@@ -220,7 +220,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 
 **Fase 4: engasgo na cutscene do Raiden**
 - [x] N08 Quedas da cutscene medidas (14/11): VU1 + revezamento EE/VU1 na espera de todos os caminhos do jogo (`0x24E680`); trechos limitados pela GPU depois. Detalhes na seção 7
-- [ ] N09 Tirar o gargalo das quedas (nenhuma linha abaixo de 58/s)
+- [!] N09 Tirar o gargalo das quedas — três abordagens medidas e revertidas (14/11): envios agrupados à placa (sem ganho), `VIF1_STAT` sem esperar e PATH3 na fila da VU1 (mais quadros do jogo, mas a janela cai para 12–14 imagens novas/s). Próximos passos na seção 7
 
 **Fase 5: imagem nítida**
 - [ ] N10 Renderizador novo: menos custo por troca de estado
@@ -428,6 +428,11 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   3. Juntar cargas de CLUT repetidas.
 
   Medir antes e depois, lado a lado, três rodadas cada (armadilha 5).
+- **Tentado (14/11), ver a N08:** os três candidatos acima não atacam o limite (o GSWorker não era o gargalo). O que segura as quedas é a VU1 somada ao EE na espera de todos os caminhos.
+- **Próximos passos, em ordem:**
+  1. **Apresentação com o GS atrasado:** com o EE correndo na frente, a janela recebeu só 12–14 imagens novas/s, embora o GS processasse ~55 campos/s. Achar por que as capturas (`QueueCapture`/`publishCapture`/`TakeCapture`, 3 slots) não chegam à janela nesse caso. Corrigido isso, `VIF1_STAT` sem espera + PATH3 na fila da VU1 dão +3–4 quadros/s de média (o código está descrito na N08; refazer atrás de variável).
+  2. **VU1 mais rápida:** no `runJitBlock`, ~28% é o laço das leituras com atraso (`block->reads`) e ~14% o das escritas (`m_vfReady[...] = entry + offset`), ou seja ~9% da VU1Thread. `processVIF1Data` 10%: caminho rápido para UNPACK V4-32/V4-16/V4-8 sem máscara e com CL=WL.
+  3. **GPU:** depois das quedas a GTX 1050 Mobile fica em 98–100%; perfil do `gs_tiles.comp` por tipo de primitivo (sprites de bloom).
 - **Pronto quando:** `PS2X_PERF` sem linha abaixo de 58/s na cutscene, em três rodadas; R3 e R4 iguais. Seção 9: "Ainda sente engasgo na cutscene?"
 
 ### N10 Renderizador novo: menos custo por troca de estado
