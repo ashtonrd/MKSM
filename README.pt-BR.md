@@ -65,7 +65,7 @@ Ele lê configurações opcionais do `mksm.ini` na raiz do projeto (uma `VARIAVE
 
 **Notebook com duas placas de vídeo:** sem isso a janela pode abrir na placa integrada. Rode com `prime-run` na frente (ou `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`).
 
-**Controle:** um controle comum (USB/Bluetooth) funciona; o analógico tem zona morta de 25%.
+**Controle:** um controle comum (USB/Bluetooth) funciona; o analógico tem zona morta de 25% (`PS2X_DEADZONE` no `mksm.ini`).
 
 Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 

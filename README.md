@@ -65,7 +65,7 @@ It reads optional settings from `mksm.ini` in the project root (one `VARIABLE=va
 
 **Laptops with two GPUs:** the window may open on the integrated GPU. Prefix the command with `prime-run` (or `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`).
 
-**Controller:** a regular USB/Bluetooth gamepad works; the analog sticks have a 25% dead zone.
+**Controller:** a regular USB/Bluetooth gamepad works; the analog sticks have a 25% dead zone (`PS2X_DEADZONE` in `mksm.ini`).
 
 Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 
