@@ -236,7 +236,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [ ] N16 Teste de uma hora (antiga T26)
 - [~] N17 Build do zero e guia do jogador — 14/11: um PS2Recomp limpo no commit fixado + `scripts/aplicar_patches.sh` compila o runtime e os testes sem rede (fontes do FetchContent reaproveitadas) e dá os mesmos resultados (`gs` 33 antigas, `vu1`/`vu`/`float` 0; hashes de `titulo`, `menu` e `fase` iguais): a lista de patches está completa. README (inglês e português) atualizado: `scripts/jogar.sh`, `mksm.ini`, F9/F10/F11, volumes, estado do chão e dos raios. Falta: compilar o código gerado do zero (horas) e testar o `instalar.sh` inteiro numa máquina limpa
 - [ ] N18 Outras máquinas e testes antigos com falha (antigas T28, T29)
-- [ ] N19 Widescreen, controle configurável e latência, quadro cheio (antigas T21, T23, T24)
+- [ ] N19 Widescreen, controle configurável e latência, quadro cheio (antigas T21, T23, T24) — 14/11: janela com ampliação bicúbica por padrão (`PS2X_UPSCALE=0` volta ao bilinear). Widescreen: a string "WideScreen" do ELF é só um rótulo de etapa de carregamento (`GameMain.cpp`), não uma opção nativa; falta achar a projeção
 
 ---
 
@@ -502,6 +502,7 @@ Perguntas que só o usuário pode responder. **Não pare o trabalho por elas.** 
 - (N03b) Pare no lugar do print 2 (chão quadriculado perto do fogo) e aperte F9 e F10; diga os nomes dos arquivos em `gsrec/` e `capturas/`.
 - (N04b, respondido 14/11) Gira toda vez que para, em qualquer lugar.
 - (N03b, respondido 14/11) Os quadrados existem desde sempre, inclusive na cutscene do Raiden; o usuário acha que falta suavização/textura/upscale. Depois de resolver, seguir o plano inteiro.
+- (14/11) A imagem na janela agora é ampliada com filtro bicúbico (mais nítido que o bilinear). Ficou melhor? Algum halo em volta do texto do HUD? (`PS2X_UPSCALE=0` no `mksm.ini` volta ao antigo.)
 - (N04b, 14/11) O Liu Kang "girando" é um mortal completo de 3 quadros que se repete a cada ~5 s com ele parado, igual ao seu print 05494? Acontece também andando, ou só parado?
 - (N03b/N05–N07, 14/11) O chão ainda aparece quadriculado em algum lugar? O raio arco-íris e os raios com degraus sumiram? (A cutscene e a primeira sala ficaram como as referências do original nas capturas.)
 - (N09, quando pronta) Ainda sente engasgo na cutscene?

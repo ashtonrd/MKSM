@@ -5443,7 +5443,7 @@ index 8590f14..4f7f148 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..c0a6a31 100644
+index 45cb9d2..ed01c03 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,7 @@
@@ -6007,7 +6007,7 @@ index 45cb9d2..c0a6a31 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +2731,94 @@ void PS2Runtime::run()
+@@ -2430,21 +2731,143 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());
@@ -6061,14 +6061,63 @@ index 45cb9d2..c0a6a31 100644
 +            fxaa = LoadShaderFromMemory(nullptr, kEdgeSmoothFs);
 +            fxaaTexel = GetShaderLocation(fxaa, "texel");
 +        }
++        // The window is ~2x the 640x448 picture: Catmull-Rom (bicubic, 9 bilinear taps) keeps it
++        // sharper than plain bilinear. PS2X_UPSCALE=0 goes back to bilinear; FXAA, when on, wins.
++        static const bool bicubicOn = [] { const char *v = std::getenv("PS2X_UPSCALE"); return !(v && v[0] == '0'); }();
++        static Shader bicubic{};
++        static int bicubicSize = -1;
++        if (bicubicOn && !fxaaOn && bicubic.id == 0)
++        {
++            static const char *kBicubicFs = R"(#version 330
++in vec2 fragTexCoord;
++in vec4 fragColor;
++out vec4 finalColor;
++uniform sampler2D texture0;
++uniform vec4 colDiffuse;
++uniform vec2 texSize;
++void main()
++{
++    vec2 pos = fragTexCoord * texSize;
++    vec2 p1 = floor(pos - 0.5) + 0.5;
++    vec2 f = pos - p1;
++    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
++    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
++    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
++    vec2 w3 = f * f * (-0.5 + 0.5 * f);
++    vec2 w12 = w1 + w2;
++    vec2 t0 = (p1 - 1.0) / texSize, t3 = (p1 + 2.0) / texSize, t12 = (p1 + w2 / w12) / texSize;
++    vec3 c = texture(texture0, vec2(t0.x, t0.y)).rgb * w0.x * w0.y
++           + texture(texture0, vec2(t12.x, t0.y)).rgb * w12.x * w0.y
++           + texture(texture0, vec2(t3.x, t0.y)).rgb * w3.x * w0.y
++           + texture(texture0, vec2(t0.x, t12.y)).rgb * w0.x * w12.y
++           + texture(texture0, vec2(t12.x, t12.y)).rgb * w12.x * w12.y
++           + texture(texture0, vec2(t3.x, t12.y)).rgb * w3.x * w12.y
++           + texture(texture0, vec2(t0.x, t3.y)).rgb * w0.x * w3.y
++           + texture(texture0, vec2(t12.x, t3.y)).rgb * w12.x * w3.y
++           + texture(texture0, vec2(t3.x, t3.y)).rgb * w3.x * w3.y;
++    finalColor = vec4(clamp(c, 0.0, 1.0), 1.0) * fragColor * colDiffuse;
++}
++)";
++            bicubic = LoadShaderFromMemory(nullptr, kBicubicFs);
++            bicubicSize = GetShaderLocation(bicubic, "texSize");
++        }
++        Shader *windowShader = nullptr;
 +        if (fxaaOn && fxaa.id != 0)
 +        {
 +            const float texel[2] = {1.0f / static_cast<float>(std::max(frameTex.width, 1)), 1.0f / static_cast<float>(std::max(frameTex.height, 1))};
 +            SetShaderValue(fxaa, fxaaTexel, texel, SHADER_UNIFORM_VEC2);
-+            BeginShaderMode(fxaa);
++            windowShader = &fxaa;
 +        }
++        else if (bicubicOn && bicubic.id != 0)
++        {
++            const float size[2] = {static_cast<float>(std::max(frameTex.width, 1)), static_cast<float>(std::max(frameTex.height, 1))};
++            SetShaderValue(bicubic, bicubicSize, size, SHADER_UNIFORM_VEC2);
++            windowShader = &bicubic;
++        }
++        if (windowShader)
++            BeginShaderMode(*windowShader);
          DrawTexturePro(frameTex, srcRect, dstRect, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
-+        if (fxaaOn && fxaa.id != 0)
++        if (windowShader)
 +            EndShaderMode();
          if (m_debugUiInitialized && m_debugUiDrawCallback)
          {
