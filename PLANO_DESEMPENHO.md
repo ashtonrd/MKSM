@@ -234,7 +234,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 
 **Fase 7: robustez e extras**
 - [ ] N16 Teste de uma hora (antiga T26)
-- [ ] N17 Build do zero e guia do jogador (antiga T27)
+- [~] N17 Build do zero e guia do jogador — 14/11: um PS2Recomp limpo no commit fixado + `scripts/aplicar_patches.sh` compila o runtime e os testes sem rede (fontes do FetchContent reaproveitadas) e dá os mesmos resultados (`gs` 33 antigas, `vu1`/`vu`/`float` 0; hashes de `titulo`, `menu` e `fase` iguais): a lista de patches está completa. README (inglês e português) atualizado: `scripts/jogar.sh`, `mksm.ini`, F9/F10/F11, volumes, estado do chão e dos raios. Falta: compilar o código gerado do zero (horas) e testar o `instalar.sh` inteiro numa máquina limpa
 - [ ] N18 Outras máquinas e testes antigos com falha (antigas T28, T29)
 - [ ] N19 Widescreen, controle configurável e latência, quadro cheio (antigas T21, T23, T24)
 

@@ -22,13 +22,16 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Velocidade cheia na gameplay (60 campos/s) | ✅ 60 numa GTX 1050; nas cenas pesadas o jogo pula quadros em vez de ficar em câmera lenta |
 | Filmes CRI (FMV) | ✅ Abertura e os 8 filmes tocam; Start pula |
 | Memory card (salvar e carregar) | ✅ Funcionando (arquivos em `extraido_full/mc0/`) |
-| Som na gameplay | ✅ 48 kHz sem distorção; falta o eco (reverb) do SPU2 |
+| Som na gameplay | ✅ 48 kHz sem distorção; eco (reverb) do SPU2 aproximado (`PS2X_REVERB`) |
+| Som dos filmes | ✅ Tocado direto dos arquivos `.SFD` (sem chiado) |
 | Kung Lao como parceiro | ✅ Aparece (era invisível) |
 | Resto das fases testadas do início ao fim | ❌ Falta |
 | Build para Windows | ❌ Não testado |
-| Raios de luz no Goro's Lair saem como faixas brancas | ❌ Aberto ([`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md), trilha E) |
-| Imagem igual ao original (tracinhos escuros no chão, desfoque) | 🟡 Em andamento (trilha E) |
-| Resolução interna maior, tela cheia, widescreen | ❌ Planejado (trilha E: melhor que o original) |
+| Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
+| Liu Kang dá um mortal de 3 quadros a cada poucos segundos parado | ❌ Aberto ([`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md), N04b) |
+| Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos (N08/N09) |
+| Tela cheia | ✅ F11 |
+| Resolução interna maior, widescreen | 🟡 Renderizador experimental `PS2X_GS_HW=1 PS2X_SCALE=2` (mais lento); widescreen planejado |
 
 Estado detalhado: [`ESTADO.md`](ESTADO.md). Plano de desempenho com medições: [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md).
 
@@ -55,8 +58,10 @@ Use `JOBS=1` se faltar memória. Se parar no meio, rode de novo: as etapas pront
 Para jogar:
 
 ```bash
-cd PS2Recomp && ./out/build/ps2xRuntime/ps2EntryRunner ../extraido_full/SLUS_210.87
+scripts/jogar.sh
 ```
+
+Ele lê configurações opcionais do `mksm.ini` na raiz do projeto (uma `VARIAVEL=valor` por linha; a lista está no começo do [`scripts/jogar.sh`](scripts/jogar.sh)). Teclas: **F11** tela cheia, **F10** captura de tela (`capturas/`), **F9** grava a cena atual para relatar defeito (`gsrec/`; são dados do jogo, não publique).
 
 **Notebook com duas placas de vídeo:** sem isso a janela pode abrir na placa integrada. Rode com `prime-run` na frente (ou `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`).
 
@@ -67,6 +72,10 @@ Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 | Variável | Efeito |
 |---|---|
 | `MKSM_SKIP_INTRO=1` | Pula os vídeos de abertura |
+| `PS2X_VOL_MASTER`, `PS2X_VOL_MUSIC`, `PS2X_VOL_SFX` | Volumes, de 0 a 100 |
+| `PS2X_REVERB=22` | Eco nos efeitos sonoros (0 desliga) |
+| `PS2X_FXAA=1` | Suaviza as bordas na janela |
+| `PS2X_RUMBLE=0` | Sem vibração no controle |
 | `PS2X_DEINTERLACE=0` | Mostra um campo por vez, sem misturar os dois (imagem mais dura) |
 | `PS2X_UNCAPPED=1` | Sem trava de tempo real (medir vazão; o jogo acelera) |
 | `PS2X_PERF=1` | Mostra fps e carga do GS e da GPU a cada 2 s |

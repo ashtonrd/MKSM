@@ -22,13 +22,16 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Full speed in gameplay (60 fields/s) | ✅ 60 on a GTX 1050; heavy scenes drop frames instead of going into slow motion |
 | CRI movies (FMV) | ✅ Intro and all 8 movies play; Start skips |
 | Memory card (save and load) | ✅ Working (files in `extraido_full/mc0/`) |
-| Gameplay sound | ✅ 48 kHz without warble; SPU2 reverb still missing |
+| Gameplay sound | ✅ 48 kHz without warble; SPU2 reverb approximated (`PS2X_REVERB`) |
+| Movie sound | ✅ Played straight from the `.SFD` files (no hiss) |
 | Kung Lao as partner | ✅ Visible (used to be invisible) |
 | Every other stage tested start to finish | ❌ To do |
 | Windows build | ❌ Not tested |
-| Light rays in Goro's Lair render as white bars | ❌ Open ([`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md), track E) |
-| Image matching the original (dark specks on floors, blur) | 🟡 In progress (track E) |
-| Higher internal resolution, fullscreen, widescreen | ❌ Planned (track E: better than the original) |
+| Floors, walls and light rays in Goro's Lair | ✅ As in the original (the VIF now runs ahead of VU1: the game sends each batch's colors right after starting it) |
+| Liu Kang flips for 3 frames every few seconds while standing | ❌ Open ([`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md), N04b) |
+| Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 fps for a few seconds (N08/N09) |
+| Fullscreen | ✅ F11 |
+| Higher internal resolution, widescreen | 🟡 Experimental renderer `PS2X_GS_HW=1 PS2X_SCALE=2` (slower); widescreen planned |
 
 Detailed state: [`ESTADO.md`](ESTADO.md). Performance plan with measurements: [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md).
 
@@ -55,8 +58,10 @@ Use `JOBS=1` if you run out of memory. If it stops halfway, run it again: finish
 Play:
 
 ```bash
-cd PS2Recomp && ./out/build/ps2xRuntime/ps2EntryRunner ../extraido_full/SLUS_210.87
+scripts/jogar.sh
 ```
+
+It reads optional settings from `mksm.ini` in the project root (one `VARIABLE=value` per line; the list is at the top of [`scripts/jogar.sh`](scripts/jogar.sh)). Keys: **F11** fullscreen, **F10** screenshot (`capturas/`), **F9** records the current scene for bug reports (`gsrec/`, game data: don't share it publicly).
 
 **Laptops with two GPUs:** the window may open on the integrated GPU. Prefix the command with `prime-run` (or `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`).
 
@@ -67,6 +72,10 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) �
 | Variable | Effect |
 |---|---|
 | `MKSM_SKIP_INTRO=1` | Skips the intro videos |
+| `PS2X_VOL_MASTER`, `PS2X_VOL_MUSIC`, `PS2X_VOL_SFX` | Volumes, 0–100 |
+| `PS2X_REVERB=22` | Echo on sound effects (0 turns it off) |
+| `PS2X_FXAA=1` | Smooths edges in the window |
+| `PS2X_RUMBLE=0` | No controller vibration |
 | `PS2X_DEINTERLACE=0` | Shows one field at a time instead of blending both (harsher image) |
 | `PS2X_UNCAPPED=1` | No real-time cap (throughput testing; the game speeds up) |
 | `PS2X_PERF=1` | Prints fps, GS and GPU load every 2 s |
