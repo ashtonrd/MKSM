@@ -1686,7 +1686,7 @@ index 67c8184..012bf9c 100644
      uint32_t microAddressMask() const;
      int32_t readBranchVi(uint8_t reg) const;
 diff --git a/ps2xRuntime/src/lib/Kernel/EeScheduler.cpp b/ps2xRuntime/src/lib/Kernel/EeScheduler.cpp
-index c5e31c4..0da73b8 100644
+index c5e31c4..6abbeb2 100644
 --- a/ps2xRuntime/src/lib/Kernel/EeScheduler.cpp
 +++ b/ps2xRuntime/src/lib/Kernel/EeScheduler.cpp
 @@ -1,4 +1,7 @@
@@ -1762,7 +1762,7 @@ index c5e31c4..0da73b8 100644
                  m_runtime.reportMissingFunction(m_rdram,
                                                  &context,
                                                  context.pc,
-@@ -384,22 +431,72 @@ bool EeScheduler::checkpointDue(uint32_t cycles) noexcept
+@@ -384,22 +431,76 @@ bool EeScheduler::checkpointDue(uint32_t cycles) noexcept
          return true;
      }
  
@@ -1776,10 +1776,14 @@ index c5e31c4..0da73b8 100644
 +            hostDue + 4'000'000)
 +    {
 +        uint64_t jump = nextEventCycle - m_eeCycle;
-+        // Stop at the next EE timer event, as the idle skip does (late timer interrupt hung a load).
-+        if (m_eeTimerBatchLimit > m_eeTimerPendingCycles)
-+            jump = std::min<uint64_t>(jump, m_eeTimerBatchLimit - m_eeTimerPendingCycles);
-+        accountCycles(static_cast<uint32_t>(std::min<uint64_t>(jump, kVBlankPeriodCycles)));
++        // Stop at the next EE timer interrupt (a late timer interrupt hung a load). Not at the
++        // timer batch limit (<= 1024 cycles): that capped every skip to ~1000 cycles, so heavy
++        // scenes went into slow motion (cutscene and combat at 30-47 vsync/s).
++        const uint64_t untilTimer = m_runtime.memory().cyclesUntilNextEeTimerInterrupt();
++        if (untilTimer != std::numeric_limits<uint64_t>::max())
++            jump = std::min<uint64_t>(jump, untilTimer > m_eeTimerPendingCycles ? untilTimer - m_eeTimerPendingCycles : 0u);
++        if (jump != 0u)
++            accountCycles(static_cast<uint32_t>(std::min<uint64_t>(jump, kVBlankPeriodCycles)));
 +    }
 +
      renewTimeSlice();
@@ -1837,7 +1841,7 @@ index c5e31c4..0da73b8 100644
  bool EeScheduler::isExecutingGuest() const noexcept
  {
      return m_guestExecuting.load(std::memory_order_acquire);
-@@ -423,7 +520,7 @@ void EeScheduler::setupCurrentThread(uint32_t stack, uint32_t stackSize, uint32_
+@@ -423,7 +524,7 @@ void EeScheduler::setupCurrentThread(uint32_t stack, uint32_t stackSize, uint32_
  int EeScheduler::createThread(const EeThreadCreateParams &params)
  {
      assertExecutor();
@@ -1846,7 +1850,7 @@ index c5e31c4..0da73b8 100644
      {
          return KE_ILLEGAL_PRIORITY;
      }
-@@ -490,6 +587,8 @@ int EeScheduler::startThread(int id, uint32_t arg, const R5900Context &caller, b
+@@ -490,6 +591,8 @@ int EeScheduler::startThread(int id, uint32_t arg, const R5900Context &caller, b
      }
  
      target->context = R5900Context{};
@@ -1855,7 +1859,7 @@ index c5e31c4..0da73b8 100644
      target->context.pc = target->entry;
      target->arg = arg;
      target->suspendCount = 0;
-@@ -1753,7 +1852,8 @@ void EeScheduler::processPendingEvents()
+@@ -1753,7 +1856,8 @@ void EeScheduler::processPendingEvents()
              dispatchIrq(false, 9u + timer);
          }
      }
@@ -1865,7 +1869,7 @@ index c5e31c4..0da73b8 100644
      {
          std::lock_guard lock(m_eventMutex);
          pending.swap(m_events);
-@@ -1775,6 +1875,8 @@ void EeScheduler::processPendingEvents()
+@@ -1775,6 +1879,8 @@ void EeScheduler::processPendingEvents()
  
  void EeScheduler::processDueDeadlines()
  {
@@ -1874,7 +1878,7 @@ index c5e31c4..0da73b8 100644
      for (;;)
      {
          std::vector<ScheduledEvent> due;
-@@ -1798,7 +1900,7 @@ void EeScheduler::processDueDeadlines()
+@@ -1798,7 +1904,7 @@ void EeScheduler::processDueDeadlines()
                  return;
              }
  
@@ -1883,7 +1887,7 @@ index c5e31c4..0da73b8 100644
              {
                  m_eventCv.wait_until(lock, pacingDeadline, [this]()
                                       { return !m_events.empty() ||
-@@ -1814,7 +1916,7 @@ void EeScheduler::processDueDeadlines()
+@@ -1814,7 +1920,7 @@ void EeScheduler::processDueDeadlines()
              auto firstFuture = std::partition(m_deadlines.begin(), m_deadlines.end(),
                                                [this, pacedNow](const ScheduledEvent &item)
                                                { return item.deadlineCycle <= m_eeCycle &&
@@ -1892,7 +1896,7 @@ index c5e31c4..0da73b8 100644
              due.insert(due.end(),
                         std::make_move_iterator(m_deadlines.begin()),
                         std::make_move_iterator(firstFuture));
-@@ -1847,11 +1949,18 @@ void EeScheduler::processDueDeadlines()
+@@ -1847,11 +1953,18 @@ void EeScheduler::processDueDeadlines()
          {
              if (scheduled.event.type == EeEventType::VBlankStart)
              {
@@ -1913,7 +1917,7 @@ index c5e31c4..0da73b8 100644
                                EeEvent{EeEventType::VBlankStart, 0, 0});
              }
              processEvent(scheduled.event);
-@@ -1868,6 +1977,8 @@ void EeScheduler::processEvent(const EeEvent &event)
+@@ -1868,6 +1981,8 @@ void EeScheduler::processEvent(const EeEvent &event)
          break;
      case EeEventType::VBlankStart:
          ++m_vsyncTick;
@@ -1922,7 +1926,7 @@ index c5e31c4..0da73b8 100644
          m_runtime.memory().gs().vsyncTick.store(m_vsyncTick, std::memory_order_release);
          if ((m_vsyncTick & 1u) != 0u)
          {
-@@ -1996,6 +2107,7 @@ void EeScheduler::writeGuestU32(uint32_t address, uint32_t value)
+@@ -1996,6 +2111,7 @@ void EeScheduler::writeGuestU32(uint32_t address, uint32_t value)
  
  void EeScheduler::waitForEvent()
  {
@@ -1930,7 +1934,7 @@ index c5e31c4..0da73b8 100644
      std::unique_lock lock(m_eventMutex);
      if (!m_events.empty() || m_stopRequested.load(std::memory_order_acquire))
      {
-@@ -2071,6 +2183,7 @@ void EeScheduler::updateNextDeadline()
+@@ -2071,6 +2187,7 @@ void EeScheduler::updateNextDeadline()
      if (m_deadlines.empty())
      {
          m_nextDeadlineCycle.store(0u, std::memory_order_release);
@@ -1938,7 +1942,7 @@ index c5e31c4..0da73b8 100644
          return;
      }
      const auto it = std::min_element(m_deadlines.begin(), m_deadlines.end(),
-@@ -2082,6 +2195,8 @@ void EeScheduler::updateNextDeadline()
+@@ -2082,6 +2199,8 @@ void EeScheduler::updateNextDeadline()
                                           }
                                           return left.sequence < right.sequence;
                                       });

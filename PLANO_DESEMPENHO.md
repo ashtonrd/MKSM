@@ -220,7 +220,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 
 **Fase 4: engasgo na cutscene do Raiden**
 - [x] N08 Quedas da cutscene medidas (14/11): VU1 + revezamento EE/VU1 na espera de todos os caminhos do jogo (`0x24E680`); trechos limitados pela GPU depois. Detalhes na seção 7
-- [!] N09 Tirar o gargalo das quedas — três abordagens medidas e revertidas (14/11): envios agrupados à placa (sem ganho), `VIF1_STAT` sem esperar e PATH3 na fila da VU1 (mais quadros do jogo, mas a janela cai para 12–14 imagens novas/s). Próximos passos na seção 7
+- [~] N09 Quedas — **câmera lenta corrigida** (14/11): o pulo de quadro do `checkpointDue` parava no lote de timers (≤ 1024 ciclos) e quase não pulava; agora para no próximo disparo de timer. Cutscene e combate com vsync 60 (velocidade certa); o jogo desenha 34–38 quadros/s nos dois trechos pesados da cutscene e ~52 em combate (antes ~46 em câmera lenta). Também corrigido: capturas prontas sobrescritas antes de chegar à janela. Correr na frente do GS (`VIF1_STAT` sem esperar + PATH3 na fila da VU1) testado de novo com isso: sem queda de imagens, mas ganho de ~1%, retirado. Falta: menos quadros perdidos (VU1 e GPU, seção 7)
 
 **Fase 5: imagem nítida**
 - [ ] N10 Renderizador novo: menos custo por troca de estado
@@ -233,7 +233,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [ ] N15 Saves, filmes do fim e dois controles (antigas T16, T18, T19)
 
 **Fase 7: robustez e extras**
-- [ ] N16 Teste de uma hora (antiga T26)
+- [x] N16 Teste de uma hora — 14/11: 3660 s de roteiro com andar, golpes e combate contra vários inimigos (morre e recomeça), sem travar; memória estável em 428–430 MB do começo ao fim. Mostrou a câmera lenta em combate (~46 vsync/s), corrigida depois na N09
 - [~] N17 Build do zero e guia do jogador — 14/11: um PS2Recomp limpo no commit fixado + `scripts/aplicar_patches.sh` compila o runtime e os testes sem rede (fontes do FetchContent reaproveitadas) e dá os mesmos resultados (`gs` 33 antigas, `vu1`/`vu`/`float` 0; hashes de `titulo`, `menu` e `fase` iguais): a lista de patches está completa. README (inglês e português) atualizado: `scripts/jogar.sh`, `mksm.ini`, F9/F10/F11, volumes, estado do chão e dos raios. Falta: compilar o código gerado do zero (horas) e testar o `instalar.sh` inteiro numa máquina limpa
 - [ ] N18 Outras máquinas e testes antigos com falha (antigas T28, T29)
 - [ ] N19 Widescreen, controle configurável e latência, quadro cheio (antigas T21, T23, T24) — 14/11: janela com ampliação bicúbica por padrão (`PS2X_UPSCALE=0` volta ao bilinear). Widescreen: a string "WideScreen" do ELF é só um rótulo de etapa de carregamento (`GameMain.cpp`), não uma opção nativa; falta achar a projeção
@@ -429,8 +429,9 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 
   Medir antes e depois, lado a lado, três rodadas cada (armadilha 5).
 - **Tentado (14/11), ver a N08:** os três candidatos acima não atacam o limite (o GSWorker não era o gargalo). O que segura as quedas é a VU1 somada ao EE na espera de todos os caminhos.
+- **Feito depois (14/11):** pulo de quadro corrigido (vsync 60 nos trechos pesados) e capturas guardadas antes de reusar o slot (as 12–14 imagens/s sumiram). Com os dois, `VIF1_STAT` sem esperar + PATH3 na fila da VU1 deram só +1% de imagens (50,1 → 50,9 de média de 56 a 100 s) e saíram.
 - **Próximos passos, em ordem:**
-  1. **Apresentação com o GS atrasado:** com o EE correndo na frente, a janela recebeu só 12–14 imagens novas/s, embora o GS processasse ~55 campos/s. Achar por que as capturas (`QueueCapture`/`publishCapture`/`TakeCapture`, 3 slots) não chegam à janela nesse caso. Corrigido isso, `VIF1_STAT` sem espera + PATH3 na fila da VU1 dão +3–4 quadros/s de média (o código está descrito na N08; refazer atrás de variável).
+  1. ~~**Apresentação com o GS atrasado:**~~ (resolvido, ver acima) com o EE correndo na frente, a janela recebeu só 12–14 imagens novas/s, embora o GS processasse ~55 campos/s. Achar por que as capturas (`QueueCapture`/`publishCapture`/`TakeCapture`, 3 slots) não chegam à janela nesse caso. Corrigido isso, `VIF1_STAT` sem espera + PATH3 na fila da VU1 dão +3–4 quadros/s de média (o código está descrito na N08; refazer atrás de variável).
   2. **VU1 mais rápida:** no `runJitBlock`, ~28% é o laço das leituras com atraso (`block->reads`) e ~14% o das escritas (`m_vfReady[...] = entry + offset`), ou seja ~9% da VU1Thread. `processVIF1Data` 10%: caminho rápido para UNPACK V4-32/V4-16/V4-8 sem máscara e com CL=WL.
   3. **GPU:** depois das quedas a GTX 1050 Mobile fica em 98–100%; perfil do `gs_tiles.comp` por tipo de primitivo (sprites de bloom).
 - **Pronto quando:** `PS2X_PERF` sem linha abaixo de 58/s na cutscene, em três rodadas; R3 e R4 iguais. Seção 9: "Ainda sente engasgo na cutscene?"
@@ -473,7 +474,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 |---|---|---|
 | Abertura e filmes | Os 8 `.SFD` tocam; som direto do arquivo, sem chiado (usuário confirmou) | N15 |
 | Menus | 60/s; sem tremida (usuário confirmou); todas as opções abrem e voltam | — |
-| Goro's Lair, velocidade | Gameplay 52–61/s; cutscene do Raiden com duas quedas de ~4 s a 32–38 quadros/s (VU1 + espera de todos os caminhos do jogo) | N09 [!] |
+| Goro's Lair, velocidade | Sem câmera lenta: vsync 60 na cutscene e em combate; o jogo pula quadros nos trechos pesados (34–38 quadros/s em dois momentos da cutscene, ~52 em combate); uma hora seguida sem travar, memória estável em ~430 MB | N09 |
 | Goro's Lair, imagem | **Chão, paredes e raios corrigidos** (VIF na frente da VU1); usuário aprovou os prints | N03b, N05–N07 |
 | Liu Kang | Mortal de 3 quadros a cada ~5 s parado; reproduzido e determinístico, causa não achada | N04b [!] |
 | Nitidez | 640×224 por campo; janela com ampliação bicúbica; escala 2x/3x só no renderizador novo, que está lento | N10–N13 |

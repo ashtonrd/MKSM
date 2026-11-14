@@ -173,6 +173,10 @@ struct GSGpuAccelerator::Impl
     bool captureDone[kSlots] = {}; // ...and its fence has signalled
     uint64_t captureSeq[kSlots] = {};
     uint64_t nextCaptureSeq = 0;
+    // A finished capture nobody took yet, saved from its slot before a new capture reuses it.
+    std::vector<uint8_t> parked;
+    uint64_t parkedSeq = 0;
+    bool parkedValid = false;
     bool mirror = false;
     std::vector<std::pair<uint32_t, uint32_t>> hostDirty; // host writes since the last submission
     VkDeviceSize vramSize = 0;
@@ -1465,6 +1469,16 @@ void GSGpuAccelerator::QueueCapture()
     v.beginIfNeeded();
     v.emitTileBatch();
     const uint32_t captureSlot = v.slot;
+    // The slot may still hold the newest finished field (the worker submits several batches per
+    // field under load): overwriting it starved the window (12-14 new images/s at 55 fields/s).
+    if (v.captureInSlot[captureSlot] && v.captureDone[captureSlot])
+    {
+        const uint8_t *src = static_cast<const uint8_t *>(v.capture[captureSlot].mapped);
+        v.parked.assign(src, src + std::min<size_t>(v.vramSize, kCaptureBytes));
+        v.parkedSeq = v.captureSeq[captureSlot];
+        v.parkedValid = true;
+        v.captureInSlot[captureSlot] = v.captureDone[captureSlot] = false;
+    }
     v.memoryBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
@@ -1491,12 +1505,19 @@ bool GSGpuAccelerator::TakeCapture(uint8_t *dst)
         if (v.captureDone[s] && (newest < 0 || v.captureSeq[s] > v.captureSeq[newest]))
             newest = static_cast<int>(s);
     }
-    if (newest < 0)
+    const bool useParked = v.parkedValid && (newest < 0 || v.parkedSeq > v.captureSeq[newest]);
+    if (newest < 0 && !useParked)
         return false;
-    std::memcpy(dst, v.capture[newest].mapped, std::min<size_t>(v.vramSize, kCaptureBytes));
+    const uint64_t takenSeq = useParked ? v.parkedSeq : v.captureSeq[newest];
+    if (useParked)
+        std::memcpy(dst, v.parked.data(), v.parked.size());
+    else
+        std::memcpy(dst, v.capture[newest].mapped, std::min<size_t>(v.vramSize, kCaptureBytes));
     for (uint32_t s = 0; s < kSlots; ++s) // an older finished capture is stale now
-        if (v.captureDone[s] && v.captureSeq[s] <= v.captureSeq[newest])
+        if (v.captureDone[s] && v.captureSeq[s] <= takenSeq)
             v.captureInSlot[s] = v.captureDone[s] = false;
+    if (v.parkedSeq <= takenSeq)
+        v.parkedValid = false;
     return true;
 }
 
