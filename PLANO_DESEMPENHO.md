@@ -219,7 +219,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [x] N07 Raios macios: idem; confirmar com o usuário (seção 10)
 
 **Fase 4: engasgo na cutscene do Raiden**
-- [ ] N08 Medir as quedas: onde, quanto e qual thread segura
+- [x] N08 Quedas da cutscene medidas (14/11): VU1 + revezamento EE/VU1 na espera de todos os caminhos do jogo (`0x24E680`); trechos limitados pela GPU depois. Detalhes na seção 7
 - [ ] N09 Tirar o gargalo das quedas (nenhuma linha abaixo de 58/s)
 
 **Fase 5: imagem nítida**
@@ -412,6 +412,14 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   2. Nesses segundos, CPU por thread (script de `/proc/<pid>/task/*/stat`, igual ao da T07 no apêndice) e perfis (R7) da `GameThread`, `VU1Thread`, `GSFrontend` e `GSWorker`. Compare com um trecho bom.
   3. Contadores temporários das esperas: `ps2_vu1_thread::sync`, fila do `GSCpuBackend` cheia (`Enqueue`), `WaitForQueue` e `gsAsyncDrain`. Ver T07 e E5 no apêndice: antes, o gargalo era o `GSWorker` saturado (`QueuePrimitive`, `PrepareGpuPrimitive`, CLUT) com a `VU1Thread` esperando por ele.
 - **Pronto quando:** cada queda tem a thread que satura e o que ela faz anotados aqui.
+- **Medido (14/11, R5 com o renderizador atual; quedas em 64–72 s e 78–84 s, 32–38 quadros/s):**
+  - CPU nas quedas: VU1Thread 84–86%, GSFrontend ~80%, GSWorker ~65%, GameThread cai para ~41%.
+  - **A GameThread espera ~1,15 s a cada 2 s** num `ps2_vu1_thread::sync()`, ~2 vezes por quadro. Vem da função do jogo `0x24E680` ("espera todos os caminhos": `D1_CHCR`, `D2_CHCR`, `VIF1_STAT & 0x1F000003`, `BC2T`, `GIF_STAT & 0xC00`); a leitura do `VIF1_STAT` sincroniza. EE e VU1 se revezam: o quadro custa EE + o resto da VU1.
+  - Perfil da VU1Thread nas quedas: código do JIT 25%, `runJitBlock` (despacho) 21%, `processVIF1Data` 10%, `run`/`execLower` (interpretador) ~13%, `commitReadyPipelines` 4%, `prepareJitTable` 3%, `compileJitBlock` 3%.
+  - O GSWorker fica "ocupado" 95–100% do tempo, mas ~30% disso é espera de fence (500–900 ms a cada 2 s), porque ele envia um lote à placa a cada pedaço de comandos (600–1900 envios a cada 2 s, só 3 slots). Agrupar os envios (≥ 3 ms) baixou o "GS ocupado" para ~70%, **sem mudar o fps**: não era o limite.
+  - **Testado e revertido:** responder o `VIF1_STAT` sem esperar (como o CSR lag) e pôr o PATH3 do EE na fila da VU1Thread (sem esperar). O jogo desenhou mais quadros (média 51 → 54,7 de 56 a 100 s), mas a janela passou a receber só **12–14 imagens novas por segundo** em boa parte da cutscene (média 49,6 → 33,7): com o EE na frente, o GS e a placa acumulam atraso e a apresentação morre de fome. Pior para quem joga.
+  - **Métrica certa:** nos `[perf] janela`, olhe "jogo N quadros/s" e "imagens novas N/s", não só o vsync (o vsync pode ficar em 60 com o jogo pulando quadros).
+  - Depois das quedas (84–90 s) a placa (GTX 1050 Mobile) fica 98–100% ocupada a ~56 quadros/s: há trechos limitados pela GPU também.
 
 ### N09 Tirar o gargalo das quedas
 - **Faça:** conforme a N08. Candidatos já levantados (apêndice E5):
