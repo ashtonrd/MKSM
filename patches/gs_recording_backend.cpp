@@ -1,3 +1,4 @@
+#include <filesystem>
 #include "runtime/gs/gs_recording_backend.h"
 #include <string>
 #include <ctime>
@@ -106,7 +107,7 @@ std::unique_ptr<GSRasterBackend> GSRecordingBackend::WrapFromEnvironment(std::un
         if (!dir || !*dir)
             return inner;
         g_recordDir = dir;
-        std::cerr << "[gs:record] F9 records 2 frames into " << g_recordDir << std::endl;
+        std::cerr << "[gs:record] F9 records frames (PS2X_GS_RECORD_FRAMES, 2) into " << g_recordDir << std::endl;
         return std::make_unique<GSRecordingBackend>(std::move(inner), std::string(), 1e18, 2u);
     }
     const char *at = std::getenv("PS2X_GS_RECORD_AT");
@@ -180,9 +181,12 @@ void GSRecordingBackend::Submit(const GSPrimitiveBatch &batch)
                 {
                     const std::time_t now = std::time(nullptr);
                     char name[64];
-                    std::strftime(name, sizeof(name), "cena_%Y%m%d_%H%M%S.gsr", std::localtime(&now));
-                    m_path = g_recordDir + "/" + name;
-                    m_framesLeft = 2u;
+                    std::strftime(name, sizeof(name), "cena_%Y%m%d_%H%M%S", std::localtime(&now));
+                    m_path = g_recordDir + "/" + name + ".gsr";
+                    for (int n = 2; std::filesystem::exists(m_path); ++n) // two recordings in the same second
+                        m_path = g_recordDir + "/" + name + "_" + std::to_string(n) + ".gsr";
+                    const char *frames = std::getenv("PS2X_GS_RECORD_FRAMES");
+                    m_framesLeft = frames && std::atoi(frames) > 0 ? static_cast<uint32_t>(std::atoi(frames)) : 2u;
                     startRecording();
                 }
             }

@@ -74,13 +74,13 @@ int main(int argc, char **argv)
 {
     if (argc < 2)
     {
-        std::fprintf(stderr, "usage: %s file.gsr [--repeat N] [--dump-vram out] [--compare ref] [--ppm prefix] [--sync 0|1]\n", argv[0]);
+        std::fprintf(stderr, "usage: %s file.gsr [--repeat N] [--dump-vram out] [--compare ref] [--ppm prefix] [--ppm-each prefix] [--sync 0|1]\n", argv[0]);
         return 2;
     }
     const std::string path = argv[1];
     int repeat = 1;
     bool syncEachFrame = true; // 0: no wait per field, so the GPU overlaps the next one as in the game
-    std::string dumpPath, comparePath, ppmPrefix;
+    std::string dumpPath, comparePath, ppmPrefix, ppmEachPrefix;
     for (int i = 2; i + 1 < argc; i += 2)
     {
         const std::string option = argv[i];
@@ -94,6 +94,8 @@ int main(int argc, char **argv)
             syncEachFrame = std::atoi(argv[i + 1]) != 0;
         else if (option == "--ppm")
             ppmPrefix = argv[i + 1];
+        else if (option == "--ppm-each") // both frame pages after every recorded frame
+            ppmEachPrefix = argv[i + 1];
         else
         {
             std::fprintf(stderr, "unknown option %s\n", option.c_str());
@@ -128,10 +130,17 @@ int main(int argc, char **argv)
             counter.InvalidateAll(); // later passes restore the same VRAM: keep the texture cache
         auto frameStart = std::chrono::steady_clock::now();
         const auto start = frameStart;
-        recording.Replay(backend, [&](uint32_t)
+        recording.Replay(backend, [&](uint32_t frameIndex)
                          {
-            if (syncEachFrame)
+            if (syncEachFrame || !ppmEachPrefix.empty())
                 backend.Sync(GSSyncReason::DebugReadback);
+            if (!ppmEachPrefix.empty() && pass == 0)
+            {
+                char suffix[32];
+                std::snprintf(suffix, sizeof(suffix), "_%03u", frameIndex);
+                writeFramePpm(cpuBackend, 0x00u, ppmEachPrefix + suffix + "_fb00.ppm");
+                writeFramePpm(cpuBackend, 0x46u, ppmEachPrefix + suffix + "_fb46.ppm");
+            }
             const auto now = std::chrono::steady_clock::now();
             frameMs.push_back(std::chrono::duration<double, std::milli>(now - frameStart).count());
             frameStart = now; });
