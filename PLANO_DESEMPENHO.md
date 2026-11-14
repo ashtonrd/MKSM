@@ -467,19 +467,21 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 
 ---
 
-## 8. Onde estamos (14/11, depois do teste do usuário)
+## 8. Onde estamos (14/11, fim do dia)
 
 | Área | Estado | Tarefas |
 |---|---|---|
 | Abertura e filmes | Os 8 `.SFD` tocam; som direto do arquivo, sem chiado (usuário confirmou) | N15 |
 | Menus | 60/s; sem tremida (usuário confirmou); todas as opções abrem e voltam | — |
-| Goro's Lair, velocidade | Gameplay 57–61/s; cutscene do Raiden melhorou muito, mas ainda engasga | N08, N09 |
-| Goro's Lair, imagem | **Chão quadriculado** (mipmap por triângulo); **raios com degraus e um com arco-íris** | N02–N07 |
-| Nitidez | 640×224 por campo; escala 2x/3x só no renderizador novo, que está lento | N10–N13 |
+| Goro's Lair, velocidade | Gameplay 52–61/s; cutscene do Raiden com duas quedas de ~4 s a 32–38 quadros/s (VU1 + espera de todos os caminhos do jogo) | N09 [!] |
+| Goro's Lair, imagem | **Chão, paredes e raios corrigidos** (VIF na frente da VU1); usuário aprovou os prints | N03b, N05–N07 |
+| Liu Kang | Mortal de 3 quadros a cada ~5 s parado; reproduzido e determinístico, causa não achada | N04b [!] |
+| Nitidez | 640×224 por campo; janela com ampliação bicúbica; escala 2x/3x só no renderizador novo, que está lento | N10–N13 |
 | Som | Bom (usuário); volumes no `mksm.ini`; eco 22 aprovado | — |
 | Controle | Dois controles (falta testar); vibração por porta | N15 |
 | Saves | Carregar funciona; autosave no meio da fase não testado | N15 |
 | Resto do jogo | Não jogado além da primeira sala | N14 |
+| Robustez | Árvore limpa (commit fixado + patches) compila e passa nos testes; uma trava no boot em 10 boots (com outra carga na máquina), não repetida em 9 boots seguidos | N16, N17 |
 
 ## 9. O que é "perfeito" (critério final)
 
