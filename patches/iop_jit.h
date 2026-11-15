@@ -34,7 +34,11 @@ namespace ps2x::iop::detail
         uint32_t run(IopCpuState &cpu, uint32_t maxInstructions);
 
     private:
+        #if defined(_WIN32)
+        using BlockFn = uint32_t(__attribute__((sysv_abi)) *)(IopCpuState *cpu, uint8_t *ram, uint8_t *owned); // emitted code is System V
+#else
         using BlockFn = uint32_t (*)(IopCpuState *cpu, uint8_t *ram, uint8_t *owned);
+#endif
         struct Block
         {
             BlockFn fn = nullptr; // null: no block starts here

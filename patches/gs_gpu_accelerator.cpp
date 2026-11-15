@@ -52,8 +52,13 @@ namespace
         }
         std::memcpy(d, s, head);
         d += head, s += head, bytes -= head;
+#if defined(__AVX2__)
         for (; bytes >= 32u; d += 32, s += 32, bytes -= 32u)
             _mm256_stream_si256(reinterpret_cast<__m256i *>(d), _mm256_loadu_si256(reinterpret_cast<const __m256i *>(s)));
+#else // a build for any x86-64 (PS2X_NATIVE_ARCH=OFF): the same streaming stores, 16 bytes at a time
+        for (; bytes >= 16u; d += 16, s += 16, bytes -= 16u)
+            _mm_stream_si128(reinterpret_cast<__m128i *>(d), _mm_loadu_si128(reinterpret_cast<const __m128i *>(s)));
+#endif
         std::memcpy(d, s, bytes);
     }
     constexpr uint32_t kRecordCapacity = 1u << 15; // primitives per submission

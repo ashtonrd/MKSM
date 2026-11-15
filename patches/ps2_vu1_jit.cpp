@@ -23,11 +23,19 @@
 #include <unordered_map>
 #include <vector>
 
-#if defined(__x86_64__) && !defined(_WIN32)
-#include <sys/mman.h>
+#if defined(__x86_64__)
 #define PS2_VU_JIT_SUPPORTED 1
+#if defined(_WIN32)
+// The emitted code and the callouts it calls follow the System V convention on every host.
+#define PS2_JIT_ABI __attribute__((sysv_abi))
+extern "C" __declspec(dllimport) void *__stdcall VirtualAlloc(void *address, size_t size, unsigned long type, unsigned long protect);
+#else
+#define PS2_JIT_ABI
+#include <sys/mman.h>
+#endif
 #else
 #define PS2_VU_JIT_SUPPORTED 0
+#define PS2_JIT_ABI
 #endif
 
 namespace
@@ -821,10 +829,17 @@ namespace
 #if PS2_VU_JIT_SUPPORTED
             if (!base)
             {
+#if defined(_WIN32)
+                void *memory = VirtualAlloc(nullptr, kCodeArenaSize, 0x3000u /* MEM_COMMIT | MEM_RESERVE */,
+                                            0x40u /* PAGE_EXECUTE_READWRITE */);
+                if (memory == nullptr)
+                    return nullptr;
+#else
                 void *memory = mmap(nullptr, kCodeArenaSize, PROT_READ | PROT_WRITE | PROT_EXEC,
                                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
                 if (memory == MAP_FAILED)
                     return nullptr;
+#endif
                 base = static_cast<uint8_t *>(memory);
             }
             if (used + code.size() > kCodeArenaSize)
@@ -844,7 +859,7 @@ namespace
 
 struct VU1Interpreter::JitBlock
 {
-    using Function = void (*)(VU1State *, uint8_t *, VU1Interpreter *);
+    using Function = void(PS2_JIT_ABI *)(VU1State *, uint8_t *, VU1Interpreter *);
     struct Timing
     {
         uint8_t kind; // 0 VF lane, 1 VI, 2 ACC lane
@@ -1010,7 +1025,7 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
     }
 
     // Callouts run with m_cycle at the block entry; the interpreter sees its own cycle.
-    const auto upperCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t offset)
+    const auto upperCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t offset) PS2_JIT_ABI
     {
         const uint64_t entry = self->m_cycle;
         self->m_cycle = entry + offset;
@@ -1018,7 +1033,7 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
         self->execUpper(instr);
         self->m_cycle = entry;
     };
-    const auto lowerCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t offset)
+    const auto lowerCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t offset) PS2_JIT_ABI
     {
         const uint64_t entry = self->m_cycle;
         self->m_cycle = entry + offset;
@@ -1032,7 +1047,7 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
     // Branch callouts: the interpreter computes the target from m_state.pc, so it gets the
     // pair's pc (packed above the cycle offset). It reads the VI backup only when the pair
     // before it recorded one; "clear" drops a backup left from outside the block.
-    const auto branchCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t packed)
+    const auto branchCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t packed) PS2_JIT_ABI
     {
         const uint64_t entry = self->m_cycle;
         const uint32_t savedPc = self->m_state.pc;
@@ -1044,7 +1059,7 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
         self->m_state.pc = savedPc;
         self->m_cycle = entry;
     };
-    const auto branchCallClear = +[](VU1Interpreter *self, uint32_t instr, uint32_t packed)
+    const auto branchCallClear = +[](VU1Interpreter *self, uint32_t instr, uint32_t packed) PS2_JIT_ABI
     {
         self->m_viBranchBackupValid = false;
         const uint64_t entry = self->m_cycle;
@@ -1057,7 +1072,7 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
         self->m_state.pc = savedPc;
         self->m_cycle = entry;
     };
-    const auto recordCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t offset)
+    const auto recordCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t offset) PS2_JIT_ABI
     {
         const uint64_t entry = self->m_cycle;
         self->m_cycle = entry + offset;
@@ -1076,7 +1091,7 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
     // The real commit (status flags too) still happens on the interpreter's schedule.
     // XGKICK ends its block: the cycles before it pass for real, it waits for the previous
     // PATH1 transfer like the interpreter's stall, and its issue cycle ends the block.
-    const auto xgkickCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t offset)
+    const auto xgkickCall = +[](VU1Interpreter *self, uint32_t instr, uint32_t offset) PS2_JIT_ABI
     {
         self->advanceTo(self->m_cycle + offset);
         const uint64_t issue = self->m_cycle;
@@ -1086,11 +1101,13 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
         self->execLower(instr, self->m_activeVuData, self->m_activeVuDataSize, *self->m_activeGs, self->m_activeMemory, 0u);
         self->advanceOneCycle();
     };
-    const auto qSyncCall = +[](VU1Interpreter *self, uint32_t, uint32_t offset)
+    const auto qSyncCall = +[](VU1Interpreter *self, uint32_t, uint32_t offset) PS2_JIT_ABI
     {
         if (self->m_fdiv.valid && self->m_fdiv.readyCycle <= self->m_cycle + offset)
             self->m_state.q = self->m_fdiv.value;
     };
+    const auto fmacFixupCall = +[](VU1Interpreter *self, uint32_t instr, float *result) PS2_JIT_ABI
+    { jitFmacFixup(self, instr, result); };
     if (pairs.size() < kMinBlockPairs)
         return &jit.noBlock;
 
@@ -1201,7 +1218,7 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
         if (clipUpper)
             emitCallout(a, reinterpret_cast<const void *>(upperCall), pair.upper, cycle);
         else
-            emitUpper(a, pair.upper, upper, reinterpret_cast<const void *>(&VU1Interpreter::jitFmacFixup), finiteVf);
+            emitUpper(a, pair.upper, upper, reinterpret_cast<const void *>(fmacFixupCall), finiteVf);
         if (pair.iBit)
         {
             uint32_t immediate = pair.lower;

@@ -1171,7 +1171,7 @@ index d0fc95d..d180aa9 100644
                      return fmt::format("// NOP operation, no action needed for VU0");
                  case VU0_S2_VRNEXT:
 diff --git a/ps2xRuntime/CMakeLists.txt b/ps2xRuntime/CMakeLists.txt
-index 589d768..82b9629 100644
+index 589d768..c3fb023 100644
 --- a/ps2xRuntime/CMakeLists.txt
 +++ b/ps2xRuntime/CMakeLists.txt
 @@ -11,7 +11,7 @@ option(PS2X_ENABLE_RUNNER_PCH "Precompile the heavy runtime headers for ps2Entry
@@ -1237,7 +1237,7 @@ index 589d768..82b9629 100644
 +target_sources(ps2EntryRunner PRIVATE
 +    "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/game_overrides_mksm.cpp"
 +    "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/ps2_log_stream_override.cpp"
-+    "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/ps2_sampling_profiler.cpp"
++    "$<$<PLATFORM_ID:Linux>:${CMAKE_CURRENT_SOURCE_DIR}/src/lib/ps2_sampling_profiler.cpp>" # signals, /proc
 +)
 +
  if(PS2X_ENABLE_RUNNER_UNITY_BUILD)
@@ -5974,7 +5974,7 @@ index 8590f14..6794c97 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..c71b38d 100644
+index 45cb9d2..e301c7f 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -6485,19 +6485,21 @@ index 45cb9d2..c71b38d 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -732,9 +1045,47 @@ bool PS2Runtime::initialize(const char *title)
+@@ -732,9 +1045,49 @@ bool PS2Runtime::initialize(const char *title)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
          SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 +        // PRIME laptops: the GS already runs on the NVIDIA card (Vulkan), but the window opened on
 +        // the integrated GPU unless started with prime-run. Ask for the NVIDIA GLX vendor before
-+        // GLFW loads libGL. PS2X_GPU_AUTO=0 leaves the system default.
++        // GLFW loads libGL. PS2X_GPU_AUTO=0 leaves the system default. (Windows: NvOptimusEnablement in main.cpp.)
++#if defined(__linux__)
 +        if (const char *autoGpu = std::getenv("PS2X_GPU_AUTO"); !(autoGpu && *autoGpu == '0') &&
 +            std::filesystem::exists("/proc/driver/nvidia") && std::getenv("__GLX_VENDOR_LIBRARY_NAME") == nullptr)
 +        {
 +            setenv("__NV_PRIME_RENDER_OFFLOAD", "1", 0);
 +            setenv("__GLX_VENDOR_LIBRARY_NAME", "nvidia", 0);
 +        }
++#endif
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title);
 +        // Twice the PS2 picture when the monitor has room for it.
 +        if (GetMonitorHeight(GetCurrentMonitor()) >= 1080)
@@ -6533,7 +6535,7 @@ index 45cb9d2..c71b38d 100644
  #endif
          SetTargetFPS(60);
          if (m_debugUiInitCallback)
-@@ -2214,6 +2565,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +2567,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -6545,7 +6547,7 @@ index 45cb9d2..c71b38d 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +2716,16 @@ void PS2Runtime::run()
+@@ -2360,13 +2718,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -6562,7 +6564,7 @@ index 45cb9d2..c71b38d 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +2747,63 @@ void PS2Runtime::run()
+@@ -2388,9 +2749,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -6627,7 +6629,7 @@ index 45cb9d2..c71b38d 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +2814,187 @@ void PS2Runtime::run()
+@@ -2401,25 +2816,188 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -6825,11 +6827,12 @@ index 45cb9d2..c71b38d 100644
 +            const float aspectFactor = gfx().widescreen ? 0.75f : 1.0f;
 +            std::memcpy(m_memory.getRDRAM() + 0x4F4B38u, &aspectFactor, 4u);
 +        }
-+        const bool gfxHint = selectPause == 1u || (inPlay == 0u && inGameMenu == 0u); // the pause, the frontend menus
++        const bool gfxHint = (selectPause == 1u || (inPlay == 0u && inGameMenu == 0u)) && // the pause, the frontend menus
++                             !g_moviePlaying.load(std::memory_order_relaxed);   // not over a movie
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3005,196 @@ void PS2Runtime::run()
+@@ -2430,21 +3008,196 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());
@@ -8083,7 +8086,7 @@ index 6974254..314523a 100644
          return;
  
 diff --git a/ps2xRuntime/src/main.cpp b/ps2xRuntime/src/main.cpp
-index 563bcbd..ce2b717 100644
+index 563bcbd..5f2323e 100644
 --- a/ps2xRuntime/src/main.cpp
 +++ b/ps2xRuntime/src/main.cpp
 @@ -9,6 +9,7 @@
@@ -8094,10 +8097,16 @@ index 563bcbd..ce2b717 100644
  #include <string>
  #include <filesystem>
  #include <exception>
-@@ -164,8 +165,27 @@ namespace
+@@ -164,8 +165,33 @@ namespace
      }
  }
  
++#if defined(_WIN32)
++// Laptops with two GPUs: ask the NVIDIA/AMD drivers for the dedicated card (the GS renderer needs it).
++extern "C" __declspec(dllexport) unsigned long NvOptimusEnablement = 1;
++extern "C" __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
++#endif
++
 +// A setting the user left out of the environment (and of mksm.ini) gets this value.
 +static void defaultEnv(const char *name, const char *value)
 +{
@@ -8122,6 +8131,14 @@ index 563bcbd..ce2b717 100644
  #if defined(__ANDROID__)
      redirectStdioToLogcat();
  #endif
+@@ -197,6 +223,7 @@ int main(int argc, char *argv[])
+ #if defined(PS2X_ENABLE_DEBUG_UI) && !defined(PLATFORM_VITA)
+         // This hook is to prevent leak rlimgui deps to recompiler etc
+         PS2DebugPanel debugPanel;
++        debugPanel.setVisible(false); // F12 opens it; players should not see it at start
+         runtime.setDebugUiCallbacks(
+             [](PS2Runtime &rt, void *userData)
+             {
 diff --git a/ps2xTest/CMakeLists.txt b/ps2xTest/CMakeLists.txt
 index 3eaa8b3..d9eca70 100644
 --- a/ps2xTest/CMakeLists.txt

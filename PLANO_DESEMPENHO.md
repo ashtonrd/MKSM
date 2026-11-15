@@ -640,7 +640,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
     | `0x6BEE2C` | pausa do Select ("Continue / Options / Exit Game") |
     | `0x4C49E8` | qualquer menu dentro do jogo (mapa e pausa) |
 
-  - **A dica "R3: Gráfico"** aparece na pausa e nas telas do menu inicial.
+  - **A dica "R3: Gráfico"** aparece na pausa e nas telas do menu inicial, nunca durante um filme (`g_moviePlaying`, 15/11: aparecia nos filmes da abertura e da história, que rodam com `0x4F4B68` = 0). O painel de depuração (F12) começa fechado.
   - **Controle:** enquanto o menu está aberto, e até soltar os botões que o fecharam, o jogo não recebe nada (`g_gfxBlockInput` no `ps2_pad.cpp`).
   - **Opções e gravação:** Predefinição Alto/Leve, Resolução 1x–4x (na hora: `GSHwBackend::SetScale`), FXAA, filtro, mistura de campos (na hora), renderizador e thread (ao reiniciar, marcados com *). Cada mudança grava as chaves no `MKSM_INI` (o `jogar.sh` exporta `$raiz/mksm.ini`), mantendo as outras linhas.
   - **Teste sem controle:** `MKSM_GFX_SCRIPT="190o,193d,194l,198c"` (abre, desce, esquerda, fecha). Testado na pausa: menu e dica certos (acentos inclusive), 2x → 1x ao vivo, `mksm.ini` atualizado, jogo seguiu.

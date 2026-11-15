@@ -4,7 +4,11 @@
 #include <cstdlib>
 #include <cstring>
 
-#if defined(__x86_64__) && !defined(_WIN32)
+#if defined(__x86_64__) && defined(_WIN32)
+extern "C" __declspec(dllimport) void *__stdcall VirtualAlloc(void *address, size_t size, unsigned long type, unsigned long protect);
+extern "C" __declspec(dllimport) int __stdcall VirtualFree(void *address, size_t size, unsigned long type);
+#define PS2X_IOP_JIT_SUPPORTED 1
+#elif defined(__x86_64__)
 #include <sys/mman.h>
 #define PS2X_IOP_JIT_SUPPORTED 1
 #else
@@ -129,9 +133,15 @@ namespace ps2x::iop::detail
         const char *setting = std::getenv("PS2X_IOP_JIT");
         if (setting != nullptr && setting[0] == '0')
             return;
+#if defined(_WIN32)
+        void *arena = VirtualAlloc(nullptr, kArenaSize, 0x3000u /* MEM_COMMIT | MEM_RESERVE */, 0x40u /* PAGE_EXECUTE_READWRITE */);
+        if (arena == nullptr)
+            return;
+#else
         void *arena = mmap(nullptr, kArenaSize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (arena == MAP_FAILED)
             return;
+#endif
         m_arena = static_cast<uint8_t *>(arena);
         m_enabled = true;
 #endif
@@ -141,7 +151,11 @@ namespace ps2x::iop::detail
     {
 #if PS2X_IOP_JIT_SUPPORTED
         if (m_arena != nullptr)
+#if defined(_WIN32)
+            VirtualFree(m_arena, 0, 0x8000u /* MEM_RELEASE */);
+#else
             munmap(m_arena, kArenaSize);
+#endif
 #endif
     }
 
