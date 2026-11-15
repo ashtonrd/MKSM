@@ -522,9 +522,14 @@ struct GSHwBackend::Renderer
     // CLUT as the GS keeps it (512 halfwords), fed from the mirror.
     std::array<uint16_t, 512> clut{};
     uint64_t clutSerial = 1; // bumped when clut changes
-    // clut converted for the last way it was read (resolveTextureSlow)
-    std::array<uint32_t, 256> paletteColors{};
-    uint64_t paletteSerial = 0, paletteHow = ~0ull, paletteHash = 0;
+    // clut converted for the last ways it was read (resolveTextureSlow; MKSM alternates CSA)
+    struct Palette
+    {
+        std::array<uint32_t, 256> colors{};
+        uint64_t serial = 0, how = ~0ull, hash = 0;
+    };
+    std::array<Palette, 4> palettesRead{};
+    uint32_t paletteNext = 0;
     uint32_t clutCbp[2]{~0u, ~0u};
     // Last texture resolved, reused while nothing it depends on changed (most primitives).
     uint64_t generation = 1;   // bumped when a surface, texture or the CLUT changes
@@ -871,6 +876,7 @@ struct GSHwBackend::Renderer
     void invalidateTexturesExact(const std::vector<uint8_t> &written, uint32_t b0, uint32_t b1);
     void loadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut);
     uint32_t clutColor(const GSDrawState &state, uint32_t index) const;
+    const Palette &paletteFor(const GSDrawState &state);
     bool resolveTexture(const GSPrimitiveBatch &b, Surface *target, BatchState &out);
     bool resolveTextureSlow(const GSPrimitiveBatch &b, Surface *target, BatchState &out);
     VkDescriptorSet mapSet(VkImageView map, VkImageView palette, VkImageView dst = VK_NULL_HANDLE);
@@ -1828,14 +1834,9 @@ bool GSHwBackend::Renderer::mappedRead(const GSPrimitiveBatch &b, Surface *s, Su
     VkImageView paletteView = dummyPalette.view;
     if (paletted)
     {
-        std::array<uint32_t, 256> colors{};
-        const uint32_t n = isFourBit(tex.psm) ? 16u : 256u;
-        uint64_t hash = 0xCBF29CE484222325ull;
-        for (uint32_t i = 0; i < n; ++i)
-        {
-            colors[i] = clutColor(state, i);
-            hash = (hash ^ colors[i]) * 0x100000001B3ull;
-        }
+        const Palette &converted = paletteFor(state);
+        const std::array<uint32_t, 256> &colors = converted.colors;
+        const uint64_t hash = converted.hash;
         auto pal = palettes.find(hash);
         if (pal == palettes.end())
         {
@@ -2125,23 +2126,20 @@ void GSHwBackend::Renderer::loadClut(const GSTex0Reg &tex0, const GSTexClutReg &
     const uint32_t destinationBase = (static_cast<uint32_t>(tex0.csa) & (sixteenBit ? 0x1Fu : 0x0Fu)) << 4u;
     const bool csm1Suffix = tex0.csm == 0u && thirtyTwoBit && !fourBit;
     const uint32_t firstEntry = csm1Suffix ? destinationBase : 0u;
+    // The CLUT texels a row at a time (CSM1: a 16x16 or 16x2 area, then the entry order; CSM2: one
+    // row), instead of a full address per entry.
+    uint32_t texelsRead[256];
+    const uint32_t readPsm = sixteenBit ? tex0.cpsm : GS_PSM_CT32;
+    if (tex0.csm == 0u)
+        for (uint32_t y = 0; y < (fourBit ? 2u : 16u); ++y)
+            GSMem::ReadRow(vram, readPsm, tex0.cbp, 1u, 0u, y, texelsRead + y * 16u, 16u);
+    else
+        GSMem::ReadRow(vram, readPsm, tex0.cbp, texclut.cbw ? texclut.cbw : 1u, static_cast<uint32_t>(texclut.cou) << 4u, texclut.cov,
+                       texelsRead, entryCount);
     for (uint32_t entry = firstEntry; entry < entryCount; ++entry)
     {
-        uint32_t sx = 0, sy = 0, sw = 1;
-        if (tex0.csm == 0u)
-        {
-            const uint32_t i = (entry & ~0x18u) | ((entry & 0x08u) << 1u) | ((entry & 0x10u) >> 1u);
-            sx = i & 0x0Fu, sy = i >> 4u;
-        }
-        else
-        {
-            sw = texclut.cbw ? texclut.cbw : 1u;
-            sx = (static_cast<uint32_t>(texclut.cou) << 4u) + entry;
-            sy = texclut.cov;
-        }
-        const uint32_t raw = sixteenBit ? (tex0.cpsm == GS_PSM_CT16S ? GSMem::ReadCT16S(vram, tex0.cbp, sw, sx, sy)
-                                                                     : GSMem::ReadCT16(vram, tex0.cbp, sw, sx, sy))
-                                        : GSMem::ReadCT32(vram, tex0.cbp, sw, sx, sy);
+        const uint32_t raw = tex0.csm == 0u ? texelsRead[(entry & ~0x18u) | ((entry & 0x08u) << 1u) | ((entry & 0x10u) >> 1u)]
+                                            : texelsRead[entry];
         const uint32_t d = (csm1Suffix ? entry : destinationBase + entry) & (sixteenBit ? 0x1FFu : 0x0FFu);
         const uint16_t lo = static_cast<uint16_t>(sixteenBit ? raw : (raw & 0xFFFFu)), hi = static_cast<uint16_t>(raw >> 16u);
         if (clut[d] != lo || (!sixteenBit && clut[d + 256u] != hi))
@@ -2150,6 +2148,29 @@ void GSHwBackend::Renderer::loadClut(const GSTex0Reg &tex0, const GSTexClutReg &
         if (!sixteenBit)
             clut[d + 256u] = hi;
     }
+}
+
+// The CLUT converted for how this draw reads it, redone only when the CLUT or that changes (256
+// clutColor calls per texture lookup and per mapped read were ~14% of the renderer thread at 2x).
+const GSHwBackend::Renderer::Palette &GSHwBackend::Renderer::paletteFor(const GSDrawState &state)
+{
+    const GSTex0Reg &tex = state.context.tex0;
+    const uint32_t n = isFourBit(tex.psm) ? 16u : 256u;
+    const uint64_t how = uint64_t(tex.cpsm) | (uint64_t(tex.csa) << 8) | (uint64_t(tex.csm) << 16) | (uint64_t(n) << 24) |
+                         (uint64_t(state.texa.ta0) << 32) | (uint64_t(state.texa.ta1) << 40) | (uint64_t(state.texa.aem) << 48);
+    for (const Palette &p : palettesRead)
+        if (p.serial == clutSerial && p.how == how)
+            return p;
+    Palette &p = palettesRead[paletteNext++ % palettesRead.size()];
+    p.colors.fill(0u);
+    p.hash = 0xCBF29CE484222325ull;
+    for (uint32_t i = 0; i < n; ++i)
+    {
+        p.colors[i] = clutColor(state, i);
+        p.hash = (p.hash ^ p.colors[i]) * 0x100000001B3ull;
+    }
+    p.serial = clutSerial, p.how = how;
+    return p;
 }
 
 uint32_t GSHwBackend::Renderer::clutColor(const GSDrawState &state, uint32_t index) const
@@ -2405,22 +2426,7 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     const bool paletted = isPaletted(tex.psm);
     if (paletted)
     {
-        // The converted palette, redone only when the CLUT or how it is read changes (256
-        // clutColor calls per lookup were 14% of the renderer thread at 2x).
-        const uint32_t n = isFourBit(tex.psm) ? 16u : 256u;
-        const uint64_t how = uint64_t(tex.cpsm) | (uint64_t(tex.csa) << 8) | (uint64_t(tex.csm) << 16) | (uint64_t(n) << 24) |
-                             (uint64_t(state.texa.ta0) << 32) | (uint64_t(state.texa.ta1) << 40) | (uint64_t(state.texa.aem) << 48);
-        if (paletteSerial != clutSerial || paletteHow != how)
-        {
-            paletteHash = 0xCBF29CE484222325ull;
-            for (uint32_t i = 0; i < n; ++i)
-            {
-                paletteColors[i] = clutColor(state, i);
-                paletteHash = (paletteHash ^ paletteColors[i]) * 0x100000001B3ull;
-            }
-            paletteSerial = clutSerial, paletteHow = how;
-        }
-        key = (key ^ paletteHash) * 0x100000001B3ull;
+        key = (key ^ paletteFor(state).hash) * 0x100000001B3ull;
     }
     else
         key = (key ^ (uint64_t(state.texa.ta0) | (uint64_t(state.texa.ta1) << 8) | (uint64_t(state.texa.aem) << 16))) * 0x100000001B3ull;
@@ -2506,29 +2512,44 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     auto *texels = reinterpret_cast<uint32_t *>(dst);
     if (partialRead) // texels outside the sampled region are never read
         std::memset(texels, 0, size_t(w) * h * 4u);
-    const uint32_t *palette = paletteColors.data();
-    for (uint32_t y = ry0; y < ry1; ++y)
-        for (uint32_t x = rx0; x < rx1; ++x)
+    // A row at a time through GSMem::ReadRow (the read per texel was ~5% of the GS thread at 2x),
+    // decoded in ordinary memory: the staging buffer is write-combined, reading it back is slow.
+    const uint32_t *colors = paletted ? paletteFor(state).colors.data() : nullptr;
+    const uint32_t n = rx1 > rx0 ? rx1 - rx0 : 0u;
+    thread_local std::vector<uint32_t> rowBuffer;
+    rowBuffer.resize(n);
+    uint32_t *row = rowBuffer.data();
+    for (uint32_t y = ry0; y < ry1 && n != 0u; ++y)
+    {
+        switch (tex.psm)
         {
-            uint32_t c = 0;
-            switch (tex.psm)
-            {
-            case GS_PSM_T4: c = palette[GSMem::ReadP4(vram, tex.tbp0, tex.tbw, x, y) & 0xFu]; break;
-            case GS_PSM_T4HL: c = palette[GSMem::ReadP4HL(vram, tex.tbp0, tex.tbw, x, y) & 0xFu]; break;
-            case GS_PSM_T4HH: c = palette[GSMem::ReadP4HH(vram, tex.tbp0, tex.tbw, x, y) & 0xFu]; break;
-            case GS_PSM_T8: c = palette[GSMem::ReadP8(vram, tex.tbp0, tex.tbw, x, y) & 0xFFu]; break;
-            case GS_PSM_T8H: c = palette[GSMem::ReadP8H(vram, tex.tbp0, tex.tbw, x, y) & 0xFFu]; break;
-            case GS_PSM_CT32: c = GSMem::ReadCT32(vram, tex.tbp0, tex.tbw, x, y); break;
-            case GS_PSM_CT24: c = applyTexa(state.texa, GS_PSM_CT24, GSMem::ReadCT24(vram, tex.tbp0, tex.tbw, x, y)); break;
-            case GS_PSM_CT16: c = expand5551(GSMem::ReadCT16(vram, tex.tbp0, tex.tbw, x, y), state.texa); break;
-            case GS_PSM_CT16S: c = expand5551(GSMem::ReadCT16S(vram, tex.tbp0, tex.tbw, x, y), state.texa); break;
-            case GS_PSM_Z32: c = GSMem::ReadZ32(vram, tex.tbp0, tex.tbw, x, y); break;
-            case GS_PSM_Z24: c = applyTexa(state.texa, GS_PSM_Z24, GSMem::ReadZ24(vram, tex.tbp0, tex.tbw, x, y)); break;
-            case GS_PSM_Z16: c = expand5551(GSMem::ReadZ16(vram, tex.tbp0, tex.tbw, x, y), state.texa); break;
-            default: c = 0xFFFF00FFu; break;
-            }
-            texels[size_t(y) * w + x] = c;
+        case GS_PSM_T4: case GS_PSM_T4HL: case GS_PSM_T4HH: case GS_PSM_T8: case GS_PSM_T8H:
+        {
+            GSMem::ReadRow(vram, tex.psm, tex.tbp0, tex.tbw, rx0, y, row, n);
+            const uint32_t mask = isFourBit(tex.psm) ? 0xFu : 0xFFu;
+            for (uint32_t i = 0; i < n; ++i)
+                row[i] = colors[row[i] & mask];
+            break;
         }
+        case GS_PSM_CT32: case GS_PSM_Z32:
+            GSMem::ReadRow(vram, tex.psm, tex.tbp0, tex.tbw, rx0, y, row, n);
+            break;
+        case GS_PSM_CT24: case GS_PSM_Z24:
+            GSMem::ReadRow(vram, tex.psm, tex.tbp0, tex.tbw, rx0, y, row, n);
+            for (uint32_t i = 0; i < n; ++i)
+                row[i] = applyTexa(state.texa, tex.psm, row[i]);
+            break;
+        case GS_PSM_CT16: case GS_PSM_CT16S: case GS_PSM_Z16:
+            GSMem::ReadRow(vram, tex.psm, tex.tbp0, tex.tbw, rx0, y, row, n);
+            for (uint32_t i = 0; i < n; ++i)
+                row[i] = expand5551(row[i], state.texa);
+            break;
+        default:
+            std::fill(row, row + n, 0xFFFF00FFu);
+            break;
+        }
+        std::memcpy(texels + size_t(y) * w + rx0, row, size_t(n) * 4u);
+    }
     ContentEntry decoded;
     decoded.image = textureImage(w, h);
     decoded.lastUse = useCounter;

@@ -1619,10 +1619,10 @@ index 2421f9e..967ac14 100644
 +    bool m_stopBands = false;
  };
 diff --git a/ps2xRuntime/include/runtime/gs/ps2_gs_memory.h b/ps2xRuntime/include/runtime/gs/ps2_gs_memory.h
-index c784ff7..9c16260 100644
+index c784ff7..06aab36 100644
 --- a/ps2xRuntime/include/runtime/gs/ps2_gs_memory.h
 +++ b/ps2xRuntime/include/runtime/gs/ps2_gs_memory.h
-@@ -563,6 +563,14 @@ namespace GSMem
+@@ -563,6 +563,17 @@ namespace GSMem
  
  	void WriteNull(u8* data, u32 bp, u32 bw, u32 x, u32 y, u32 value);
  
@@ -1630,6 +1630,9 @@ index c784ff7..9c16260 100644
 +	// the run is element (first + k) of src, packed as a host transfer packs them: 4, 3, 2 or 1
 +	// bytes, or a nibble (low first) for the 4-bit formats.
 +	void WriteRow(u8* data, u32 psm, u32 bp, u32 bw, u32 x, u32 y, const u8* src, u32 first, u32 count);
++	// Reads `count` pixels of row y from x on into out, as the per-pixel Read* for psm would
++	// (stored value: palette index for the paletted formats). Unknown psm: zeros.
++	void ReadRow(u8* data, u32 psm, u32 bp, u32 bw, u32 x, u32 y, u32* out, u32 count);
 +
 +	u32 PixelIndexCT32(u32 bp, u32 bw, u32 x, u32 y);
 +	// Pixel index (in units of the format's storage width) for any psm; 0 if unknown.
@@ -5371,10 +5374,15 @@ index 9281d5f..0776ea3 100644
  }
  
 diff --git a/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp b/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp
-index a8f9fa8..0edc51b 100644
+index a8f9fa8..0de20c2 100644
 --- a/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp
 +++ b/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp
-@@ -324,6 +324,74 @@ namespace GSMem
+@@ -1,3 +1,4 @@
++#include <algorithm>
+ #include <array>
+ 
+ #include "runtime/gs/ps2_gs_memory.h"
+@@ -324,6 +325,102 @@ namespace GSMem
      {
      }
  
@@ -5401,6 +5409,34 @@ index a8f9fa8..0edc51b 100644
 +            else
 +                v = (src[k >> 1] >> ((k & 1u) * 4u)) & 0x0Fu;
 +            PixelStorageTraits<P>::Write(table, data, bp, bw, x + i, y, static_cast<PackedT>(v));
++        }
++    }
++
++    template<PixelStorageMode P, typename Table>
++    static void ReadRowT(const Table& table, u8* data, u32 bp, u32 bw, u32 x, u32 y, u32* out, u32 count)
++    {
++        for (u32 i = 0; i < count; ++i)
++            out[i] = PixelStorageTraits<P>::Read(table, data, bp, bw, x + i, y);
++    }
++
++    void ReadRow(u8* data, u32 psm, u32 bp, u32 bw, u32 x, u32 y, u32* out, u32 count)
++    {
++        switch (static_cast<PixelStorageMode>(psm))
++        {
++        case C32: return ReadRowT<C32>(PageTableC32, data, bp, bw, x, y, out, count);
++        case C24: return ReadRowT<C24>(PageTableC32, data, bp, bw, x, y, out, count);
++        case Z32: return ReadRowT<Z32>(PageTableZ32, data, bp, bw, x, y, out, count);
++        case Z24: return ReadRowT<Z24>(PageTableZ32, data, bp, bw, x, y, out, count);
++        case C16: return ReadRowT<C16>(PageTableC16, data, bp, bw, x, y, out, count);
++        case C16S: return ReadRowT<C16S>(PageTableC16S, data, bp, bw, x, y, out, count);
++        case Z16: return ReadRowT<Z16>(PageTableZ16, data, bp, bw, x, y, out, count);
++        case Z16S: return ReadRowT<Z16S>(PageTableZ16S, data, bp, bw, x, y, out, count);
++        case P8: return ReadRowT<P8>(PageTableP8, data, bp, bw, x, y, out, count);
++        case P8H: return ReadRowT<P8H>(PageTableC32, data, bp, bw, x, y, out, count);
++        case P4: return ReadRowT<P4>(PageTableP4, data, bp, bw, x, y, out, count);
++        case P4HL: return ReadRowT<P4HL>(PageTableC32, data, bp, bw, x, y, out, count);
++        case P4HH: return ReadRowT<P4HH>(PageTableC32, data, bp, bw, x, y, out, count);
++        default: std::fill(out, out + count, 0u); return;
 +        }
 +    }
 +
