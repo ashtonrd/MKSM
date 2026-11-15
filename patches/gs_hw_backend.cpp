@@ -2607,6 +2607,11 @@ bool GSHwBackend::Renderer::draw(const GSPrimitiveBatch &b)
     const bool same = batchCount != 0u && batch.color && lastDrawGeneration == generation && lastDrawCount == b.vertexCount &&
                       (!(state.prim.tme && isPaletted(state.context.tex0.psm)) || lastDrawClutSerial == clutSerial) &&
                       !feedbackLast && std::memcmp(&lastDrawState, &state, sizeof(state)) == 0 && (!feedbackSurface || feedbackServed(b)) && (!dateSurface || dateServed(b));
+    // shortcut: after a partial read (partialRead) the next primitive with the same state reuses
+    // that decode even if it samples another region: MKSM's 4x7 grid of 32x32 tiles out of the
+    // 1024x1024 texture at 0x2580 gets tiles 2-28 from zeros. The field pages come out identical
+    // (bench_cutscene), and decoding each tile cost ~4 GPU readbacks per frame (2.9 -> 6.3 s);
+    // fix it if that grid ever shows on screen.
     if (!same)
     {
         if (!drawState(b))
@@ -3183,7 +3188,12 @@ void GSHwBackend::presentNow(const GSPresentationRequest &) {}
 void GSHwBackend::Submit(const GSPrimitiveBatch &batch)
 {
     if (m_async)
-        return enqueue([&](Async::Work &w) { w.commands.push_back({Async::KSubmit, 0u, batch}); });
+        return enqueue([&](Async::Work &w) {
+            w.commands.push_back({Async::KSubmit, 0u, {}});
+            // Byte for byte, padding too: draw() compares states with memcmp, and a member-wise
+            // copy left garbage there (shortcut misses, run-to-run differences in what was drawn).
+            std::memcpy(&w.commands.back().batch, &batch, sizeof(batch));
+        });
     submitNow(batch);
 }
 
