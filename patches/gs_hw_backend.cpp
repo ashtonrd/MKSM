@@ -21,6 +21,29 @@
 #include <unordered_map>
 #include <vector>
 
+
+static inline uint64_t mix64(uint64_t x)
+{
+    x ^= x >> 33, x *= 0xFF51AFD7ED558CCDull;
+    x ^= x >> 33, x *= 0xC4CEB9FE1A85EC53ull;
+    return x ^ (x >> 33);
+}
+
+// A 64-bit fingerprint of n bytes (n a multiple of 32): four independent lanes, then mixed.
+static uint64_t hashBytes(const void *data, size_t n)
+{
+    const uint8_t *p = static_cast<const uint8_t *>(data);
+    uint64_t lane[4] = {0x9E3779B97F4A7C15ull, 0xBF58476D1CE4E5B9ull, 0x94D049BB133111EBull, n};
+    for (size_t i = 0; i + 32u <= n; i += 32u)
+        for (int k = 0; k < 4; ++k)
+        {
+            uint64_t w;
+            std::memcpy(&w, p + i + size_t(k) * 8u, 8u);
+            lane[k] = (lane[k] ^ w) * 0x9E3779B97F4A7C15ull;
+        }
+    return mix64(lane[0] ^ mix64(lane[1] ^ mix64(lane[2] ^ mix64(lane[3]))));
+}
+
 #if defined(PS2X_HAVE_VULKAN)
 #include <vulkan/vulkan.h>
 #endif
@@ -523,13 +546,23 @@ struct GSHwBackend::Renderer
     std::array<uint16_t, 512> clut{};
     uint64_t clutSerial = 1; // bumped when clut changes
     // clut converted for the last ways it was read (resolveTextureSlow; MKSM alternates CSA)
+    uint64_t clutHash = 0;   // content of clut[]: keys the converted palettes
+    // By content: MKSM switches CLUTs ~2500 times a frame, mostly among a few. Keyed by the
+    // serial (which only grows), every switch back was a new conversion of 256 entries.
     struct Palette
     {
         std::array<uint32_t, 256> colors{};
-        uint64_t serial = 0, how = ~0ull, hash = 0;
+        uint64_t clut = ~0ull, how = ~0ull, hash = 0; // clut: the clutHash it was converted from
     };
-    std::array<Palette, 4> palettesRead{};
-    uint32_t paletteNext = 0;
+    std::array<Palette, 64> palettesRead{};
+    // Recent CLUT loads by their source bytes: a repeat applies the stored entries instead of
+    // reading and reordering the texels again.
+    struct ClutLoad
+    {
+        uint64_t key = ~0ull, raw = 0;
+        std::array<uint16_t, 256> lo{}, hi{}; // by entry, in CLUT order
+    };
+    std::vector<ClutLoad> clutLoads = std::vector<ClutLoad>(256);
     uint32_t clutCbp[2]{~0u, ~0u};
     // Last texture resolved, reused while nothing it depends on changed (most primitives).
     uint64_t generation = 1;   // bumped when a surface or texture changes (the CLUT has clutSerial)
@@ -2099,9 +2132,9 @@ void GSHwBackend::Renderer::loadClut(const GSTex0Reg &tex0, const GSTexClutReg &
     uint32_t c0 = 0, c1 = 0;
     blockRange(tex0.cbp, std::max<uint32_t>(texclut.cbw, 1u), tex0.cpsm, 256u, 64u, c0, c1);
     syncIfPending(c0, c1);
+    std::vector<uint32_t> clutBlocks;
     {
         // The exact CLUT blocks; surfaces that hold them give up just those blocks.
-        std::vector<uint32_t> clutBlocks;
         const uint32_t cw = tex0.csm == 0u ? (fourBit ? 8u : 16u) : 256u, ch = tex0.csm == 0u ? (fourBit ? 2u : 16u) : 1u;
         const uint32_t cx = tex0.csm == 0u ? 0u : static_cast<uint32_t>(texclut.cou) * 16u, cy = tex0.csm == 0u ? 0u : texclut.cov;
         const uint32_t cbw = tex0.csm == 0u ? 1u : std::max<uint32_t>(texclut.cbw, 1u);
@@ -2126,31 +2159,58 @@ void GSHwBackend::Renderer::loadClut(const GSTex0Reg &tex0, const GSTexClutReg &
     const uint32_t destinationBase = (static_cast<uint32_t>(tex0.csa) & (sixteenBit ? 0x1Fu : 0x0Fu)) << 4u;
     const bool csm1Suffix = tex0.csm == 0u && thirtyTwoBit && !fourBit;
     const uint32_t firstEntry = csm1Suffix ? destinationBase : 0u;
-    // The CLUT texels a row at a time (CSM1: a 16x16 or 16x2 area, then the entry order; CSM2: one
-    // row), instead of a full address per entry.
-    uint32_t texelsRead[256];
-    const uint32_t readPsm = sixteenBit ? tex0.cpsm : GS_PSM_CT32;
-    if (tex0.csm == 0u)
-        for (uint32_t y = 0; y < (fourBit ? 2u : 16u); ++y)
-            GSMem::ReadRow(vram, readPsm, tex0.cbp, 1u, 0u, y, texelsRead + y * 16u, 16u);
-    else
-        GSMem::ReadRow(vram, readPsm, tex0.cbp, texclut.cbw ? texclut.cbw : 1u, static_cast<uint32_t>(texclut.cou) << 4u, texclut.cov,
-                       texelsRead, entryCount);
-    bool clutChanged = false;
-    for (uint32_t entry = firstEntry; entry < entryCount; ++entry)
+    // The source blocks as the mirror holds them now (current after the above) pick a stored load.
+    const uint64_t key = uint64_t(tex0.cbp) | uint64_t(tex0.cpsm) << 14 | uint64_t(tex0.csm) << 20 | uint64_t(tex0.csa) << 21 |
+                         uint64_t(fourBit) << 26 |
+                         (tex0.csm ? (uint64_t(texclut.cbw) << 27 | uint64_t(texclut.cou) << 33 | uint64_t(texclut.cov) << 39) : 0u);
+    uint64_t raw = mix64(key);
+    for (uint32_t blk : clutBlocks)
+        raw = mix64(raw ^ hashBytes(vram + size_t(blk) * 256u, 256u));
+    ClutLoad &stored = clutLoads[raw & (clutLoads.size() - 1u)];
+    if (stored.key != key || stored.raw != raw)
     {
-        const uint32_t raw = tex0.csm == 0u ? texelsRead[(entry & ~0x18u) | ((entry & 0x08u) << 1u) | ((entry & 0x10u) >> 1u)]
-                                            : texelsRead[entry];
-        const uint32_t d = (csm1Suffix ? entry : destinationBase + entry) & (sixteenBit ? 0x1FFu : 0x0FFu);
-        const uint16_t lo = static_cast<uint16_t>(sixteenBit ? raw : (raw & 0xFFFFu)), hi = static_cast<uint16_t>(raw >> 16u);
-        if (clut[d] != lo || (!sixteenBit && clut[d + 256u] != hi))
-            clutChanged = true;
-        clut[d] = lo;
-        if (!sixteenBit)
-            clut[d + 256u] = hi;
+        // The CLUT texels a row at a time (CSM1: a 16x16 or 16x2 area, then the entry order; CSM2:
+        // one row), instead of a full address per entry.
+        uint32_t texelsRead[256];
+        const uint32_t readPsm = sixteenBit ? tex0.cpsm : GS_PSM_CT32;
+        if (tex0.csm == 0u)
+            for (uint32_t y = 0; y < (fourBit ? 2u : 16u); ++y)
+                GSMem::ReadRow(vram, readPsm, tex0.cbp, 1u, 0u, y, texelsRead + y * 16u, 16u);
+        else
+            GSMem::ReadRow(vram, readPsm, tex0.cbp, texclut.cbw ? texclut.cbw : 1u, static_cast<uint32_t>(texclut.cou) << 4u, texclut.cov,
+                           texelsRead, entryCount);
+        for (uint32_t entry = firstEntry; entry < entryCount; ++entry)
+        {
+            const uint32_t texel = tex0.csm == 0u ? texelsRead[(entry & ~0x18u) | ((entry & 0x08u) << 1u) | ((entry & 0x10u) >> 1u)]
+                                                  : texelsRead[entry];
+            stored.lo[entry] = static_cast<uint16_t>(sixteenBit ? texel : (texel & 0xFFFFu));
+            stored.hi[entry] = static_cast<uint16_t>(texel >> 16u);
+        }
+        stored.key = key, stored.raw = raw;
     }
+    bool clutChanged = false;
+    const uint32_t mask = sixteenBit ? 0x1FFu : 0x0FFu, d0 = (csm1Suffix ? firstEntry : destinationBase + firstEntry) & mask;
+    const uint32_t n = entryCount - firstEntry;
+    if (d0 + n <= mask + 1u)
+    {
+        clutChanged = std::memcmp(&clut[d0], &stored.lo[firstEntry], n * 2u) != 0 ||
+                      (!sixteenBit && std::memcmp(&clut[d0 + 256u], &stored.hi[firstEntry], n * 2u) != 0);
+        std::memcpy(&clut[d0], &stored.lo[firstEntry], n * 2u);
+        if (!sixteenBit)
+            std::memcpy(&clut[d0 + 256u], &stored.hi[firstEntry], n * 2u);
+    }
+    else
+        for (uint32_t entry = firstEntry; entry < entryCount; ++entry)
+        {
+            const uint32_t d = (csm1Suffix ? entry : destinationBase + entry) & mask;
+            if (clut[d] != stored.lo[entry] || (!sixteenBit && clut[d + 256u] != stored.hi[entry]))
+                clutChanged = true;
+            clut[d] = stored.lo[entry];
+            if (!sixteenBit)
+                clut[d + 256u] = stored.hi[entry];
+        }
     if (clutChanged)
-        ++clutSerial;
+        ++clutSerial, clutHash = hashBytes(clut.data(), clut.size() * sizeof(clut[0]));
 }
 
 // The CLUT converted for how this draw reads it, redone only when the CLUT or that changes (256
@@ -2161,10 +2221,9 @@ const GSHwBackend::Renderer::Palette &GSHwBackend::Renderer::paletteFor(const GS
     const uint32_t n = isFourBit(tex.psm) ? 16u : 256u;
     const uint64_t how = uint64_t(tex.cpsm) | (uint64_t(tex.csa) << 8) | (uint64_t(tex.csm) << 16) | (uint64_t(n) << 24) |
                          (uint64_t(state.texa.ta0) << 32) | (uint64_t(state.texa.ta1) << 40) | (uint64_t(state.texa.aem) << 48);
-    for (const Palette &p : palettesRead)
-        if (p.serial == clutSerial && p.how == how)
-            return p;
-    Palette &p = palettesRead[paletteNext++ % palettesRead.size()];
+    Palette &p = palettesRead[mix64(clutHash ^ how) & (palettesRead.size() - 1u)];
+    if (p.clut == clutHash && p.how == how)
+        return p;
     p.colors.fill(0u);
     p.hash = 0xCBF29CE484222325ull;
     for (uint32_t i = 0; i < n; ++i)
@@ -2172,7 +2231,7 @@ const GSHwBackend::Renderer::Palette &GSHwBackend::Renderer::paletteFor(const GS
         p.colors[i] = clutColor(state, i);
         p.hash = (p.hash ^ p.colors[i]) * 0x100000001B3ull;
     }
-    p.serial = clutSerial, p.how = how;
+    p.clut = clutHash, p.how = how;
     return p;
 }
 
