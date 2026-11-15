@@ -5015,7 +5015,7 @@ index f0ad507..03a88be 100644
      };
  
 diff --git a/ps2xRuntime/src/lib/gs/gs_frontend.cpp b/ps2xRuntime/src/lib/gs/gs_frontend.cpp
-index 9281d5f..0367d82 100644
+index 9281d5f..0776ea3 100644
 --- a/ps2xRuntime/src/lib/gs/gs_frontend.cpp
 +++ b/ps2xRuntime/src/lib/gs/gs_frontend.cpp
 @@ -1,6 +1,9 @@
@@ -5048,7 +5048,25 @@ index 9281d5f..0367d82 100644
  {
      reset();
  }
-@@ -526,18 +533,34 @@ GSPresentationRequest GS::buildPresentationRequestUnlocked() const
+@@ -314,9 +321,14 @@ GSDebugHistoryEntry GS::makeDebugEventUnlocked(GSDebugEventKind kind) const
+     entry.bitbltbuf = m_bitbltbuf;
+     entry.trxpos = m_trxpos;
+     entry.trxreg = m_trxreg;
+-    const GSTransferSnapshot transfer = m_backend ? m_backend->GetTransferSnapshot() : GSTransferSnapshot{};
+-    entry.trxdir = transfer.direction;
+-    entry.transferPixels = transfer.totalPixels;
++    // Only transfer events carry the transfer state: fetching it locks the backend, and draws and
++    // GIF tags made one call per primitive (the new renderer's worker holds that lock).
++    if (kind == GSDebugEventKind::Transfer)
++    {
++        const GSTransferSnapshot transfer = m_backend ? m_backend->GetTransferSnapshot() : GSTransferSnapshot{};
++        entry.trxdir = transfer.direction;
++        entry.transferPixels = transfer.totalPixels;
++    }
+     return entry;
+ }
+ 
+@@ -526,18 +538,34 @@ GSPresentationRequest GS::buildPresentationRequestUnlocked() const
  
  void GS::latchHostPresentationFrame()
  {
@@ -5086,7 +5104,7 @@ index 9281d5f..0367d82 100644
      }
  
      PresentationFrame frame{};
-@@ -570,8 +593,10 @@ void GS::latchHostPresentationFrame()
+@@ -570,8 +598,10 @@ void GS::latchHostPresentationFrame()
  
      if (hasFrame)
      {
@@ -5099,7 +5117,7 @@ index 9281d5f..0367d82 100644
      }
  }
  
-@@ -610,7 +635,12 @@ bool GS::copyLatchedHostPresentationFrame(std::vector<uint8_t> &outPixels,
+@@ -610,7 +640,12 @@ bool GS::copyLatchedHostPresentationFrame(std::vector<uint8_t> &outPixels,
      outPixels.resize(packedRowBytes * static_cast<size_t>(outHeight));
      if (outWidth != 0u && outHeight != 0u)
      {
@@ -5113,7 +5131,7 @@ index 9281d5f..0367d82 100644
          for (uint32_t y = 0; y < outHeight; ++y)
          {
              const size_t srcOffset = static_cast<size_t>(y) * sourceRowBytes;
-@@ -1577,6 +1607,18 @@ void GS::vertexKick(bool drawing)
+@@ -1577,6 +1612,18 @@ void GS::vertexKick(bool drawing)
      {
          GSPrimitiveBatch batch = buildDrawBatch(needed);
          updatePreferredDisplaySourceForDraw(batch);
@@ -5132,7 +5150,7 @@ index 9281d5f..0367d82 100644
          m_backend->Submit(batch);
          recordDrawDebugEventUnlocked(needed);
      }
-@@ -1693,12 +1735,64 @@ GSPrimitiveBatch GS::buildDrawBatch(int vertexCount) const
+@@ -1693,12 +1740,64 @@ GSPrimitiveBatch GS::buildDrawBatch(int vertexCount) const
      batch.state.fogR = m_fogR;
      batch.state.fogG = m_fogG;
      batch.state.fogB = m_fogB;

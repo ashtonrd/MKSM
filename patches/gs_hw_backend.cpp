@@ -295,6 +295,7 @@ struct GSHwBackend::Renderer
         // of disjoint in-place sprites shares one copy (one per primitive was ~25 000/s).
         bool shadowFull = false;
         std::vector<std::array<int, 4>> drawnSinceCopy; // inclusive x0, y0, x1, y1
+        std::vector<uint32_t> pending; // blocks a host transfer rewrote, refreshed from the mirror on use
         void noteDrawn(int x0, int y0, int x1, int y1)
         {
             if (!shadowFull)
@@ -422,7 +423,6 @@ struct GSHwBackend::Renderer
     uint64_t uploadsToSurface = 0;
     // Blocks a host transfer rewrote inside GPU surfaces, refreshed from the mirror once the
     // CPU backend applied the transfer (instead of a full download and re-upload per CLUT).
-    std::vector<std::pair<Surface *, uint32_t>> pendingBlocks;
     Image blockStage; // scratch for refreshPending at scale > 1
     void refreshPending(Surface *only = nullptr); // only: that surface's blocks
     // Texture images are recycled by size: allocating and freeing device memory for every
@@ -521,6 +521,10 @@ struct GSHwBackend::Renderer
 
     // CLUT as the GS keeps it (512 halfwords), fed from the mirror.
     std::array<uint16_t, 512> clut{};
+    uint64_t clutSerial = 1; // bumped when clut changes
+    // clut converted for the last way it was read (resolveTextureSlow)
+    std::array<uint32_t, 256> paletteColors{};
+    uint64_t paletteSerial = 0, paletteHow = ~0ull, paletteHash = 0;
     uint32_t clutCbp[2]{~0u, ~0u};
     // Last texture resolved, reused while nothing it depends on changed (most primitives).
     uint64_t generation = 1;   // bumped when a surface, texture or the CLUT changes
@@ -1330,7 +1334,6 @@ void GSHwBackend::Renderer::destroySurface(Surface *s)
     }
     retire(s->image);
     retire(s->shadow);
-    pendingBlocks.erase(std::remove_if(pendingBlocks.begin(), pendingBlocks.end(), [s](auto &e) { return e.first == s; }), pendingBlocks.end());
     ++generation;
     surfaces.erase(std::remove_if(surfaces.begin(), surfaces.end(), [s](const std::unique_ptr<Surface> &p) { return p.get() == s; }),
                    surfaces.end());
@@ -1872,8 +1875,7 @@ bool GSHwBackend::Renderer::mappedRead(const GSPrimitiveBatch &b, Surface *s, Su
 
 void GSHwBackend::Renderer::refreshPending(Surface *only)
 {
-    if (pendingBlocks.empty() ||
-        (only && std::none_of(pendingBlocks.begin(), pendingBlocks.end(), [only](const auto &e) { return e.first == only; })))
+    if (only ? only->pending.empty() : std::none_of(surfaces.begin(), surfaces.end(), [](auto &p) { return !p->pending.empty(); }))
         return;
     syncInner();
     flushBatch();
@@ -1898,18 +1900,20 @@ void GSHwBackend::Renderer::refreshPending(Surface *only)
         uint32_t x0, y0, block;
     };
     std::vector<Item> items;
-    items.reserve(pendingBlocks.size());
-    for (const auto &[s, block] : pendingBlocks)
-    {
-        if (only && s != only)
-            continue;
-        if (std::find_if(surfaces.begin(), surfaces.end(), [s = s](auto &p) { return p.get() == s; }) == surfaces.end())
-            continue;
-        uint32_t x0 = 0, y0 = 0;
-        if (!blockOrigin(s->block, s->fbw, s->psm, block, x0, y0) || x0 + 8u > s->w || y0 + 8u > s->h)
-            continue;
-        items.push_back({s, x0, y0, block});
-    }
+    const auto take = [&items](Surface *s) {
+        for (uint32_t block : s->pending)
+        {
+            uint32_t x0 = 0, y0 = 0;
+            if (blockOrigin(s->block, s->fbw, s->psm, block, x0, y0) && x0 + 8u <= s->w && y0 + 8u <= s->h)
+                items.push_back({s, x0, y0, block});
+        }
+        s->pending.clear();
+    };
+    if (only)
+        take(only);
+    else
+        for (auto &p : surfaces)
+            take(p.get());
     // Grouped by surface, each block once: every copy reads the mirror as it is now, so repeats
     // carry the same bytes, and regions of one copy or blit must not overlap.
     std::sort(items.begin(), items.end(), [](const Item &l, const Item &r) { return l.s != r.s ? l.s < r.s : l.block < r.block; });
@@ -2001,11 +2005,6 @@ void GSHwBackend::Renderer::refreshPending(Surface *only)
         fullBarrier(); // the next chunk reuses the scratch image
     }
     fullBarrier();
-    if (only)
-        pendingBlocks.erase(std::remove_if(pendingBlocks.begin(), pendingBlocks.end(), [only](const auto &e) { return e.first == only; }),
-                            pendingBlocks.end());
-    else
-        pendingBlocks.clear();
     ++generation;
 }
 
@@ -2077,7 +2076,7 @@ void GSHwBackend::Renderer::loadClut(const GSTex0Reg &tex0, const GSTexClutReg &
         const uint32_t d = (csm1Suffix ? entry : destinationBase + entry) & (sixteenBit ? 0x1FFu : 0x0FFu);
         const uint16_t lo = static_cast<uint16_t>(sixteenBit ? raw : (raw & 0xFFFFu)), hi = static_cast<uint16_t>(raw >> 16u);
         if (clut[d] != lo || (!sixteenBit && clut[d + 256u] != hi))
-            ++generation;
+            ++generation, ++clutSerial;
         clut[d] = lo;
         if (!sixteenBit)
             clut[d + 256u] = hi;
@@ -2332,18 +2331,27 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     }
 
     // Decoded from the mirror, cached by everything that changes the texels.
-    std::array<uint32_t, 256> palette{};
     uint64_t key = (uint64_t(tex.tbp0) << 40) ^ (uint64_t(tex.tbw) << 34) ^ (uint64_t(tex.psm) << 28) ^ (uint64_t(tex.tw) << 24) ^
                    (uint64_t(tex.th) << 20);
     const bool paletted = isPaletted(tex.psm);
     if (paletted)
     {
+        // The converted palette, redone only when the CLUT or how it is read changes (256
+        // clutColor calls per lookup were 14% of the renderer thread at 2x).
         const uint32_t n = isFourBit(tex.psm) ? 16u : 256u;
-        for (uint32_t i = 0; i < n; ++i)
+        const uint64_t how = uint64_t(tex.cpsm) | (uint64_t(tex.csa) << 8) | (uint64_t(tex.csm) << 16) | (uint64_t(n) << 24) |
+                             (uint64_t(state.texa.ta0) << 32) | (uint64_t(state.texa.ta1) << 40) | (uint64_t(state.texa.aem) << 48);
+        if (paletteSerial != clutSerial || paletteHow != how)
         {
-            palette[i] = clutColor(state, i);
-            key = (key ^ palette[i]) * 0x100000001B3ull;
+            paletteHash = 0xCBF29CE484222325ull;
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                paletteColors[i] = clutColor(state, i);
+                paletteHash = (paletteHash ^ paletteColors[i]) * 0x100000001B3ull;
+            }
+            paletteSerial = clutSerial, paletteHow = how;
         }
+        key = (key ^ paletteHash) * 0x100000001B3ull;
     }
     else
         key = (key ^ (uint64_t(state.texa.ta0) | (uint64_t(state.texa.ta1) << 8) | (uint64_t(state.texa.aem) << 16))) * 0x100000001B3ull;
@@ -2429,6 +2437,7 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     auto *texels = reinterpret_cast<uint32_t *>(dst);
     if (partialRead) // texels outside the sampled region are never read
         std::memset(texels, 0, size_t(w) * h * 4u);
+    const uint32_t *palette = paletteColors.data();
     for (uint32_t y = ry0; y < ry1; ++y)
         for (uint32_t x = rx0; x < rx1; ++x)
         {
@@ -3374,10 +3383,13 @@ void GSHwBackend::beginTransferNow(const GSTransferCommand &command)
                     r.downloadBlocks(*sp, blocks); // the bytes the transfer leaves alone come from the GPU
                 for (uint32_t blk : blocks)
                     if (blk >= sp->b0 && blk < sp->b1)
-                        r.pendingBlocks.emplace_back(sp, blk);
+                        sp->pending.push_back(blk);
+                if (sp->pending.size() > 4u * (sp->b1 - sp->b0)) // a surface nobody uses: repeats merge
+                {
+                    std::sort(sp->pending.begin(), sp->pending.end());
+                    sp->pending.erase(std::unique(sp->pending.begin(), sp->pending.end()), sp->pending.end());
+                }
             }
-            if (r.pendingBlocks.size() > 65536u) // surfaces nobody uses: bound the list (repeats merge)
-                r.refreshPending();
             if (lo < hi)
                 r.invalidateTexturesExact(written, lo, hi);
         }
@@ -3627,8 +3639,7 @@ void GSHwBackend::SnapshotVram(std::vector<uint8_t> &out) const
 
 GSTransferSnapshot GSHwBackend::GetTransferSnapshot() const
 {
-    std::lock_guard<std::recursive_mutex> lock(m_lock);
-    return m_inner.GetTransferSnapshot();
+    return m_inner.GetTransferSnapshot(); // debug only; the CPU backend locks its own state
 }
 void GSHwBackend::report() const
 {
