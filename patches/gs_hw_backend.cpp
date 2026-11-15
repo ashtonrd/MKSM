@@ -1919,90 +1919,159 @@ void GSHwBackend::Renderer::refreshPending(Surface *only)
     std::sort(items.begin(), items.end(), [](const Item &l, const Item &r) { return l.s != r.s ? l.s < r.s : l.block < r.block; });
     items.erase(std::unique(items.begin(), items.end(), [](const Item &l, const Item &r) { return l.s == r.s && l.block == r.block; }), items.end());
 
-    // All blocks staged in one piece: one copy per surface at scale 1; at larger scales one copy
-    // into a scratch image and one blit per surface. (A copy, a full barrier and a blit per block,
-    // through one corner of the shadow, kept the GPU draining 400-700 ms a second at 2x.)
-    constexpr uint32_t kRow = 64u, kChunk = kRow * kRow; // 512x512 scratch: 4096 blocks
-    for (size_t first = 0; first < items.size(); first += kChunk)
+    // The blocks of each surface as rectangles of its block grid, one copy region (and at larger
+    // scales one blit region) each: MKSM rewrites all of 0x2980 every field, one rectangle instead
+    // of ~1300 regions (the driver did work of its own per region; ~5-10% of the GS thread at 2x).
+    struct Rect
     {
-        const size_t n = std::min<size_t>(kChunk, items.size() - first);
+        Surface *s;
+        uint32_t x, y, w, h;          // in blocks
+        std::vector<uint32_t> blocks; // row-major
+    };
+    std::vector<Rect> rects;
+    constexpr uint32_t kMaxRect = 128u; // blocks per side; the scratch is that square at 8 pixels a block
+    for (size_t i = 0; i < items.size();)
+    {
+        size_t j = i;
+        while (j < items.size() && items[j].s == items[i].s)
+            ++j;
+        Surface *s = items[i].s;
+        const uint32_t gw = s->w / 8u, gh = s->h / 8u;
+        std::vector<uint32_t> cell(size_t(gw) * gh, ~0u); // block, ~0u = nothing pending
+        for (size_t k = i; k < j; ++k)
+            cell[size_t(items[k].y0 / 8u) * gw + items[k].x0 / 8u] = items[k].block;
+        for (uint32_t y = 0; y < gh; ++y)
+            for (uint32_t x = 0; x < gw; ++x)
+            {
+                if (cell[size_t(y) * gw + x] == ~0u)
+                    continue;
+                uint32_t w = 0, h = 1;
+                while (x + w < gw && w < kMaxRect && cell[size_t(y) * gw + x + w] != ~0u)
+                    ++w;
+                while (y + h < gh && h < kMaxRect &&
+                       std::all_of(cell.begin() + ptrdiff_t(size_t(y + h) * gw + x), cell.begin() + ptrdiff_t(size_t(y + h) * gw + x + w),
+                                   [](uint32_t c) { return c != ~0u; }))
+                    ++h;
+                Rect r{s, x, y, w, h, std::vector<uint32_t>(size_t(w) * h)};
+                for (uint32_t ry = 0; ry < h; ++ry)
+                    for (uint32_t rx = 0; rx < w; ++rx)
+                    {
+                        uint32_t &c = cell[size_t(y + ry) * gw + x + rx];
+                        r.blocks[size_t(ry) * w + rx] = c;
+                        c = ~0u;
+                    }
+                s->noteDrawn(int(x * 8u), int(y * 8u), int((x + w) * 8u) - 1, int((y + h) * 8u) - 1); // the shadow misses these
+                rects.push_back(std::move(r));
+            }
+        i = j;
+    }
+
+    for (size_t first = 0; first < rects.size();)
+    {
+        // As many rectangles as fit the scratch (shelves; at scale 1 they go straight to the surface).
+        std::vector<std::array<uint32_t, 2>> at;
+        VkDeviceSize bytes = 0;
+        uint32_t sx = 0, sy = 0, shelf = 0;
+        size_t last = first;
+        for (; last < rects.size(); ++last)
+        {
+            const Rect &r = rects[last];
+            if (scale != 1u)
+            {
+                if (sx + r.w > kMaxRect)
+                    sx = 0u, sy += shelf, shelf = 0u;
+                if (sy + r.h > kMaxRect)
+                    break;
+                at.push_back({sx, sy});
+                sx += r.w, shelf = std::max(shelf, r.h);
+            }
+            bytes += VkDeviceSize(r.w) * r.h * 512u;
+        }
         VkDeviceSize offset = 0;
-        uint8_t *dst = stage(VkDeviceSize(n) * 512u, offset);
+        uint8_t *dst = stage(bytes, offset);
         if (!dst)
             break;
-        for (size_t i = 0; i < n; ++i)
+        std::vector<VkBufferImageCopy> copies;
+        VkDeviceSize at0 = 0;
+        for (size_t k = first; k < last; ++k)
         {
-            const Item &it = items[first + i];
-            const bool z = it.s->psm == GS_PSM_Z32 || it.s->psm == GS_PSM_Z24;
-            const uint32_t keep = (it.s->psm == GS_PSM_CT24 || it.s->psm == GS_PSM_Z24) ? 0x00FFFFFFu : 0xFFFFFFFFu;
+            const Rect &r = rects[k];
+            const bool z = r.s->psm == GS_PSM_Z32 || r.s->psm == GS_PSM_Z24;
+            const uint32_t keep = (r.s->psm == GS_PSM_CT24 || r.s->psm == GS_PSM_Z24) ? 0x00FFFFFFu : 0xFFFFFFFFu;
             const uint32_t force = keep == 0xFFFFFFFFu ? 0u : 0x80000000u;
-            const uint8_t *words = vram + size_t(it.block % kVramBlocks) * 256u;
-            uint8_t *out = dst + i * 512u;
-            for (uint32_t p = 0; p < 64u; ++p)
-            {
-                uint32_t c = 0;
-                std::memcpy(&c, words + tables.order[z][p] * 4u, 4);
-                c = (c & keep) | force;
-                const uint16_t h[4] = {tables.color[c & 0xFFu], tables.color[(c >> 8) & 0xFFu], tables.color[(c >> 16) & 0xFFu], tables.alpha[c >> 24]};
-                std::memcpy(out + p * 8u, h, 8);
-            }
-            it.s->noteDrawn(int(it.x0), int(it.y0), int(it.x0) + 7, int(it.y0) + 7); // the shadow misses these pixels
+            const uint32_t pitch = r.w * 8u; // pixels
+            uint8_t *base = dst + at0;
+            for (uint32_t ry = 0; ry < r.h; ++ry)
+                for (uint32_t rx = 0; rx < r.w; ++rx)
+                {
+                    const uint8_t *words = vram + size_t(r.blocks[size_t(ry) * r.w + rx] % kVramBlocks) * 256u;
+                    for (uint32_t p = 0; p < 64u; ++p)
+                    {
+                        uint32_t c = 0;
+                        std::memcpy(&c, words + tables.order[z][p] * 4u, 4);
+                        c = (c & keep) | force;
+                        const uint16_t h[4] = {tables.color[c & 0xFFu], tables.color[(c >> 8) & 0xFFu], tables.color[(c >> 16) & 0xFFu], tables.alpha[c >> 24]};
+                        std::memcpy(base + (size_t(ry * 8u + p / 8u) * pitch + rx * 8u + p % 8u) * 8u, h, 8);
+                    }
+                }
+            VkBufferImageCopy region{};
+            region.bufferOffset = offset + at0;
+            region.bufferRowLength = pitch;
+            region.bufferImageHeight = r.h * 8u;
+            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            region.imageExtent = {r.w * 8u, r.h * 8u, 1};
+            if (scale == 1u)
+                region.imageOffset = {static_cast<int32_t>(r.x * 8u), static_cast<int32_t>(r.y * 8u), 0};
+            else
+                region.imageOffset = {static_cast<int32_t>(at[k - first][0] * 8u), static_cast<int32_t>(at[k - first][1] * 8u), 0};
+            copies.push_back(region);
+            at0 += VkDeviceSize(r.w) * r.h * 512u;
         }
         VkCommandBuffer c = cmd();
         gpuKind(GkUpload);
-        std::vector<VkBufferImageCopy> copies(n);
-        for (size_t i = 0; i < n; ++i)
-        {
-            const Item &it = items[first + i];
-            VkBufferImageCopy &region = copies[i];
-            region = VkBufferImageCopy{};
-            region.bufferOffset = offset + i * 512u;
-            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            region.imageExtent = {8, 8, 1};
-            if (scale == 1u)
-                region.imageOffset = {static_cast<int32_t>(it.x0), static_cast<int32_t>(it.y0), 0};
-            else
-                region.imageOffset = {static_cast<int32_t>(i % kRow * 8u), static_cast<int32_t>(i / kRow * 8u), 0};
-        }
         if (scale == 1u)
         {
-            for (size_t i = 0; i < n;)
+            for (size_t i = first; i < last;)
             {
                 size_t j = i;
-                while (j < n && items[first + j].s == items[first + i].s)
+                while (j < last && rects[j].s == rects[i].s)
                     ++j;
-                vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, items[first + i].s->image.image, VK_IMAGE_LAYOUT_GENERAL,
-                                       static_cast<uint32_t>(j - i), copies.data() + i);
+                vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, rects[i].s->image.image, VK_IMAGE_LAYOUT_GENERAL,
+                                       static_cast<uint32_t>(j - i), copies.data() + (i - first));
                 i = j;
             }
-            continue;
         }
-        if (!blockStage.image)
-            blockStage = createImage(kRow * 8u, kRow * 8u, kColorFormat, 0);
-        vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, blockStage.image, VK_IMAGE_LAYOUT_GENERAL, static_cast<uint32_t>(n), copies.data());
-        fullBarrier();
-        std::vector<VkImageBlit> blits(n);
-        for (size_t i = 0; i < n; ++i)
+        else
         {
-            const Item &it = items[first + i];
-            VkImageBlit &blit = blits[i];
-            blit = VkImageBlit{};
-            blit.srcSubresource = blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            blit.srcOffsets[0] = copies[i].imageOffset;
-            blit.srcOffsets[1] = {copies[i].imageOffset.x + 8, copies[i].imageOffset.y + 8, 1};
-            blit.dstOffsets[0] = {static_cast<int32_t>(it.x0 * scale), static_cast<int32_t>(it.y0 * scale), 0};
-            blit.dstOffsets[1] = {static_cast<int32_t>((it.x0 + 8u) * scale), static_cast<int32_t>((it.y0 + 8u) * scale), 1};
+            if (!blockStage.image)
+                blockStage = createImage(kMaxRect * 8u, kMaxRect * 8u, kColorFormat, 0);
+            vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, blockStage.image, VK_IMAGE_LAYOUT_GENERAL,
+                                   static_cast<uint32_t>(copies.size()), copies.data());
+            fullBarrier();
+            std::vector<VkImageBlit> blits;
+            for (size_t k = first; k < last; ++k)
+            {
+                const Rect &r = rects[k];
+                VkImageBlit blit{};
+                blit.srcSubresource = blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                blit.srcOffsets[0] = copies[k - first].imageOffset;
+                blit.srcOffsets[1] = {blit.srcOffsets[0].x + int32_t(r.w * 8u), blit.srcOffsets[0].y + int32_t(r.h * 8u), 1};
+                blit.dstOffsets[0] = {static_cast<int32_t>(r.x * 8u * scale), static_cast<int32_t>(r.y * 8u * scale), 0};
+                blit.dstOffsets[1] = {static_cast<int32_t>((r.x + r.w) * 8u * scale), static_cast<int32_t>((r.y + r.h) * 8u * scale), 1};
+                blits.push_back(blit);
+            }
+            for (size_t i = first; i < last;)
+            {
+                size_t j = i;
+                while (j < last && rects[j].s == rects[i].s)
+                    ++j;
+                vkCmdBlitImage(c, blockStage.image, VK_IMAGE_LAYOUT_GENERAL, rects[i].s->image.image, VK_IMAGE_LAYOUT_GENERAL,
+                               static_cast<uint32_t>(j - i), blits.data() + (i - first), VK_FILTER_NEAREST);
+                i = j;
+            }
+            fullBarrier(); // the next group reuses the scratch image
         }
-        for (size_t i = 0; i < n;)
-        {
-            size_t j = i;
-            while (j < n && items[first + j].s == items[first + i].s)
-                ++j;
-            vkCmdBlitImage(c, blockStage.image, VK_IMAGE_LAYOUT_GENERAL, items[first + i].s->image.image, VK_IMAGE_LAYOUT_GENERAL,
-                           static_cast<uint32_t>(j - i), blits.data() + i, VK_FILTER_NEAREST);
-            i = j;
-        }
-        fullBarrier(); // the next chunk reuses the scratch image
+        first = last;
     }
     fullBarrier();
     ++generation;
