@@ -2946,6 +2946,7 @@ void GSHwBackend::Renderer::fallback(const GSPrimitiveBatch &b)
     flushBatch();
     downloadAll();
     syncInner();
+    cpu.SetClutTable(clut, clutCbp);
     cpu.Submit(b);
     cpu.Sync(GSSyncReason::DebugReadback);
     const GSContext &ctx = b.state.context;
@@ -3298,9 +3299,9 @@ void GSHwBackend::loadClutNow(const GSTex0Reg &tex0, const GSTexClutReg &texclut
     std::lock_guard<std::recursive_mutex> lock(m_lock);
 #if defined(PS2X_HAVE_VULKAN)
     if (m_renderer)
-        m_renderer->loadClut(tex0, texclut);
+        return m_renderer->loadClut(tex0, texclut); // the CPU fallback gets this CLUT when it draws (SetClutTable)
 #endif
-    m_inner.LoadClut(tex0, texclut); // the CPU fallback keeps its own copy
+    m_inner.LoadClut(tex0, texclut);
 }
 
 void GSHwBackend::beginTransferNow(const GSTransferCommand &command)

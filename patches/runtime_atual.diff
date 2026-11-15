@@ -1461,10 +1461,10 @@ index f247ff9..1e64c26 100644
      mutable std::mutex m_snapshotMutex;
      EeKernelSnapshot m_snapshot;
 diff --git a/ps2xRuntime/include/runtime/gs/gs_cpu_backend.h b/ps2xRuntime/include/runtime/gs/gs_cpu_backend.h
-index 2421f9e..17b2a5c 100644
+index 2421f9e..967ac14 100644
 --- a/ps2xRuntime/include/runtime/gs/gs_cpu_backend.h
 +++ b/ps2xRuntime/include/runtime/gs/gs_cpu_backend.h
-@@ -1,18 +1,32 @@
+@@ -1,18 +1,35 @@
  #pragma once
  
  #include "runtime/gs/gs_backend.h"
@@ -1491,6 +1491,9 @@ index 2421f9e..17b2a5c 100644
 +    // Before Initialize: draw on the CPU only and keep m_vram on the caller's buffer (the
 +    // batching renderer of track F uses this backend as its VRAM mirror).
 +    void DisableGpu() { m_gpuAllowed = false; }
++    // The new renderer keeps the CLUT itself and hands it over before the CPU draws one of its
++    // fallback primitives (queueing every CLUT load here cost a lock and a worker wake-up each).
++    void SetClutTable(const std::array<uint16_t, 512> &clut, const uint32_t cbp[2]);
 +    // The batching renderer's mirror: a host-to-local transfer and its data applied on the
 +    // caller's thread, after anything already queued (no worker round trip to wait for).
 +    void BeginTransferNow(const GSTransferCommand &command);
@@ -1498,7 +1501,7 @@ index 2421f9e..17b2a5c 100644
      void Reset() override;
  
      void Submit(const GSPrimitiveBatch &batch) override;
-@@ -33,14 +47,58 @@ public:
+@@ -33,14 +50,58 @@ public:
      void SnapshotVram(std::vector<uint8_t> &out) const override;
      GSTransferSnapshot GetTransferSnapshot() const override;
  
@@ -1558,7 +1561,7 @@ index 2421f9e..17b2a5c 100644
      void DrawSprite(const GSPrimitiveBatch &batch);
      void DrawTriangle(const GSPrimitiveBatch &batch);
      void DrawLine(const GSPrimitiveBatch &batch);
-@@ -68,14 +126,55 @@ private:
+@@ -68,14 +129,55 @@ private:
      mutable std::mutex m_mutex;
      uint8_t *m_vram = nullptr;
      uint32_t m_vramSize = 0;
@@ -3240,7 +3243,7 @@ index 5110ee2..7026a21 100644
      }
  
 diff --git a/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp b/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp
-index f0ad507..3b6c125 100644
+index f0ad507..ed0e7a6 100644
 --- a/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp
 +++ b/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp
 @@ -1,4 +1,6 @@
@@ -4096,7 +4099,7 @@ index f0ad507..3b6c125 100644
  }
  
  void GSCpuBackend::WriteVramUnlocked(uint32_t psm, uint32_t base, uint32_t bw, uint32_t x, uint32_t y, uint32_t value)
-@@ -686,8 +1356,54 @@ void GSCpuBackend::WriteVramUnlocked(uint32_t psm, uint32_t base, uint32_t bw, u
+@@ -686,8 +1356,65 @@ void GSCpuBackend::WriteVramUnlocked(uint32_t psm, uint32_t base, uint32_t bw, u
      m_writeVramFuncs[psm & 0x3Fu](m_vram, base, bw, x, y, value);
  }
  
@@ -4145,13 +4148,24 @@ index f0ad507..3b6c125 100644
 +    }
 +}
 +
++void GSCpuBackend::SetClutTable(const std::array<uint16_t, 512> &clut, const uint32_t cbp[2])
++{
++    WaitForQueue();
++    std::lock_guard<std::mutex> lock(m_mutex);
++    m_clut = clut;
++    m_clutUnknown.fill(0u);
++    m_clutCbp = {cbp[0], cbp[1]};
++    if (m_gpu)
++        m_gpu->SetClut(m_clut.data());
++}
++
  void GSCpuBackend::SnapshotVram(std::vector<uint8_t> &out) const
  {
 +    WaitForQueue();
      std::lock_guard<std::mutex> lock(m_mutex);
      if (!m_vram || m_vramSize == 0u)
      {
-@@ -849,7 +1565,7 @@ void GSCpuBackend::DrawPrimitive(const GSPrimitiveBatch &batch)
+@@ -849,7 +1576,7 @@ void GSCpuBackend::DrawPrimitive(const GSPrimitiveBatch &batch)
  void GSCpuBackend::WritePixel(const GSDrawState &state, int x, int y, int z, uint8_t r, uint8_t g, uint8_t b, uint8_t a, uint8_t fog)
  {
      const auto &ctx = state.context;
@@ -4160,7 +4174,7 @@ index f0ad507..3b6c125 100644
          return;
  
      if (state.prim.fge)
-@@ -1012,6 +1728,71 @@ void GSCpuBackend::WritePixel(const GSDrawState &state, int x, int y, int z, uin
+@@ -1012,6 +1739,71 @@ void GSCpuBackend::WritePixel(const GSDrawState &state, int x, int y, int z, uin
      }
  }
  
@@ -4232,7 +4246,7 @@ index f0ad507..3b6c125 100644
  uint32_t GSCpuBackend::LookupCLUT(const GSDrawState &state,
                                    uint8_t index,
                                    uint8_t cpsm,
-@@ -1088,7 +1869,7 @@ uint32_t GSCpuBackend::SampleTexture(const GSDrawState &state, float s, float t,
+@@ -1088,7 +1880,7 @@ uint32_t GSCpuBackend::SampleTexture(const GSDrawState &state, float s, float t,
          sampleU = wrapTextureCoordinate(sampleU, texW, wrapU, minU, maxU);
          sampleV = wrapTextureCoordinate(sampleV, texH, wrapV, minV, maxV);
  
@@ -4241,7 +4255,7 @@ index f0ad507..3b6c125 100644
  
          switch (tex.psm)
          {
-@@ -1118,45 +1899,19 @@ uint32_t GSCpuBackend::SampleTexture(const GSDrawState &state, float s, float t,
+@@ -1118,45 +1910,19 @@ uint32_t GSCpuBackend::SampleTexture(const GSDrawState &state, float s, float t,
          return samplePoint(static_cast<int>(texUf), static_cast<int>(texVf));
      }
  
@@ -4300,7 +4314,7 @@ index f0ad507..3b6c125 100644
  }
  
  void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
-@@ -1203,6 +1958,70 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
+@@ -1203,6 +1969,70 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
  
      uint8_t r = v1.r, g = v1.g, b = v1.b, a = v1.a;
  
@@ -4371,7 +4385,7 @@ index f0ad507..3b6c125 100644
      if (state.prim.tme)
      {
          const auto &tex = ctx.tex0;
-@@ -1236,6 +2055,8 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
+@@ -1236,6 +2066,8 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
  
          for (int y = drawY0; y <= drawY1; ++y)
          {
@@ -4380,7 +4394,7 @@ index f0ad507..3b6c125 100644
              float ty = (static_cast<float>(y - unclippedY0) + 0.5f) / spriteH;
              float texVf = v0f + (v1f - v0f) * ty;
  
-@@ -1267,14 +2088,324 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
+@@ -1267,14 +2099,324 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
              }
          }
      }
@@ -4706,7 +4720,7 @@ index f0ad507..3b6c125 100644
  void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
  {
      const GSDrawState &state = batch.state;
-@@ -1307,33 +2438,73 @@ void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
+@@ -1307,33 +2449,73 @@ void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
      if (std::fabs(denom) < 0.001f)
          return;
  
@@ -4792,7 +4806,7 @@ index f0ad507..3b6c125 100644
              }
              else
              {
-@@ -1387,7 +2558,7 @@ void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
+@@ -1387,7 +2569,7 @@ void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
                  a = color.a;
              }
  
@@ -4801,7 +4815,7 @@ index f0ad507..3b6c125 100644
              WritePixel(state, x, y, static_cast<u32>(z + 0.5), r, g, b, a, fog);
          }
      }
-@@ -1462,7 +2633,51 @@ void GSCpuBackend::DrawLine(const GSPrimitiveBatch &batch)
+@@ -1462,7 +2644,51 @@ void GSCpuBackend::DrawLine(const GSPrimitiveBatch &batch)
  
  void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
  {
@@ -4814,14 +4828,14 @@ index f0ad507..3b6c125 100644
 +void GSCpuBackend::BeginTransferNow(const GSTransferCommand &command)
 +{
 +    WaitForQueue();
-     std::lock_guard<std::mutex> lock(m_mutex);
++    std::lock_guard<std::mutex> lock(m_mutex);
 +    BeginTransferLocked(command);
 +}
 +
 +void GSCpuBackend::UploadImageNow(const uint8_t *data, uint32_t sizeBytes)
 +{
 +    WaitForQueue();
-+    std::lock_guard<std::mutex> lock(m_mutex);
+     std::lock_guard<std::mutex> lock(m_mutex);
 +    UploadImageLocked(data, sizeBytes);
 +}
 +
@@ -4853,7 +4867,7 @@ index f0ad507..3b6c125 100644
      m_transfer = command;
      m_transferState.x = command.trxpos.dsax;
      m_transferState.y = command.trxpos.dsay;
-@@ -1471,6 +2686,9 @@ void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
+@@ -1471,6 +2697,9 @@ void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
      m_transferState.direction = command.direction;
      m_transferState.localToHostPendingBytes = 0u;
  
@@ -4863,7 +4877,7 @@ index f0ad507..3b6c125 100644
      if (command.direction == 2u)
          PerformLocalToLocalTransfer();
      else if (command.direction == 1u)
-@@ -1479,7 +2697,16 @@ void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
+@@ -1479,7 +2708,16 @@ void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
  
  void GSCpuBackend::UploadImage(const uint8_t *data, uint32_t sizeBytes)
  {
@@ -4881,7 +4895,7 @@ index f0ad507..3b6c125 100644
      if (!data || sizeBytes == 0u || !m_vram || m_transferState.direction != 0u)
          return;
      if (m_transfer.trxreg.rrw == 0u || m_transfer.trxreg.rrh == 0u || m_transferState.totalPixels == 0u)
-@@ -1489,99 +2716,43 @@ void GSCpuBackend::UploadImage(const uint8_t *data, uint32_t sizeBytes)
+@@ -1489,99 +2727,43 @@ void GSCpuBackend::UploadImage(const uint8_t *data, uint32_t sizeBytes)
      const uint32_t dbw = std::max<uint32_t>(m_transfer.bitbltbuf.dbw, 1u);
      const uint8_t dpsm = m_transfer.bitbltbuf.dpsm;
      const uint32_t rrw = m_transfer.trxreg.rrw;
@@ -5015,7 +5029,7 @@ index f0ad507..3b6c125 100644
  }
  
  void GSCpuBackend::PerformLocalToLocalTransfer()
-@@ -1696,6 +2867,7 @@ void GSCpuBackend::PerformLocalToHostTransfer()
+@@ -1696,6 +2878,7 @@ void GSCpuBackend::PerformLocalToHostTransfer()
  
  uint32_t GSCpuBackend::ConsumeLocalToHostBytes(uint8_t *dst, uint32_t maxBytes)
  {
@@ -5023,7 +5037,7 @@ index f0ad507..3b6c125 100644
      std::lock_guard<std::mutex> lock(m_mutex);
      if (!dst || maxBytes == 0u || m_localToHostReadPos >= m_localToHostBuffer.size())
          return 0u;
-@@ -1708,6 +2880,7 @@ uint32_t GSCpuBackend::ConsumeLocalToHostBytes(uint8_t *dst, uint32_t maxBytes)
+@@ -1708,6 +2891,7 @@ uint32_t GSCpuBackend::ConsumeLocalToHostBytes(uint8_t *dst, uint32_t maxBytes)
  
  bool GSCpuBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
  {
@@ -5031,7 +5045,7 @@ index f0ad507..3b6c125 100644
      std::lock_guard<std::mutex> lock(m_mutex);
      if (!m_vram || context.frame.fbw == 0u)
          return false;
-@@ -1725,6 +2898,8 @@ bool GSCpuBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
+@@ -1725,6 +2909,8 @@ bool GSCpuBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
  
      const uint32_t fbp = GSInternal::framePageBaseToBlock(context.frame.fbp);
      const uint32_t fbw = std::max<uint32_t>(context.frame.fbw, 1u);
@@ -5040,7 +5054,7 @@ index f0ad507..3b6c125 100644
      if (context.frame.psm == GS_PSM_CT32 || context.frame.psm == GS_PSM_CT24)
      {
          const uint32_t source = static_cast<uint32_t>(r) |
-@@ -1848,12 +3023,38 @@ PresentationFrame GSCpuBackend::Present(const GSPresentationRequest &request)
+@@ -1848,12 +3034,38 @@ PresentationFrame GSCpuBackend::Present(const GSPresentationRequest &request)
      // Snapshot local memory under the backend lock, then perform the expensive
      // display conversion without holding the producer-side raster lock.
      thread_local std::vector<uint8_t> snapshot;
@@ -5080,7 +5094,7 @@ index f0ad507..3b6c125 100644
      return snapshotBackend.PresentFromLocalMemory(request);
  }
  
-@@ -1871,6 +3072,16 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
+@@ -1871,6 +3083,16 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
      uint32_t width1 = 0u, height1 = 0u, width2 = 0u, height2 = 0u;
      decodeDisplaySize(request.display1, width1, height1);
      decodeDisplaySize(request.display2, width2, height2);
@@ -5097,7 +5111,7 @@ index f0ad507..3b6c125 100644
      const bool valid1 = pmode.enableCrt1 && hasDisplaySetup(request.display1, displayFrame1);
      const bool valid2 = pmode.enableCrt2 && hasDisplaySetup(request.display2, displayFrame2);
      if (!valid1 && !valid2)
-@@ -1889,32 +3100,50 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
+@@ -1889,32 +3111,50 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
          selected = displayFrame;
          pixels.clear();
          usedPreferred = false;
