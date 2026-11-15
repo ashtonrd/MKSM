@@ -1616,13 +1616,18 @@ index 2421f9e..17b2a5c 100644
 +    bool m_stopBands = false;
  };
 diff --git a/ps2xRuntime/include/runtime/gs/ps2_gs_memory.h b/ps2xRuntime/include/runtime/gs/ps2_gs_memory.h
-index c784ff7..d81d36a 100644
+index c784ff7..9c16260 100644
 --- a/ps2xRuntime/include/runtime/gs/ps2_gs_memory.h
 +++ b/ps2xRuntime/include/runtime/gs/ps2_gs_memory.h
-@@ -563,6 +563,9 @@ namespace GSMem
+@@ -563,6 +563,14 @@ namespace GSMem
  
  	void WriteNull(u8* data, u32 bp, u32 bw, u32 x, u32 y, u32 value);
  
++	// Writes `count` pixels of row y from x on, as the per-pixel Write* for psm would. Pixel k of
++	// the run is element (first + k) of src, packed as a host transfer packs them: 4, 3, 2 or 1
++	// bytes, or a nibble (low first) for the 4-bit formats.
++	void WriteRow(u8* data, u32 psm, u32 bp, u32 bw, u32 x, u32 y, const u8* src, u32 first, u32 count);
++
 +	u32 PixelIndexCT32(u32 bp, u32 bw, u32 x, u32 y);
 +	// Pixel index (in units of the format's storage width) for any psm; 0 if unknown.
 +	u32 PixelAddress(u32 psm, u32 bp, u32 bw, u32 x, u32 y);
@@ -3235,7 +3240,7 @@ index 5110ee2..7026a21 100644
      }
  
 diff --git a/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp b/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp
-index f0ad507..03a88be 100644
+index f0ad507..3b6c125 100644
 --- a/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp
 +++ b/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp
 @@ -1,4 +1,6 @@
@@ -3291,10 +3296,7 @@ index f0ad507..03a88be 100644
 +    // MKSM's post-processing rewrites FB alpha with flat tiles covering the screen
 +    // several times a frame. Their blend equation returns Cd, so only one byte changes.
 +    bool writesOnlyAlphaByte(const GSDrawState &state, uint8_t alpha)
-     {
--        const float top = static_cast<float>(c00) + (static_cast<float>(c10) - static_cast<float>(c00)) * fx;
--        const float bottom = static_cast<float>(c01) + (static_cast<float>(c11) - static_cast<float>(c01)) * fx;
--        return clampU8(static_cast<int>(std::lround(top + (bottom - top) * fy)));
++    {
 +        const auto &ctx = state.context;
 +        const uint64_t blend = ctx.alpha;
 +        const uint32_t a = blend & 3u, b = (blend >> 2) & 3u, c = (blend >> 4) & 3u, d = (blend >> 6) & 3u;
@@ -3310,7 +3312,10 @@ index f0ad507..03a88be 100644
 +
 +    // Blends all four channels at once; t is 0..255 and t == 0 returns a exactly.
 +    uint32_t lerpRgba(uint32_t a, uint32_t b, uint32_t t)
-+    {
+     {
+-        const float top = static_cast<float>(c00) + (static_cast<float>(c10) - static_cast<float>(c00)) * fx;
+-        const float bottom = static_cast<float>(c01) + (static_cast<float>(c11) - static_cast<float>(c01)) * fx;
+-        return clampU8(static_cast<int>(std::lround(top + (bottom - top) * fy)));
 +        const uint32_t inverse = 256u - t;
 +        const uint32_t redBlue = (((a & 0x00FF00FFu) * inverse + (b & 0x00FF00FFu) * t) >> 8) & 0x00FF00FFu;
 +        const uint32_t greenAlpha = (((a >> 8) & 0x00FF00FFu) * inverse + ((b >> 8) & 0x00FF00FFu) * t) & 0xFF00FF00u;
@@ -4876,7 +4881,141 @@ index f0ad507..03a88be 100644
      if (!data || sizeBytes == 0u || !m_vram || m_transferState.direction != 0u)
          return;
      if (m_transfer.trxreg.rrw == 0u || m_transfer.trxreg.rrh == 0u || m_transferState.totalPixels == 0u)
-@@ -1696,6 +2923,7 @@ void GSCpuBackend::PerformLocalToHostTransfer()
+@@ -1489,99 +2716,43 @@ void GSCpuBackend::UploadImage(const uint8_t *data, uint32_t sizeBytes)
+     const uint32_t dbw = std::max<uint32_t>(m_transfer.bitbltbuf.dbw, 1u);
+     const uint8_t dpsm = m_transfer.bitbltbuf.dpsm;
+     const uint32_t rrw = m_transfer.trxreg.rrw;
+-    const uint32_t dsax = m_transfer.trxpos.dsax;
+-    uint32_t offset = 0u;
+-
+-    auto advancePixel = [&](uint32_t count)
+-    {
+-        const uint32_t totalPixels = m_transferState.totalPixels;
+-        m_transferState.copiedPixels =
+-            std::min<uint32_t>(totalPixels, m_transferState.copiedPixels + count);
+-
+-        if (m_transferState.copiedPixels >= totalPixels)
+-        {
+-            m_transferState.direction = 3u;
+-            m_transferState.totalPixels = 0u;
+-            return;
+-        }
+-
+-        m_transferState.x = dsax + (m_transferState.copiedPixels % rrw);
+-        m_transferState.y = m_transfer.trxpos.dsay + (m_transferState.copiedPixels / rrw);
+-    };
++    const uint32_t dsax = m_transfer.trxpos.dsax, dsay = m_transfer.trxpos.dsay;
++
++    // Elements in `data`: pixels of 4/3/2/1 bytes, or nibbles for the 4-bit formats (two pixels
++    // per byte, low first; a trailing partial pixel is dropped).
++    uint32_t available = 0u;
++    switch (dpsm)
++    {
++    case GS_PSM_CT32: case GS_PSM_Z32: available = sizeBytes / 4u; break;
++    case GS_PSM_CT24: case GS_PSM_Z24: available = sizeBytes / 3u; break;
++    case GS_PSM_CT16: case GS_PSM_CT16S: case GS_PSM_Z16: case GS_PSM_Z16S: available = sizeBytes / 2u; break;
++    case GS_PSM_T8: case GS_PSM_T8H: available = sizeBytes; break;
++    case GS_PSM_T4: case GS_PSM_T4HL: case GS_PSM_T4HH: available = sizeBytes * 2u; break;
++    default: return;
++    }
+ 
+-    while (offset < sizeBytes && m_transferState.direction == 0u)
++    // Row runs instead of a dispatch, a call and a division per pixel (the per-pixel loop was
++    // ~19% of the new renderer's thread at 2x; the bytes written are the same).
++    uint32_t pixel = m_transferState.copiedPixels;
++    const uint32_t total = m_transferState.totalPixels;
++    uint32_t col = pixel % rrw, row = pixel / rrw, used = 0u;
++    while (used < available && pixel < total)
++    {
++        const uint32_t run = std::min({rrw - col, total - pixel, available - used});
++        GSMem::WriteRow(m_vram, dpsm, dbp, dbw, dsax + col, dsay + row, data, used, run);
++        used += run, pixel += run, col += run;
++        if (col == rrw)
++            col = 0u, ++row;
++    }
++    m_transferState.copiedPixels = pixel;
++    if (pixel >= total)
+     {
+-        switch (dpsm)
+-        {
+-        case GS_PSM_CT32:
+-        case GS_PSM_Z32:
+-        {
+-            if (sizeBytes - offset < 4u)
+-                return;
+-            uint32_t value = 0u;
+-            std::memcpy(&value, data + offset, sizeof(value));
+-            WriteVramUnlocked(dpsm, dbp, dbw, m_transferState.x, m_transferState.y, value);
+-            offset += 4u;
+-            advancePixel(1u);
+-            break;
+-        }
+-        case GS_PSM_CT24:
+-        case GS_PSM_Z24:
+-        {
+-            if (sizeBytes - offset < 3u)
+-                return;
+-            const uint32_t value = static_cast<uint32_t>(data[offset]) |
+-                                   (static_cast<uint32_t>(data[offset + 1u]) << 8u) |
+-                                   (static_cast<uint32_t>(data[offset + 2u]) << 16u);
+-            WriteVramUnlocked(dpsm, dbp, dbw, m_transferState.x, m_transferState.y, value);
+-            offset += 3u;
+-            advancePixel(1u);
+-            break;
+-        }
+-        case GS_PSM_CT16:
+-        case GS_PSM_CT16S:
+-        case GS_PSM_Z16:
+-        case GS_PSM_Z16S:
+-        {
+-            if (sizeBytes - offset < 2u)
+-                return;
+-            uint16_t value = 0u;
+-            std::memcpy(&value, data + offset, sizeof(value));
+-            WriteVramUnlocked(dpsm, dbp, dbw, m_transferState.x, m_transferState.y, value);
+-            offset += 2u;
+-            advancePixel(1u);
+-            break;
+-        }
+-        case GS_PSM_T8:
+-        case GS_PSM_T8H:
+-            WriteVramUnlocked(dpsm, dbp, dbw, m_transferState.x, m_transferState.y, data[offset++]);
+-            advancePixel(1u);
+-            break;
+-        case GS_PSM_T4:
+-        case GS_PSM_T4HL:
+-        case GS_PSM_T4HH:
+-        {
+-            const uint8_t packed = data[offset++];
+-            const uint32_t firstPixel = m_transferState.copiedPixels;
+-            WriteVramUnlocked(dpsm, dbp, dbw,
+-                              dsax + (firstPixel % rrw),
+-                              m_transfer.trxpos.dsay + (firstPixel / rrw),
+-                              packed & 0x0Fu);
+-            if (firstPixel + 1u < m_transferState.totalPixels)
+-            {
+-                const uint32_t secondPixel = firstPixel + 1u;
+-                WriteVramUnlocked(dpsm, dbp, dbw,
+-                                  dsax + (secondPixel % rrw),
+-                                  m_transfer.trxpos.dsay + (secondPixel / rrw),
+-                                  (packed >> 4u) & 0x0Fu);
+-            }
+-            advancePixel(std::min<uint32_t>(2u, m_transferState.totalPixels - firstPixel));
+-            break;
+-        }
+-        default:
+-            return;
+-        }
++        m_transferState.direction = 3u;
++        m_transferState.totalPixels = 0u;
++        return;
+     }
++    m_transferState.x = dsax + col;
++    m_transferState.y = dsay + row;
+ }
+ 
+ void GSCpuBackend::PerformLocalToLocalTransfer()
+@@ -1696,6 +2867,7 @@ void GSCpuBackend::PerformLocalToHostTransfer()
  
  uint32_t GSCpuBackend::ConsumeLocalToHostBytes(uint8_t *dst, uint32_t maxBytes)
  {
@@ -4884,7 +5023,7 @@ index f0ad507..03a88be 100644
      std::lock_guard<std::mutex> lock(m_mutex);
      if (!dst || maxBytes == 0u || m_localToHostReadPos >= m_localToHostBuffer.size())
          return 0u;
-@@ -1708,6 +2936,7 @@ uint32_t GSCpuBackend::ConsumeLocalToHostBytes(uint8_t *dst, uint32_t maxBytes)
+@@ -1708,6 +2880,7 @@ uint32_t GSCpuBackend::ConsumeLocalToHostBytes(uint8_t *dst, uint32_t maxBytes)
  
  bool GSCpuBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
  {
@@ -4892,7 +5031,7 @@ index f0ad507..03a88be 100644
      std::lock_guard<std::mutex> lock(m_mutex);
      if (!m_vram || context.frame.fbw == 0u)
          return false;
-@@ -1725,6 +2954,8 @@ bool GSCpuBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
+@@ -1725,6 +2898,8 @@ bool GSCpuBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
  
      const uint32_t fbp = GSInternal::framePageBaseToBlock(context.frame.fbp);
      const uint32_t fbw = std::max<uint32_t>(context.frame.fbw, 1u);
@@ -4901,7 +5040,7 @@ index f0ad507..03a88be 100644
      if (context.frame.psm == GS_PSM_CT32 || context.frame.psm == GS_PSM_CT24)
      {
          const uint32_t source = static_cast<uint32_t>(r) |
-@@ -1848,12 +3079,38 @@ PresentationFrame GSCpuBackend::Present(const GSPresentationRequest &request)
+@@ -1848,12 +3023,38 @@ PresentationFrame GSCpuBackend::Present(const GSPresentationRequest &request)
      // Snapshot local memory under the backend lock, then perform the expensive
      // display conversion without holding the producer-side raster lock.
      thread_local std::vector<uint8_t> snapshot;
@@ -4941,7 +5080,7 @@ index f0ad507..03a88be 100644
      return snapshotBackend.PresentFromLocalMemory(request);
  }
  
-@@ -1871,6 +3128,16 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
+@@ -1871,6 +3072,16 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
      uint32_t width1 = 0u, height1 = 0u, width2 = 0u, height2 = 0u;
      decodeDisplaySize(request.display1, width1, height1);
      decodeDisplaySize(request.display2, width2, height2);
@@ -4958,7 +5097,7 @@ index f0ad507..03a88be 100644
      const bool valid1 = pmode.enableCrt1 && hasDisplaySetup(request.display1, displayFrame1);
      const bool valid2 = pmode.enableCrt2 && hasDisplaySetup(request.display2, displayFrame2);
      if (!valid1 && !valid2)
-@@ -1889,32 +3156,50 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
+@@ -1889,32 +3100,50 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
          selected = displayFrame;
          pixels.clear();
          usedPreferred = false;
@@ -5218,13 +5357,60 @@ index 9281d5f..0776ea3 100644
  }
  
 diff --git a/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp b/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp
-index a8f9fa8..c6be6c7 100644
+index a8f9fa8..0edc51b 100644
 --- a/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp
 +++ b/ps2xRuntime/src/lib/gs/ps2_gs_memory.cpp
-@@ -324,6 +324,27 @@ namespace GSMem
+@@ -324,6 +324,74 @@ namespace GSMem
      {
      }
  
++    template<PixelStorageMode P, typename Table>
++    static void WriteRowT(const Table& table, u8* data, u32 bp, u32 bw, u32 x, u32 y, const u8* src, u32 first, u32 count)
++    {
++        using PackedT = typename PixelStorageTraits<P>::PackedT;
++        for (u32 i = 0; i < count; ++i)
++        {
++            const u32 k = first + i;
++            u32 v = 0;
++            if constexpr (P == C32 || P == Z32)
++                std::memcpy(&v, src + size_t(k) * 4u, 4);
++            else if constexpr (P == C24 || P == Z24)
++                v = u32(src[size_t(k) * 3u]) | (u32(src[size_t(k) * 3u + 1u]) << 8) | (u32(src[size_t(k) * 3u + 2u]) << 16);
++            else if constexpr (P == C16 || P == C16S || P == Z16 || P == Z16S)
++            {
++                u16 h = 0;
++                std::memcpy(&h, src + size_t(k) * 2u, 2);
++                v = h;
++            }
++            else if constexpr (P == P8 || P == P8H)
++                v = src[k];
++            else
++                v = (src[k >> 1] >> ((k & 1u) * 4u)) & 0x0Fu;
++            PixelStorageTraits<P>::Write(table, data, bp, bw, x + i, y, static_cast<PackedT>(v));
++        }
++    }
++
++    void WriteRow(u8* data, u32 psm, u32 bp, u32 bw, u32 x, u32 y, const u8* src, u32 first, u32 count)
++    {
++        switch (static_cast<PixelStorageMode>(psm))
++        {
++        case C32: return WriteRowT<C32>(PageTableC32, data, bp, bw, x, y, src, first, count);
++        case C24: return WriteRowT<C24>(PageTableC32, data, bp, bw, x, y, src, first, count);
++        case Z32: return WriteRowT<Z32>(PageTableZ32, data, bp, bw, x, y, src, first, count);
++        case Z24: return WriteRowT<Z24>(PageTableZ32, data, bp, bw, x, y, src, first, count);
++        case C16: return WriteRowT<C16>(PageTableC16, data, bp, bw, x, y, src, first, count);
++        case C16S: return WriteRowT<C16S>(PageTableC16S, data, bp, bw, x, y, src, first, count);
++        case Z16: return WriteRowT<Z16>(PageTableZ16, data, bp, bw, x, y, src, first, count);
++        case Z16S: return WriteRowT<Z16S>(PageTableZ16S, data, bp, bw, x, y, src, first, count);
++        case P8: return WriteRowT<P8>(PageTableP8, data, bp, bw, x, y, src, first, count);
++        case P8H: return WriteRowT<P8H>(PageTableC32, data, bp, bw, x, y, src, first, count);
++        case P4: return WriteRowT<P4>(PageTableP4, data, bp, bw, x, y, src, first, count);
++        case P4HL: return WriteRowT<P4HL>(PageTableC32, data, bp, bw, x, y, src, first, count);
++        case P4HH: return WriteRowT<P4HH>(PageTableC32, data, bp, bw, x, y, src, first, count);
++        default: return;
++        }
++    }
++
 +    u32 PixelIndexCT32(u32 bp, u32 bw, u32 x, u32 y)
 +    {
 +        return C32Traits::Address(PageTableC32, bp, bw, x, y);
