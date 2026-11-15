@@ -3164,16 +3164,27 @@ bool GSHwBackend::Renderer::copyDone(const PresentCopy &copy) const
     return __atomic_load_n(&s.serial, __ATOMIC_ACQUIRE) != copy.serial || vkGetFenceStatus(device, s.fence) == VK_SUCCESS;
 }
 
-// Window side: the newest finished copy, or the last one shown while the GPU is still on it.
+// Window side: the next finished copy, or the last one shown while the GPU is still on it.
+// One copy per window frame, oldest first: the window and the game tick on separate 60 Hz clocks,
+// and taking only the newest showed a field twice and dropped the next one 2-5 times a second
+// (57 of 60 game frames/s shown). Past two waiting it jumps to the newest, so the delay stays ~1 field.
 bool GSHwBackend::Renderer::takeNewest(PresentationFrame &out)
 {
     int index = -1;
     {
         std::lock_guard<std::mutex> lock(presentMutex);
+        int newest = -1, waiting = 0;
         for (int i = 0; i < kPresentCopies; ++i)
-            if (presentCopies[i].seq > shownSeq && (index < 0 || presentCopies[i].seq > presentCopies[index].seq) &&
-                copyDone(presentCopies[i]))
-                index = i;
+            if (presentCopies[i].seq > shownSeq && copyDone(presentCopies[i]))
+            {
+                ++waiting;
+                if (index < 0 || presentCopies[i].seq < presentCopies[index].seq)
+                    index = i;
+                if (newest < 0 || presentCopies[i].seq > presentCopies[newest].seq)
+                    newest = i;
+            }
+        if (waiting > 2)
+            index = newest;
         reading = index;
     }
     if (index >= 0)

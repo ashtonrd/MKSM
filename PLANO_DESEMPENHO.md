@@ -603,6 +603,11 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
     - Resultado: testes `vu1`/`vu` iguais; cutscene com geometria inteira nas capturas; VU1 por quadro nos vales 24,8–25,3 → 23,6–24,5 ms, nos trechos médios 14,5–15,0 → 14,3–14,7 (−2 a −5%); quadros/s dentro do ruído.
   - **Conclusão do item 3 até aqui:** nos piores vales, a VU1 (preciso por ciclo) e a `GSHwWorker` precisam ficar ~40% e ~30% mais rápidas. Nenhum corte isolado medido chega perto disso. O mais provável é que esses dois trechos não fiquem em 60 cravados nesta máquina sem uma VU1 bem mais rápida (flags no JIT, despacho por bloco mais barato, UNPACK rápido, somados). Seguir pelos itens 2 e 5, que ajudam os trechos de 50–57, e voltar à VU1 com as flags no JIT.
   - Uma vez em ~20 rodadas (cp1, 15/11), o vsync caiu para 12/s de 90 s em diante, com o EE sem esperar VU1 nem GS. Não se repetiu na rodada seguinte; se voltar, perfil da GameThread (`PS2X_PROFILE_THREAD=GameThread`) no trecho.
+- **15/11, depois do usuário jogar a pasta portátil ("dá umas lagadas"; "mudei o gráfico e não ficou mais rápido"):**
+    - **Item 7 feito:** a janela mostrava 55–58 imagens novas com o jogo a 60 (pegava sempre a cópia mais nova; um campo atrasado aparecia duas vezes e o seguinte sumia). Agora mostra em ordem, uma por volta, pulando só com mais de duas esperando: 60/60 nos trechos a 60 (R5 sem capturas).
+    - **Limite de 30 quadros/s testado e descartado:** com o bit FIELD virando a cada 2 vblanks o jogo vai a 30 cravados (pior intervalo 34–35 ms, sem tranco), mas a lógica anda por quadro: a cutscene levou ~48 s contra ~27 s. Câmera lenta, não serve.
+    - **Medida na gameplay (R5 até 310 s):** VU1 13–14 ms por quadro de 16,7 (vales da cutscene 24–28). É a VU1 que segura o ritmo nesta máquina; o gráfico mais leve só alivia a GPU. Novo: `PS2X_PERF` mostra o pior intervalo entre quadros a cada 2 s.
+    - **Próximo:** medir onde o usuário está (save dele em `portatil/backup_save_mc0_15nov`), que é mais adiante e mais pesado que o Goro's Lair, e voltar ao item 3 (VU1).
 - **Pronto quando:** R5 sem variáveis, três rodadas: cutscene e gameplay sem intervalo de 2 s abaixo de 58 quadros/s, e "imagens novas" igual a "jogo".
 - **Estimativa honesta:**
   - Os trechos de 50–57 devem chegar a 60 com os itens 2 e 5.

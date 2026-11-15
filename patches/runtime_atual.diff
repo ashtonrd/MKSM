@@ -5206,7 +5206,7 @@ index f0ad507..77606d9 100644
      };
  
 diff --git a/ps2xRuntime/src/lib/gs/gs_frontend.cpp b/ps2xRuntime/src/lib/gs/gs_frontend.cpp
-index 9281d5f..18913ee 100644
+index 9281d5f..a8b448d 100644
 --- a/ps2xRuntime/src/lib/gs/gs_frontend.cpp
 +++ b/ps2xRuntime/src/lib/gs/gs_frontend.cpp
 @@ -1,6 +1,9 @@
@@ -5391,7 +5391,7 @@ index 9281d5f..18913ee 100644
          for (uint32_t y = 0; y < outHeight; ++y)
          {
              const size_t srcOffset = static_cast<size_t>(y) * sourceRowBytes;
-@@ -1577,6 +1622,18 @@ void GS::vertexKick(bool drawing)
+@@ -1577,6 +1622,28 @@ void GS::vertexKick(bool drawing)
      {
          GSPrimitiveBatch batch = buildDrawBatch(needed);
          updatePreferredDisplaySourceForDraw(batch);
@@ -5404,13 +5404,23 @@ index 9281d5f..18913ee 100644
 +            {
 +                g_gsGameFrameSerial.fetch_add(1u, std::memory_order_relaxed);
 +                ps2_perf::counters().gameFrames.fetch_add(1u, std::memory_order_relaxed);
++                if (ps2_perf::enabled())
++                {
++                    static uint64_t lastFrameNs = 0;
++                    const uint64_t now = ps2_perf::nowNs(), gap = lastFrameNs ? now - lastFrameNs : 0u;
++                    lastFrameNs = now;
++                    auto &worst = ps2_perf::counters().worstFrameGapNs;
++                    for (uint64_t seen = worst.load(std::memory_order_relaxed);
++                         gap > seen && !worst.compare_exchange_weak(seen, gap, std::memory_order_relaxed);)
++                        ;
++                }
 +            }
 +            lastFrameFbp = fbp;
 +        }
          m_backend->Submit(batch);
          recordDrawDebugEventUnlocked(needed);
      }
-@@ -1693,12 +1750,64 @@ GSPrimitiveBatch GS::buildDrawBatch(int vertexCount) const
+@@ -1693,12 +1760,64 @@ GSPrimitiveBatch GS::buildDrawBatch(int vertexCount) const
      batch.state.fogR = m_fogR;
      batch.state.fogG = m_fogG;
      batch.state.fogB = m_fogB;
@@ -5823,11 +5833,12 @@ index 37b6a4d..4377297 100644
          // path above; kept correct for direct callers.
          const uint32_t off = address & 7u;
 diff --git a/ps2xRuntime/src/lib/ps2_pad.cpp b/ps2xRuntime/src/lib/ps2_pad.cpp
-index 8590f14..6794c97 100644
+index 8590f14..7539453 100644
 --- a/ps2xRuntime/src/lib/ps2_pad.cpp
 +++ b/ps2xRuntime/src/lib/ps2_pad.cpp
-@@ -1,7 +1,17 @@
+@@ -1,7 +1,18 @@
 +#include <algorithm>
++#include <cassert>
 +#include <chrono>
 +#include <cmath>
  #include "runtime/ps2_pad.h"
@@ -5844,7 +5855,7 @@ index 8590f14..6794c97 100644
  namespace
  {
      constexpr uint8_t kPadAnalogMarker = 0x73;
-@@ -25,7 +35,7 @@ namespace
+@@ -25,7 +36,7 @@ namespace
      constexpr uint16_t PAD_L2 = 0x0100u;
  }
  
@@ -5853,7 +5864,7 @@ index 8590f14..6794c97 100644
  {
      if (!data || size < 32)
          return false;
-@@ -37,8 +47,11 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+@@ -37,8 +48,11 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
      data[3] = 0xFF;
      data[4] = data[5] = data[6] = data[7] = kPadStickCenter;
  
@@ -5866,7 +5877,7 @@ index 8590f14..6794c97 100644
      const bool useGamepad = IsGamepadAvailable(kGamepad);
      auto clearBit = [&btns](uint16_t mask)
      { btns &= ~mask; };
-@@ -82,12 +95,31 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+@@ -82,12 +96,50 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
          float ly = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_LEFT_Y);
          float rx = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_RIGHT_X);
          float ry = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_RIGHT_Y);
@@ -5879,12 +5890,31 @@ index 8590f14..6794c97 100644
 +            const float percent = setting ? static_cast<float>(std::atof(setting)) : 25.0f;
 +            return std::clamp(percent, 0.0f, 90.0f) / 100.0f;
 +        }();
++        // Then the DualShock 2's square response: a full diagonal reads near 0/255 on both axes, where a
++        // round modern stick gives 0.71 per axis and MKSM took a diagonal run for a walk. Travel past 90%
++        // counts as full (worn sticks stop short of 1.0).
 +        auto deadZone = [](float &x, float &y)
 +        {
++            constexpr float kFull = 0.9f;
 +            const float mag = std::sqrt(x * x + y * y);
-+            const float scale = mag <= kDead ? 0.0f : std::min(1.0f, (mag - kDead) / (1.0f - kDead)) / mag;
-+            x *= scale, y *= scale;
++            if (mag <= kDead)
++            {
++                x = y = 0.0f;
++                return;
++            }
++            const float amount = std::min(1.0f, (mag - kDead) / std::max(kFull - kDead, 0.05f));
++            const float edge = std::max(std::fabs(x), std::fabs(y)) / mag; // 1 on an axis, 0.71 on a diagonal
++            x = std::clamp(x / mag * amount / edge, -1.0f, 1.0f);
++            y = std::clamp(y / mag * amount / edge, -1.0f, 1.0f);
 +        };
++        static const bool shapeChecked = [&deadZone]
++        {
++            float x = 0.68f, y = -0.68f; // a round stick at 96% on the diagonal (any dead zone up to 90%)
++            deadZone(x, y);
++            assert(x == 1.0f && y == -1.0f);
++            return true;
++        }();
++        (void)shapeChecked;
 +        deadZone(lx, ly);
 +        deadZone(rx, ry);
          data[6] = static_cast<uint8_t>(128 + lx * 127);
@@ -5899,7 +5929,7 @@ index 8590f14..6794c97 100644
      {
          if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))
              clearBit(PAD_UP);
-@@ -119,6 +151,73 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+@@ -119,6 +171,73 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
              clearBit(PAD_SELECT);
      }
  
@@ -5974,7 +6004,7 @@ index 8590f14..6794c97 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..e301c7f 100644
+index 45cb9d2..531d8f1 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -6016,7 +6046,7 @@ index 45cb9d2..e301c7f 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -373,10 +385,253 @@ namespace
+@@ -373,10 +385,254 @@ namespace
      }
  }
  
@@ -6037,6 +6067,7 @@ index 45cb9d2..e301c7f 100644
 +// Graphics menu ("Gráfico"): R3 opens it out of gameplay (menus, pause, map), F1 anywhere. The
 +// options apply at once, except the renderer and its thread (next start), and go to MKSM_INI.
 +extern std::atomic<bool> g_moviePlaying; // Kernel/Stubs/MPEG.cpp
++uint64_t gsGameFrameSerial();            // gs/gs_frontend.cpp: game frames drawn so far
 +std::atomic<bool> g_gfxBlockInput{false}; // ps2_pad.cpp: the game sees no buttons (menu open, or its buttons still held)
 +
 +namespace
@@ -6272,7 +6303,7 @@ index 45cb9d2..e301c7f 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,21 +642,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +643,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -6297,7 +6328,7 @@ index 45cb9d2..e301c7f 100644
      uint32_t width = 0u;
      uint32_t height = 0u;
      uint32_t displayFbp = 0u;
-@@ -450,13 +694,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -450,13 +695,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
@@ -6334,7 +6365,7 @@ index 45cb9d2..e301c7f 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +732,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +733,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -6370,7 +6401,7 @@ index 45cb9d2..e301c7f 100644
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +771,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +772,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -6379,7 +6410,7 @@ index 45cb9d2..e301c7f 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +819,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +820,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -6389,7 +6420,7 @@ index 45cb9d2..e301c7f 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +959,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +960,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -6485,7 +6516,7 @@ index 45cb9d2..e301c7f 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -732,9 +1045,49 @@ bool PS2Runtime::initialize(const char *title)
+@@ -732,9 +1046,49 @@ bool PS2Runtime::initialize(const char *title)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
          SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -6535,7 +6566,7 @@ index 45cb9d2..e301c7f 100644
  #endif
          SetTargetFPS(60);
          if (m_debugUiInitCallback)
-@@ -2214,6 +2567,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +2568,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -6547,7 +6578,7 @@ index 45cb9d2..e301c7f 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +2718,16 @@ void PS2Runtime::run()
+@@ -2360,13 +2719,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -6564,7 +6595,7 @@ index 45cb9d2..e301c7f 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +2749,63 @@ void PS2Runtime::run()
+@@ -2388,9 +2750,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -6629,7 +6660,7 @@ index 45cb9d2..e301c7f 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +2816,188 @@ void PS2Runtime::run()
+@@ -2401,25 +2817,202 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -6827,12 +6858,26 @@ index 45cb9d2..e301c7f 100644
 +            const float aspectFactor = gfx().widescreen ? 0.75f : 1.0f;
 +            std::memcpy(m_memory.getRDRAM() + 0x4F4B38u, &aspectFactor, 4u);
 +        }
-+        const bool gfxHint = (selectPause == 1u || (inPlay == 0u && inGameMenu == 0u)) && // the pause, the frontend menus
-+                             !g_moviePlaying.load(std::memory_order_relaxed);   // not over a movie
++        // The hint: in the Select pause, and in the frontend menus. Those read like a load screen or a
++        // stall (0x4F4B68 == 0), so the hint waits for a second of the game drawing at menu speed
++        // (32+ frames/s; loads and stalls draw almost nothing). Never over a movie.
++        static double drawRateAt = 0.0, menuSince = 0.0;
++        static uint64_t drawRateFrames = 0;
++        static bool gameDrawing = false;
++        const double hintNow = GetTime();
++        if (hintNow - drawRateAt >= 0.25)
++        {
++            const uint64_t frames = gsGameFrameSerial();
++            gameDrawing = frames - drawRateFrames >= 8u;
++            drawRateAt = hintNow, drawRateFrames = frames;
++        }
++        if (!(inPlay == 0u && inGameMenu == 0u && gameDrawing))
++            menuSince = hintNow;
++        const bool gfxHint = (selectPause == 1u || hintNow - menuSince >= 1.0) && !g_moviePlaying.load(std::memory_order_relaxed);
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3008,196 @@ void PS2Runtime::run()
+@@ -2430,21 +3023,196 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());
