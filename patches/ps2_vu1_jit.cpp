@@ -1340,6 +1340,17 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
 
     std::stable_sort(block->reads.begin(), block->reads.end(), [](const auto &x, const auto &y)
                      { return x.offset < y.offset; });
+    // Only the earliest read of a lane can stall the block (the same ready cycle against a
+    // larger offset never wins): MKSM's vertex loop reads the matrix rows in every pair, and
+    // runJitBlock walked each repeat (~1/3 of its time).
+    {
+        bool seen[3][32][4] = {};
+        size_t keep = 0;
+        for (const JitBlock::Timing &read : block->reads)
+            if (bool &s = seen[read.kind][read.reg & 31u][read.lane & 3u]; !s)
+                s = true, block->reads[keep++] = read;
+        block->reads.resize(keep);
+    }
     std::stable_sort(block->writes.begin(), block->writes.end(), [](const auto &x, const auto &y)
                      { return x.offset > y.offset; });
 
