@@ -5554,6 +5554,19 @@ index a8f9fa8..0de20c2 100644
      u32 ReadCT32(u8* data, u32 bp, u32 bw, u32 x, u32 y)
      {
          return PixelStorageTraits<C32>::Read(PageTableC32, data, bp, bw, x, y);
+diff --git a/ps2xRuntime/src/lib/ps2_debug_panel.cpp b/ps2xRuntime/src/lib/ps2_debug_panel.cpp
+index c9aa2c6..9a3103d 100644
+--- a/ps2xRuntime/src/lib/ps2_debug_panel.cpp
++++ b/ps2xRuntime/src/lib/ps2_debug_panel.cpp
+@@ -2206,7 +2206,7 @@ void PS2DebugPanel::draw(PS2Runtime &runtime)
+         return;
+     }
+ 
+-    if (IsKeyPressed(KEY_F1))
++    if (IsKeyPressed(KEY_F12)) // F1 opens the Graphics menu (ps2_runtime.cpp)
+     {
+         toggleVisible();
+     }
 diff --git a/ps2xRuntime/src/lib/ps2_memory.cpp b/ps2xRuntime/src/lib/ps2_memory.cpp
 index 37b6a4d..4377297 100644
 --- a/ps2xRuntime/src/lib/ps2_memory.cpp
@@ -5775,10 +5788,10 @@ index 37b6a4d..4377297 100644
          // path above; kept correct for direct callers.
          const uint32_t off = address & 7u;
 diff --git a/ps2xRuntime/src/lib/ps2_pad.cpp b/ps2xRuntime/src/lib/ps2_pad.cpp
-index 8590f14..3ae32a9 100644
+index 8590f14..6794c97 100644
 --- a/ps2xRuntime/src/lib/ps2_pad.cpp
 +++ b/ps2xRuntime/src/lib/ps2_pad.cpp
-@@ -1,7 +1,14 @@
+@@ -1,7 +1,17 @@
 +#include <algorithm>
 +#include <chrono>
 +#include <cmath>
@@ -5788,12 +5801,15 @@ index 8590f14..3ae32a9 100644
 +#include <cstdlib>
  #include <cstring>
  
++#include <atomic>
++
 +void gsRecordScene(); // gs/gs_recording_backend.cpp
++extern std::atomic<bool> g_gfxBlockInput; // ps2_runtime.cpp: the Graphics menu is open
 +
  namespace
  {
      constexpr uint8_t kPadAnalogMarker = 0x73;
-@@ -25,7 +32,7 @@ namespace
+@@ -25,7 +35,7 @@ namespace
      constexpr uint16_t PAD_L2 = 0x0100u;
  }
  
@@ -5802,9 +5818,12 @@ index 8590f14..3ae32a9 100644
  {
      if (!data || size < 32)
          return false;
-@@ -38,7 +45,8 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+@@ -37,8 +47,11 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+     data[3] = 0xFF;
      data[4] = data[5] = data[6] = data[7] = kPadStickCenter;
  
++    if (g_gfxBlockInput.load(std::memory_order_relaxed))
++        return true; // nothing pressed, sticks centred
      uint16_t btns = 0xFFFFu;
 -    constexpr int kGamepad = 0;
 +    // Port 1 is the second gamepad (2 players); the keyboard plays on port 0 only.
@@ -5812,7 +5831,7 @@ index 8590f14..3ae32a9 100644
      const bool useGamepad = IsGamepadAvailable(kGamepad);
      auto clearBit = [&btns](uint16_t mask)
      { btns &= ~mask; };
-@@ -82,12 +90,31 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+@@ -82,12 +95,31 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
          float ly = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_LEFT_Y);
          float rx = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_RIGHT_X);
          float ry = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_RIGHT_Y);
@@ -5845,7 +5864,7 @@ index 8590f14..3ae32a9 100644
      {
          if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))
              clearBit(PAD_UP);
-@@ -119,6 +146,73 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+@@ -119,6 +151,73 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
              clearBit(PAD_SELECT);
      }
  
@@ -5920,18 +5939,19 @@ index 8590f14..3ae32a9 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..833d049 100644
+index 45cb9d2..fd5b376 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
-@@ -1,3 +1,7 @@
+@@ -1,3 +1,8 @@
 +#include "ps2_vu1_thread.h"
 +#include <ctime>
 +void gsRecordScene(); // gs/gs_recording_backend.cpp: F9 records the scene
 +#include "gs/gs_async.h"
++#include "gs/gs_hw_backend.h"
  #include "ps2_runtime.h"
  #include "ps2_log.h"
  #include "ps2_stubs.h"
-@@ -6,6 +10,7 @@
+@@ -6,6 +11,7 @@
  #include "ps2_runtime_macros.h"
  #include "runtime/gs/gs_frontend.h"
  #include "runtime/ee_scheduler.h"
@@ -5939,7 +5959,7 @@ index 45cb9d2..833d049 100644
  #include "ThreadNaming.h"
  #include "Kernel/Stubs/Audio.h"
  #include "Kernel/Stubs/GS.h"
-@@ -14,6 +19,9 @@
+@@ -14,8 +20,12 @@
  #include "ps2_iop_host.h"
  #include "ps2x/iop/iop_subsystem.h"
  
@@ -5948,8 +5968,11 @@ index 45cb9d2..833d049 100644
 +#endif
  #include <iostream>
  #include <stdexcept>
++#include <cctype>
  #include <fstream>
-@@ -27,6 +35,8 @@
+ #include <algorithm>
+ #include <array>
+@@ -27,6 +37,8 @@
  #include <unordered_map>
  #include <sstream>
  
@@ -5958,7 +5981,7 @@ index 45cb9d2..833d049 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -373,10 +383,22 @@ namespace
+@@ -373,10 +385,248 @@ namespace
      }
  }
  
@@ -5976,6 +5999,232 @@ index 45cb9d2..833d049 100644
 +        out[i] = static_cast<uint8_t>((a[i] + b[i] + 1u) >> 1);
 +}
 +
++// Graphics menu ("Gráfico"): R3 opens it out of gameplay (menus, pause, map), F1 anywhere. The
++// options apply at once, except the renderer and its thread (next start), and go to MKSM_INI.
++std::atomic<bool> g_gfxBlockInput{false}; // ps2_pad.cpp: the game sees no buttons (menu open, or its buttons still held)
++
++namespace
++{
++    bool envOn(const char *name, bool fallback)
++    {
++        const char *v = std::getenv(name);
++        return v ? v[0] != '0' : fallback;
++    }
++
++    struct GfxSettings
++    {
++        bool fxaa = envOn("PS2X_FXAA", true);
++        bool bicubic = envOn("PS2X_UPSCALE", true);
++        bool blend = envOn("PS2X_DEINTERLACE", true);
++        uint32_t scale = std::getenv("PS2X_SCALE") ? static_cast<uint32_t>(std::clamp(std::atoi(std::getenv("PS2X_SCALE")), 1, 4)) : 1u;
++        bool newRenderer = envOn("PS2X_GS_HW", false);
++        bool thread = envOn("PS2X_GS_HW_THREAD", false);
++        const bool runningNew = newRenderer, runningThread = thread; // what this run uses
++    };
++    GfxSettings &gfx()
++    {
++        static GfxSettings settings;
++        return settings;
++    }
++
++    // Rewrites the graphics keys in MKSM_INI (set by jogar.sh), keeping every other line.
++    bool saveGfx()
++    {
++        const char *path = std::getenv("MKSM_INI");
++        if (!path || !*path)
++            return false;
++        const GfxSettings &g = gfx();
++        const std::pair<std::string, std::string> values[] = {
++            {"PS2X_SCALE", std::to_string(g.scale)},       {"PS2X_FXAA", g.fxaa ? "1" : "0"},
++            {"PS2X_UPSCALE", g.bicubic ? "1" : "0"},       {"PS2X_DEINTERLACE", g.blend ? "1" : "0"},
++            {"PS2X_GS_HW", g.newRenderer ? "1" : "0"},     {"PS2X_GS_HW_THREAD", g.thread ? "1" : "0"}};
++        std::vector<std::string> lines;
++        {
++            std::ifstream in(path);
++            for (std::string line; std::getline(in, line);)
++                lines.push_back(line);
++        }
++        for (const auto &[key, value] : values)
++        {
++            bool found = false;
++            for (std::string &line : lines)
++                if (line.rfind(key + "=", 0) == 0)
++                    line = key + "=" + value, found = true;
++            if (!found)
++                lines.push_back(key + "=" + value);
++        }
++        std::ofstream out(path, std::ios::trunc);
++        for (const std::string &line : lines)
++            out << line << '\n';
++        return static_cast<bool>(out);
++    }
++
++    enum GfxRow { RowPreset, RowScale, RowFxaa, RowFilter, RowBlend, RowRenderer, RowThread, RowClose, RowCount };
++    struct GfxMenu
++    {
++        bool open = false, waitRelease = false, saveTried = false, saved = false;
++        int row = 0;
++    } g_gfxMenu;
++
++    bool presetHigh(const GfxSettings &g) { return g.newRenderer && g.scale == 2u && g.fxaa && g.bicubic; }
++    bool presetLow(const GfxSettings &g) { return g.newRenderer && g.scale == 1u && !g.fxaa && !g.bicubic; }
++
++    void applyScale(uint32_t scale)
++    {
++        if (GSHwBackend *hw = GSHwBackend::Active())
++            hw->SetScale(scale), gfx().scale = hw->Scale();
++        else
++            gfx().scale = scale; // the old renderer runs: kept for the new one
++    }
++
++    void changeGfxRow(int row, int dir)
++    {
++        GfxSettings &g = gfx();
++        switch (row)
++        {
++        case RowPreset:
++        {
++            const bool low = presetHigh(g) || (!presetLow(g) && dir < 0); // Alto <-> Leve
++            applyScale(low ? 1u : 2u);
++            g.fxaa = g.bicubic = !low;
++            g.newRenderer = true;
++            break;
++        }
++        case RowScale: applyScale(((g.scale - 1u + (dir < 0 ? 3u : 1u)) % 4u) + 1u); break;
++        case RowFxaa: g.fxaa = !g.fxaa; break;
++        case RowFilter: g.bicubic = !g.bicubic; break;
++        case RowBlend: g.blend = !g.blend; break;
++        case RowRenderer: g.newRenderer = !g.newRenderer; break;
++        case RowThread: g.thread = !g.thread; break;
++        default: return;
++        }
++        g_gfxMenu.saveTried = true;
++        g_gfxMenu.saved = saveGfx();
++    }
++
++    // Test harness: MKSM_GFX_SCRIPT="188o,190d,191l,194c" presses o(pen/R3) u d l r x c(lose) at those seconds.
++    char gfxScriptStep()
++    {
++        static const char *script = std::getenv("MKSM_GFX_SCRIPT");
++        static const char *next = script;
++        if (!next || !*next || GetTime() < std::atof(next))
++            return 0;
++        while (*next && (std::isdigit(static_cast<unsigned char>(*next)) || *next == '.'))
++            ++next;
++        const char step = *next ? *next++ : 0;
++        if (*next == ',')
++            ++next;
++        return step;
++    }
++
++    void updateGfxMenu(bool allowR3)
++    {
++        GfxMenu &m = g_gfxMenu;
++        const bool padOk = IsGamepadAvailable(0);
++        const char step = gfxScriptStep();
++        const auto pressed = [padOk, step](int button)
++        {
++            const char want = button == GAMEPAD_BUTTON_RIGHT_THUMB ? 'o' : button == GAMEPAD_BUTTON_LEFT_FACE_UP ? 'u'
++                            : button == GAMEPAD_BUTTON_LEFT_FACE_DOWN ? 'd' : button == GAMEPAD_BUTTON_LEFT_FACE_LEFT ? 'l'
++                            : button == GAMEPAD_BUTTON_LEFT_FACE_RIGHT ? 'r' : button == GAMEPAD_BUTTON_RIGHT_FACE_DOWN ? 'x'
++                            : button == GAMEPAD_BUTTON_RIGHT_FACE_RIGHT ? 'c' : 0;
++            return (step != 0 && step == want) || (padOk && IsGamepadButtonPressed(0, button));
++        };
++        if (!m.open)
++        {
++            if (IsKeyPressed(KEY_F1) || (allowR3 && pressed(GAMEPAD_BUTTON_RIGHT_THUMB)))
++                m.open = true, m.row = 0;
++        }
++        else
++        {
++            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_UP) || IsKeyPressed(KEY_UP))
++                m.row = (m.row + RowCount - 1) % RowCount;
++            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN) || IsKeyPressed(KEY_DOWN))
++                m.row = (m.row + 1) % RowCount;
++            const bool left = pressed(GAMEPAD_BUTTON_LEFT_FACE_LEFT) || IsKeyPressed(KEY_LEFT);
++            const bool right = pressed(GAMEPAD_BUTTON_LEFT_FACE_RIGHT) || IsKeyPressed(KEY_RIGHT);
++            const bool accept = pressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || IsKeyPressed(KEY_ENTER);
++            const bool back = pressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) || pressed(GAMEPAD_BUTTON_RIGHT_THUMB) ||
++                              IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_F1);
++            if (back || (accept && m.row == RowClose))
++                m.open = false;
++            else if (left || right || accept)
++                changeGfxRow(m.row, left ? -1 : 1);
++        }
++        // The buttons that closed the menu must not reach the game either: wait until they are let go.
++        bool held = false;
++        for (int button = GAMEPAD_BUTTON_LEFT_FACE_UP; padOk && button <= GAMEPAD_BUTTON_RIGHT_THUMB; ++button)
++            held = held || IsGamepadButtonDown(0, button);
++        for (const int key : {KEY_ESCAPE, KEY_ENTER, KEY_BACKSPACE, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT})
++            held = held || IsKeyDown(key);
++        m.waitRelease = m.open || (m.waitRelease && held);
++        g_gfxBlockInput.store(m.waitRelease, std::memory_order_relaxed);
++    }
++
++    void drawGfxMenu(const Rectangle &area, bool hint)
++    {
++        const GfxSettings &g = gfx();
++        const GfxMenu &m = g_gfxMenu;
++        const int font = static_cast<int>(std::max(12.0f, area.height / 30.0f));
++        const Color gold{214, 170, 84, 255}, text{230, 225, 210, 255}, dim{150, 145, 135, 255};
++        if (!m.open)
++        {
++            if (hint)
++            {
++                const char *label = "R3: Gráfico";
++                const int x = static_cast<int>(area.x + area.width) - MeasureText(label, font) - font,
++                          y = static_cast<int>(area.y + area.height) - font * 2;
++                DrawText(label, x + 2, y + 2, font, Color{0, 0, 0, 200});
++                DrawText(label, x, y, font, gold);
++            }
++            return;
++        }
++        const float line = font * 1.6f;
++        const float width = std::min(area.width * 0.9f, font * 30.0f), height = line * (RowCount + 5);
++        const Rectangle panel{area.x + (area.width - width) * 0.5f, area.y + (area.height - height) * 0.5f, width, height};
++        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{0, 0, 0, 120});
++        DrawRectangleRec(panel, Color{10, 12, 16, 235});
++        DrawRectangleLinesEx(panel, 2.0f, gold);
++        const int left = static_cast<int>(panel.x + font), right = static_cast<int>(panel.x + panel.width - font);
++        int y = static_cast<int>(panel.y + font * 0.8f);
++        DrawText("Gráfico", left, y, font + font / 2, gold);
++        y += static_cast<int>(line * 1.4f);
++        const auto onOff = [](bool on) { return on ? "Ligada" : "Desligada"; };
++        char scaleText[48];
++        std::snprintf(scaleText, sizeof(scaleText), GSHwBackend::Active() ? "%ux" : "%ux (renderizador novo)", g.scale);
++        const char *rows[RowCount][2] = {
++            {"Predefinição", presetHigh(g) ? "Alto" : presetLow(g) ? "Leve" : "Personalizado"},
++            {"Resolução interna", scaleText},
++            {"Suavização (FXAA)", onOff(g.fxaa)},
++            {"Filtro de ampliação", g.bicubic ? "Bicúbico" : "Bilinear"},
++            {"Mistura de campos", onOff(g.blend)},
++            {"Renderizador", g.newRenderer != g.runningNew ? (g.newRenderer ? "Novo *" : "Antigo *") : (g.newRenderer ? "Novo" : "Antigo")},
++            {"Thread de desenho", g.thread != g.runningThread ? (g.thread ? "Ligada *" : "Desligada *") : onOff(g.thread)},
++            {"Fechar", ""}};
++        for (int row = 0; row < RowCount; ++row, y += static_cast<int>(line))
++        {
++            const bool selected = row == m.row;
++            if (selected)
++                DrawRectangle(left - font / 2, y - font / 4, right - left + font, static_cast<int>(line) - font / 4, Color{70, 52, 22, 230});
++            DrawText(rows[row][0], left, y, font, selected ? gold : text);
++            if (rows[row][1][0] != '\0')
++            {
++                char value[64];
++                std::snprintf(value, sizeof(value), "< %s >", rows[row][1]);
++                DrawText(value, right - MeasureText(value, font), y, font, selected ? gold : text);
++            }
++        }
++        y += static_cast<int>(line * 0.4f);
++        const int small = std::max(10, font * 3 / 4);
++        DrawText("* vale ao reiniciar o jogo", left, y, small, dim);
++        y += static_cast<int>(small * 1.5f);
++        DrawText("Cima/Baixo: escolher   Esquerda/Direita ou X: mudar   O ou R3: fechar", left, y, small, dim);
++        y += static_cast<int>(small * 1.5f);
++        if (m.saveTried)
++            DrawText(m.saved ? "Salvo no mksm.ini" : "Não salvo: abra o jogo pelo scripts/jogar.sh", left, y, small, m.saved ? dim : gold);
++    }
++}
++
  static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint32_t &outHeight)
  {
 -    static uint64_t s_lastPresentationTick = std::numeric_limits<uint64_t>::max();
@@ -5983,7 +6232,7 @@ index 45cb9d2..833d049 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,21 +409,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +637,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -6008,7 +6257,7 @@ index 45cb9d2..833d049 100644
      uint32_t width = 0u;
      uint32_t height = 0u;
      uint32_t displayFbp = 0u;
-@@ -450,13 +461,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -450,13 +689,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
@@ -6045,7 +6294,7 @@ index 45cb9d2..833d049 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +499,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +727,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -6053,7 +6302,7 @@ index 45cb9d2..833d049 100644
 +    // Field blend: the game draws a 640x224 field into 0x00 and 0x46 in turn; a TV mixes
 +    // consecutive fields, so show the mean of this field and the previous one (PCSX2's
 +    // "blend" deinterlace) instead of a hard single field. PS2X_DEINTERLACE=0 turns it off.
-+    static const bool blendFields = [] { const char *v = std::getenv("PS2X_DEINTERLACE"); return !(v && *v == '0'); }();
++    const bool blendFields = gfx().blend; // PS2X_DEINTERLACE, or the Graphics menu
 +    static std::vector<uint8_t> s_previous, s_otherField, s_shown;
 +    static uint32_t s_previousFbp = std::numeric_limits<uint32_t>::max();
 +    const size_t bytes = s_uploadBuffer.size();
@@ -6081,7 +6330,7 @@ index 45cb9d2..833d049 100644
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +538,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +766,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -6090,7 +6339,7 @@ index 45cb9d2..833d049 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +586,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +814,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -6100,7 +6349,7 @@ index 45cb9d2..833d049 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +726,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +954,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -6196,7 +6445,7 @@ index 45cb9d2..833d049 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -732,9 +812,47 @@ bool PS2Runtime::initialize(const char *title)
+@@ -732,9 +1040,47 @@ bool PS2Runtime::initialize(const char *title)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
          SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -6244,7 +6493,7 @@ index 45cb9d2..833d049 100644
  #endif
          SetTargetFPS(60);
          if (m_debugUiInitCallback)
-@@ -2214,6 +2332,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +2560,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -6256,7 +6505,7 @@ index 45cb9d2..833d049 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +2483,16 @@ void PS2Runtime::run()
+@@ -2360,13 +2711,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -6273,7 +6522,7 @@ index 45cb9d2..833d049 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +2514,63 @@ void PS2Runtime::run()
+@@ -2388,9 +2742,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -6338,7 +6587,7 @@ index 45cb9d2..833d049 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +2581,173 @@ void PS2Runtime::run()
+@@ -2401,25 +2809,181 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -6523,10 +6772,18 @@ index 45cb9d2..833d049 100644
 +        if (IsKeyPressed(KEY_F9)) // records the scene (PS2X_GS_RECORD_DIR, gs_recording_backend.cpp)
 +            gsRecordScene();
 +        const bool captureNow = IsKeyPressed(KEY_F10); // saved after drawing, into PS2X_CAPTURE_DIR
++        // MKSM (SLUS-210.87) state, found by RAM diffs (PLANO_DESEMPENHO.md, N21): 0x4F4B68 is 1 in
++        // gameplay and cutscenes, 0x6BEE2C 1 in the Select pause, 0x4C49E8 1 in any in-game menu.
++        uint32_t inPlay = 1u, selectPause = 0u, inGameMenu = 0u;
++        std::memcpy(&inPlay, m_memory.getRDRAM() + 0x4F4B68u, 4u);
++        std::memcpy(&selectPause, m_memory.getRDRAM() + 0x6BEE2Cu, 4u);
++        std::memcpy(&inGameMenu, m_memory.getRDRAM() + 0x4C49E8u, 4u);
++        updateGfxMenu(inPlay == 0u);
++        const bool gfxHint = selectPause == 1u || (inPlay == 0u && inGameMenu == 0u); // the pause, the frontend menus
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +2758,192 @@ void PS2Runtime::run()
+@@ -2430,21 +2994,193 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());
@@ -6547,7 +6804,7 @@ index 45cb9d2..833d049 100644
 +        // Edge anti-aliasing at the PS2 resolution, before the upscale (PS2X_FXAA=0 turns it off):
 +        // FXAA 3.11 style, it walks along each edge to its ends and blends by the position on the
 +        // step, so long stair steps on characters smooth out. Subpixel blend kept low for HUD text.
-+        static const bool fxaaOn = [] { const char *v = std::getenv("PS2X_FXAA"); return !(v && v[0] == '0'); }();
++        const bool fxaaOn = gfx().fxaa; // PS2X_FXAA, or the Graphics menu
 +        static Shader fxaa{};
 +        static int fxaaTexel = -1;
 +        static RenderTexture2D aaTarget{};
@@ -6641,7 +6898,7 @@ index 45cb9d2..833d049 100644
 +        }
 +        // The window is ~2x the 640x448 picture: Catmull-Rom (bicubic, 9 bilinear taps) keeps it
 +        // sharper than plain bilinear. PS2X_UPSCALE=0 goes back to bilinear.
-+        static const bool bicubicOn = [] { const char *v = std::getenv("PS2X_UPSCALE"); return !(v && v[0] == '0'); }();
++        const bool bicubicOn = gfx().bicubic; // PS2X_UPSCALE, or the Graphics menu
 +        static Shader bicubic{};
 +        static int bicubicSize = -1;
 +        if (bicubicOn && bicubic.id == 0)
@@ -6688,6 +6945,7 @@ index 45cb9d2..833d049 100644
 +        DrawTexturePro(upscaleSource, upscaleRect, dstRect, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
 +        if (bicubicOn && bicubic.id != 0)
 +            EndShaderMode();
++        drawGfxMenu(dstRect, gfxHint);
          if (m_debugUiInitialized && m_debugUiDrawCallback)
          {
              m_debugUiDrawCallback(*this, m_debugUiUserData);

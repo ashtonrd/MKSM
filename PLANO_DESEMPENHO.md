@@ -244,7 +244,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [ ] N18 Outras máquinas e testes antigos com falha (antigas T28, T29)
 - [ ] N19 Widescreen, controle configurável e latência, quadro cheio (antigas T21, T23, T24) — 14/11: FXAA de verdade (busca ao longo da borda) na resolução do PS2 antes da ampliação, ligado por padrão (`PS2X_FXAA=0` desliga; o HUD não borra); zona morta do analógico configurável (`PS2X_DEADZONE`, 25%); janela com ampliação bicúbica por padrão (`PS2X_UPSCALE=0` volta ao bilinear). Widescreen: a string "WideScreen" do ELF é só um rótulo de etapa de carregamento (`GameMain.cpp`), não uma opção nativa; falta achar a projeção
 - [ ] N20 60 quadros/s fixos e ritmo regular (pedido do usuário em 15/11: "70 fps ou no mínimo 60, pra ficar fluido") — plano na seção 7
-- [ ] N21 Opção "Gráfico" para PC fraco (pedido do usuário em 15/11) — viabilidade na seção 7; esperando o usuário escolher o formato
+- [x] N21 Opção "Gráfico" para PC fraco (pedido do usuário em 15/11) — feito: menu do runtime por cima do jogo (R3 fora da gameplay, F1 a qualquer hora), escolha do usuário; detalhes na seção 7
 
 ---
 
@@ -615,6 +615,21 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   | Thread do desenho | sim / não | ao reiniciar |
 
   - Predefinições: "Alto" (2x, FXAA, bicúbico) e "Leve" (1x, sem FXAA, bilinear).
+- **Feito (15/11), no formato recomendado (o usuário escolheu):**
+  - **Quando abre:** R3 abre o menu "Gráfico" quando o jogo não está em gameplay; F1 abre a qualquer hora. O painel de depuração passou do F1 para o F12.
+  - **Detecção do estado do jogo:** comparando a RAM jogando, no mapa (Start), na pausa (Select) e no menu inicial. O `0x5D2724`/`0x5D2728` do MODDING.md ficou sempre em 0.
+
+    | endereço | vale 1 em |
+    |---|---|
+    | `0x4F4B68` | gameplay e cutscenes (0 no menu inicial, carregamento, mapa e pausa; 0x3C no boot) |
+    | `0x6BEE2C` | pausa do Select ("Continue / Options / Exit Game") |
+    | `0x4C49E8` | qualquer menu dentro do jogo (mapa e pausa) |
+
+  - **A dica "R3: Gráfico"** aparece na pausa e nas telas do menu inicial.
+  - **Controle:** enquanto o menu está aberto, e até soltar os botões que o fecharam, o jogo não recebe nada (`g_gfxBlockInput` no `ps2_pad.cpp`).
+  - **Opções e gravação:** Predefinição Alto/Leve, Resolução 1x–4x (na hora: `GSHwBackend::SetScale`), FXAA, filtro, mistura de campos (na hora), renderizador e thread (ao reiniciar, marcados com *). Cada mudança grava as chaves no `MKSM_INI` (o `jogar.sh` exporta `$raiz/mksm.ini`), mantendo as outras linhas.
+  - **Teste sem controle:** `MKSM_GFX_SCRIPT="190o,193d,194l,198c"` (abre, desce, esquerda, fecha). Testado na pausa: menu e dica certos (acentos inclusive), 2x → 1x ao vivo, `mksm.ini` atualizado, jogo seguiu.
+  - **Achado no caminho:** com a thread ligada, `InvalidateAll` chamado com a trava do renderizador pega travava tudo (ele espera a fila, e a `GSHwWorker` precisa da trava para esvaziá-la). Era o caso do `SetScale`, e também de `Initialize`/`Reset`, que só rodam no boot. Agora usam `invalidateAllLocked`.
 - **Limite honesto:** essas opções aliviam a placa de vídeo (1x desenha ~4× menos pixels que 2x). Num PC com processador fraco, o peso maior é emular o EE e a VU1 (N20), e isso não muda com gráfico mais baixo.
 
 ## 8. Onde estamos (14/11, fim do dia)

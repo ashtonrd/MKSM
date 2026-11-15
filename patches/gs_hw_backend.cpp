@@ -22,6 +22,8 @@
 #include <vector>
 
 
+static GSHwBackend *g_activeHw = nullptr; // the renderer drawing the game (Active())
+
 static inline uint64_t mix64(uint64_t x)
 {
     x ^= x >> 33, x *= 0xFF51AFD7ED558CCDull;
@@ -3394,6 +3396,8 @@ GSHwBackend::GSHwBackend(GSRasterBackend &inner, Mode mode) : m_inner(inner), m_
 
 GSHwBackend::~GSHwBackend()
 {
+    if (g_activeHw == this)
+        g_activeHw = nullptr;
 #if defined(PS2X_HAVE_VULKAN)
     if (m_async)
     {
@@ -3410,6 +3414,33 @@ GSHwBackend::~GSHwBackend()
 }
 
 bool GSHwBackend::ready() const { return m_mode == Mode::Count || m_renderer != nullptr; }
+
+GSHwBackend *GSHwBackend::Active() { return g_activeHw; }
+
+uint32_t GSHwBackend::Scale() const
+{
+#if defined(PS2X_HAVE_VULKAN)
+    return m_renderer ? m_renderer->scale : 0u;
+#else
+    return 0u;
+#endif
+}
+
+void GSHwBackend::SetScale(uint32_t scale)
+{
+#if defined(PS2X_HAVE_VULKAN)
+    scale = std::clamp<uint32_t>(scale, 1u, 4u);
+    waitIdle();
+    std::lock_guard<std::recursive_mutex> lock(m_lock);
+    if (!m_renderer || m_renderer->scale == scale)
+        return;
+    m_renderer->downloadAll(); // what only the GPU has goes back to the mirror first
+    invalidateAllLocked();
+    m_renderer->scale = scale;
+#else
+    (void)scale;
+#endif
+}
 
 static bool g_hwRendering = false;
 
@@ -3433,6 +3464,8 @@ std::unique_ptr<GSRasterBackend> GSHwBackend::WrapFromEnvironment(std::unique_pt
     }
     std::fprintf(stderr, "[gs:hw] %s\n", m == Mode::Count ? "counting batches" : "batching GPU renderer");
     g_hwRendering = m == Mode::Render;
+    if (g_hwRendering)
+        g_activeHw = wrapper.get();
     wrapper->m_owned = std::move(inner);
     return wrapper;
 }
@@ -3447,6 +3480,12 @@ void GSHwBackend::InvalidateAll()
 {
     waitIdle();
     std::lock_guard<std::recursive_mutex> lock(m_lock);
+    invalidateAllLocked();
+}
+
+// Waiting for the queue with m_lock held would deadlock: the GSHwWorker needs the lock to drain it.
+void GSHwBackend::invalidateAllLocked()
+{
 #if defined(PS2X_HAVE_VULKAN)
     if (!m_renderer)
         return;
@@ -3468,7 +3507,7 @@ void GSHwBackend::Initialize(uint8_t *vram, uint32_t vramSize)
     if (m_renderer)
     {
         m_renderer->vram = vram;
-        InvalidateAll();
+        invalidateAllLocked();
     }
 #endif
 }
@@ -3479,7 +3518,7 @@ void GSHwBackend::Reset()
     std::lock_guard<std::recursive_mutex> lock(m_lock);
 #if defined(PS2X_HAVE_VULKAN)
     if (m_renderer)
-        m_renderer->downloadAll(), InvalidateAll();
+        m_renderer->downloadAll(), invalidateAllLocked();
 #endif
     m_inner.Reset();
 }

@@ -32,6 +32,7 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 fps for a few seconds (N08/N09) |
 | Fullscreen | ✅ F11 |
 | Higher internal resolution | ✅ New batching renderer at 2x by default, as fast as the old one; `PS2X_GS_HW=0` goes back to the old one, `PS2X_SCALE=1..4` picks the scale |
+| Graphics menu for weaker PCs | ✅ R3 in menus/pause (or F1): internal resolution, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini` |
 | Widescreen | ❌ Planned |
 
 Detailed state: [`ESTADO.md`](ESTADO.md). Performance plan with measurements: [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md).

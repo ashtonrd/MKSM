@@ -32,6 +32,12 @@ public:
 
     // Reads PS2X_GS_HW; returns inner unchanged when it is unset or the GPU is unavailable.
     static std::unique_ptr<GSRasterBackend> WrapFromEnvironment(std::unique_ptr<GSRasterBackend> inner);
+    // The renderer drawing the game (0 = none), for the window's Graphics menu.
+    static GSHwBackend *Active();
+    uint32_t Scale() const;
+    // Internal resolution 1-4 while the game runs: the targets go back to the mirror and are
+    // rebuilt from it at the new scale. Call from the window thread.
+    void SetScale(uint32_t scale);
 
     struct Stats
     {
@@ -85,6 +91,7 @@ private:
     void presentNow(const GSPresentationRequest &request);
     PresentationFrame presentFallback(const GSPresentationRequest &request);
     bool onPresentThread() const; // the window, which never waits on the renderer
+    void invalidateAllLocked(); // InvalidateAll with m_lock held and the queue idle
     void waitIdle() const;
     void workerLoop();
     template <typename F>
