@@ -2885,15 +2885,12 @@ void GSHwBackend::Renderer::appendVertices(const GSPrimitiveBatch &b)
     // Vertices.
     const float ofx = static_cast<float>(ctx.xyoffset.ofx >> 4), ofy = static_cast<float>(ctx.xyoffset.ofy >> 4);
     const double zRange = depthRange(ctx.zbuf.psm);
-    auto make = [&](const GSVertex &v, const GSVertex &attr, float x, float y, float s, float t, float q) {
-        HwVertex o;
-        o.pos[0] = x, o.pos[1] = y;
-        o.pos[2] = static_cast<float>(std::clamp(attr.z / zRange, 0.0, 1.0));
-        o.pos[3] = q;
+    // Each vertex is written once, in place, with its depth computed once (the triangle path
+    // computed it twice and the sprite path four times; appendVertices was ~17% of the GS worker).
+    const auto put = [](HwVertex &o, const GSVertex &attr, float x, float y, float z, float s, float t, float q) {
+        o.pos[0] = x, o.pos[1] = y, o.pos[2] = z, o.pos[3] = q;
         o.color[0] = attr.r, o.color[1] = attr.g, o.color[2] = attr.b, o.color[3] = attr.a;
         o.tex[0] = s, o.tex[1] = t, o.tex[2] = attr.fog, o.tex[3] = 0.0f;
-        (void)v;
-        return o;
     };
     HwVertex verts[6];
     uint32_t n = 0;
@@ -2903,11 +2900,10 @@ void GSHwBackend::Renderer::appendVertices(const GSPrimitiveBatch &b)
         {
             const GSVertex &v = b.vertices[i];
             const GSVertex &attr = state.prim.iip ? v : b.vertices[2];
-            HwVertex o = make(v, attr, v.x - ofx, v.y - ofy, state.prim.fst ? v.u / 16.0f : v.s,
-                              state.prim.fst ? v.v / 16.0f : v.t, state.prim.fst ? 1.0f : v.q);
-            o.pos[2] = static_cast<float>(std::clamp(v.z / zRange, 0.0, 1.0));
-            verts[n++] = o;
+            put(verts[i], attr, v.x - ofx, v.y - ofy, static_cast<float>(std::clamp(v.z / zRange, 0.0, 1.0)),
+                state.prim.fst ? v.u / 16.0f : v.s, state.prim.fst ? v.v / 16.0f : v.t, state.prim.fst ? 1.0f : v.q);
         }
+        n = 3;
     }
     else
     {
@@ -2921,9 +2917,12 @@ void GSHwBackend::Renderer::appendVertices(const GSPrimitiveBatch &b)
             const float q0 = std::fabs(v0.q) > 1e-12f ? v0.q : 1.0f, q1 = std::fabs(v1.q) > 1e-12f ? v1.q : 1.0f;
             s0 = v0.s / q0, t0 = v0.t / q0, s1 = v1.s / q1, t1 = v1.t / q1;
         }
-        const HwVertex a = make(v1, v1, x0, y0, s0, t0, 1.0f), bb = make(v1, v1, x1, y0, s1, t0, 1.0f);
-        const HwVertex c = make(v1, v1, x0, y1, s0, t1, 1.0f), d = make(v1, v1, x1, y1, s1, t1, 1.0f);
-        verts[0] = a, verts[1] = bb, verts[2] = c, verts[3] = bb, verts[4] = d, verts[5] = c;
+        const float z = static_cast<float>(std::clamp(v1.z / zRange, 0.0, 1.0));
+        put(verts[0], v1, x0, y0, z, s0, t0, 1.0f);
+        put(verts[1], v1, x1, y0, z, s1, t0, 1.0f);
+        put(verts[2], v1, x0, y1, z, s0, t1, 1.0f);
+        put(verts[4], v1, x1, y1, z, s1, t1, 1.0f);
+        verts[3] = verts[1], verts[5] = verts[2];
         n = 6;
     }
     {
