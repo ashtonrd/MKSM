@@ -224,9 +224,9 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 
 **Fase 5: imagem nítida**
 - [ ] N10 Renderizador novo: menos custo por troca de estado
-- [ ] N11 Renderizador novo: menos barreiras de GPU e thread própria de novo
-- [ ] N12 Renderizador novo a 60/s em 2x na fase
-- [ ] N13 Renderizador novo como padrão, com escala 2x (confirmar)
+- [ ] N11 Renderizador novo: janela sem esperar a GPU, sem câmera lenta quando o GS atrasa, thread própria sem falha
+- [ ] N12 Renderizador novo a 60/s em 2x (menos cópias de feedback e lotes, perfil de GPU por passo)
+- [ ] N13 Renderizador novo como padrão, com escala 2x (o usuário já escolheu o 2x em 14/11)
 
 **Fase 6: o resto do jogo (com o usuário)**
 - [ ] N14 Avançar no jogo, apontando defeitos com F9 (antigas T15, T17)
@@ -455,18 +455,28 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   3. Feedback: desenhos seguidos que leem regiões já copiadas não precisam de nova cópia (já existe a lista de retângulos; veja se dá para não quebrar o lote).
 - **Pronto quando:** fase com `PS2X_GS_HW=1` em 1x ≥ 45/s, PSNR igual.
 
-### N11 Renderizador novo: menos barreiras de GPU e thread própria
+### N11 Renderizador novo: janela sem esperar a GPU, sem câmera lenta, thread própria
+- **Por quê:** é o "tudo piscando" e a "câmera lenta" que o usuário viu em 2x (14/11). Não dependem da GPU ser rápida: são esperas e travas.
 - **Faça:**
-  1. Troque o `fullBarrier` (ALL_COMMANDS→ALL_COMMANDS) por barreiras estreitas (cópia→fragmento, fragmento→cópia), e evite reabrir o passo de render depois de cada cópia quando a cópia pode vir antes.
-  2. Teste de novo a `GSHwWorker` (`PS2X_GS_HW_THREAD=1`, apêndice T07b): ela ficou mais lenta porque a GPU virava o limite.
-- **Pronto quando:** com a thread ligada, a fase em 1x fica mais rápida que sem ela, e a janela a 60 fps.
+  1. **Janela sem trava nem espera:** hoje o `Present` do caminho sem thread pega a trava do renderizador (que o frontend segura enquanto desenha) e o `finishPresent` espera a cerca da GPU; a janela cai para 12–48 fps. O frontend deve publicar a última imagem pronta num slot (como as capturas do renderizador atual: `QueueCapture`/`TakeCapture`, com `parked`), e a janela pega a mais nova cuja cerca já sinalizou, sem trava e sem esperar; se nenhuma estiver pronta, repete a anterior.
+  2. **Sem câmera lenta com o GS atrasado:** quando o EE fica parado esperando o GS (CSR/FINISH, `VIF1_STAT`, fila cheia), o tempo do jogo não anda e o vsync cai abaixo de 60. A espera deve contar como tempo passando (vblanks e timers avançam, como no pulo de quadro do `checkpointDue`), para o jogo perder quadros em vez de ficar lento. Conferir na cutscene em 2x: `PS2X_PERF` com vsync 60.
+  3. Troque o `fullBarrier` (ALL_COMMANDS→ALL_COMMANDS) por barreiras estreitas (cópia→fragmento, fragmento→cópia).
+  4. **`GSHwWorker` (`PS2X_GS_HW_THREAD=1`):** corrigir a falha de segmentação intermitente (1 em 3 rodadas em 14/11; rodar com `gdb -batch -ex run -ex bt` até pegar) e medir de novo (15–17 quadros/s em 2x em 14/11, abaixo dos 19 sem thread).
+- **Pronto quando:** em 2x na cutscene do Raiden, janela a 60 fps sem piscar, vsync 60 (velocidade certa) e três rodadas com a thread ligada sem falha.
 
-### N12 Renderizador novo a 60/s em 2x na fase
-- **Faça:** R5 com `PS2X_GS_HW=1 PS2X_SCALE=2`. O que sobrar de custo de GPU em 2x (cópias, sombra, leituras de volta) vira item aqui.
-- **Pronto quando:** fase em 2x ≥ 58/s, capturas nítidas e certas.
+### N12 Renderizador novo a 60/s em 2x
+- **Por quê:** com N11 feita, o que sobra é custo real: o GSFrontend gasta 59% em driver/libc gravando comandos (~260–310 lotes e 36–39 cópias de feedback por quadro, cada cópia fecha o passo de render) e a GPU fica em 55–67%.
+- **Faça:**
+  1. **Perfil de GPU por passo:** timestamps (`VkQueryPool`) em volta de cada passo de render, cópia de feedback, cópia de sombra e leitura de volta; um resumo por segundo atrás de `PS2X_PERF`. Sem isso, os itens abaixo são chute.
+  2. **Menos cópias de feedback:** reaproveitar a cópia quando a região lida não foi desenhada desde a última cópia (a lista de retângulos já existe); não copiar quando o desenho lê só fora do que foi desenhado no passo.
+  3. **Menos lotes:** juntar lotes seguidos com o mesmo estado (o atalho de estado acerta 94%; ver por que os lotes não se juntam) e invalidar por `generation` só o que mudou (item 1 da N10).
+  4. **Menos banda em 2x:** RGBA8 em vez de RGBA16F nas superfícies onde o resultado é exato (CT32/CT24 sem blend com sobra), conferindo PSNR.
+  5. **Gravação de comandos mais barata:** perfil (`perf`) do frontend em 2x; push constants/descritores reaproveitados no lugar do que aparecer no topo.
+- **Pronto quando:** cutscene e fase em 2x ≥ 58/s em três rodadas, PSNR das cenas igual, capturas nítidas e certas.
 
-### N13 Renderizador novo como padrão, com escala 2x (confirmar)
-- **Faça:** a antiga T11 (apêndice), com `PS2X_SCALE=2` como padrão quando a placa aguentar. Antes, rode o jogo para o usuário com as duas opções e pergunte qual ele prefere.
+### N13 Renderizador novo como padrão, com escala 2x
+- **Escolha do usuário (14/11):** "o 2x realmente fica muito melhor"; ele quer a imagem 2x no jogo normal. Não precisa perguntar de novo.
+- **Faça:** a antiga T11 (apêndice): `PS2X_GS_HW=1` e `PS2X_SCALE=2` como padrão no `jogar.sh`/runtime quando a placa aguentar 60/s; o renderizador atual fica atrás de `PS2X_GS_HW=0`. README e `jogar.sh` atualizados.
 - **Pronto quando:** R5 sem variável nenhuma a 60/s em toda a fase, em 2x. Seção 9: "Jogou com o renderizador novo? Ficou mais nítido? Algum defeito novo?"
 
 ### N14 a N19
