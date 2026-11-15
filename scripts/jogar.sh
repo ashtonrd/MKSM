@@ -17,6 +17,7 @@
 #   PS2X_GS_HW=0          renderizador antigo, só na resolução do PS2 (o padrão é o novo, por lotes, em 2x)
 #   PS2X_SCALE=2          resolução interna do renderizador novo: 1 a 4 (padrão 2)
 #   PS2X_GS_HW_THREAD=0   renderizador novo numa thread só (o padrão usa uma thread a mais com 4+ núcleos lógicos)
+#   PS2X_WIDESCREEN=1     tela 16:9 (o 3D ganha campo nas laterais; o 2D estica; os filmes ficam 4:3)
 # Menu "Gráfico": R3 nos menus, na pausa (Select) e no mapa, ou F1 a qualquer hora. As opções valem na
 # hora (renderizador e thread ao reiniciar) e ficam gravadas neste mksm.ini. F12: painel de depuração.
 # Dois controles: o segundo joga na porta 2; o teclado só no primeiro jogador.
