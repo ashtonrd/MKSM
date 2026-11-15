@@ -8131,7 +8131,7 @@ index 6974254..314523a 100644
          return;
  
 diff --git a/ps2xRuntime/src/main.cpp b/ps2xRuntime/src/main.cpp
-index 563bcbd..5f2323e 100644
+index 563bcbd..5d65bc3 100644
 --- a/ps2xRuntime/src/main.cpp
 +++ b/ps2xRuntime/src/main.cpp
 @@ -9,6 +9,7 @@
@@ -8142,14 +8142,17 @@ index 563bcbd..5f2323e 100644
  #include <string>
  #include <filesystem>
  #include <exception>
-@@ -164,8 +165,33 @@ namespace
+@@ -164,8 +165,36 @@ namespace
      }
  }
  
 +#if defined(_WIN32)
 +// Laptops with two GPUs: ask the NVIDIA/AMD drivers for the dedicated card (the GS renderer needs it).
-+extern "C" __declspec(dllexport) unsigned long NvOptimusEnablement = 1;
-+extern "C" __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
++extern "C"
++{
++    __declspec(dllexport) unsigned long NvOptimusEnablement = 1;
++    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
++}
 +#endif
 +
 +// A setting the user left out of the environment (and of mksm.ini) gets this value.
@@ -8176,7 +8179,7 @@ index 563bcbd..5f2323e 100644
  #if defined(__ANDROID__)
      redirectStdioToLogcat();
  #endif
-@@ -197,6 +223,7 @@ int main(int argc, char *argv[])
+@@ -197,6 +226,7 @@ int main(int argc, char *argv[])
  #if defined(PS2X_ENABLE_DEBUG_UI) && !defined(PLATFORM_VITA)
          // This hook is to prevent leak rlimgui deps to recompiler etc
          PS2DebugPanel debugPanel;

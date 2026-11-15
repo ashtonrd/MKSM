@@ -2,7 +2,8 @@
 # Compila o jogo para Windows a partir do Linux (MinGW-w64) e monta portatil/MKSM-windows.
 # uso: scripts/build_windows.sh [raiz com PS2Recomp/ e extraido_full/]   (padrão: a raiz deste repositório)
 # Precisa de mingw-w64-gcc, cmake, ninja e glslc. O primeiro build baixa o FFmpeg para Windows (GitHub, o
-# mesmo pacote que o PS2Recomp usa no Windows). O código gerado leva horas; JOBS=3 por padrão (~5 GB por job).
+# mesmo pacote que o PS2Recomp usa no Windows, 34 MB). O código gerado vai em lotes de 32 arquivos com cabeçalho
+# pré-compilado: ~0,5 GB por job, menos de 1 h com JOBS = número de threads (o padrão).
 set -euo pipefail
 AQUI=$(cd "$(dirname "$0")/.." && pwd)
 RAIZ=$(cd "${1:-$AQUI}" && pwd)
@@ -24,14 +25,17 @@ cmake -S "$SRC" -B "$B" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$AQUI/scripts/mingw-w64
   -DPS2X_BUILD_RECOMP=OFF -DPS2X_BUILD_ANALYZER=OFF -DPS2X_BUILD_STUDIO=OFF -DPS2X_BUILD_TEST=OFF \
   -DPS2X_NATIVE_ARCH=OFF -DPS2X_OPTIMIZE_RUNTIME_LIB=ON -DPS2X_SHOW_WINDOWS_CONSOLE=OFF \
   -DPS2X_VULKAN_LIBRARY="$B/libvulkan-1.a" "${fontes[@]}"
-ninja -C "$B" -j "${JOBS:-3}" ps2EntryRunner
+ninja -C "$B" -j "${JOBS:-$(nproc)}" ps2EntryRunner
 
 mkdir -p "$OUT/bin" "$OUT/jogo"
 cp "$B/ps2xRuntime/ps2EntryRunner.exe" "$OUT/bin/MKSM.exe"
-cp "$B"/ps2xRuntime/*.dll "$OUT/bin/"
-# rsync refaz arquivo de tamanho diferente (cópia cortada); os memory cards só entram na primeira vez.
-rsync -a --exclude=mc0 --exclude=mc1 "$RAIZ/extraido_full/" "$OUT/jogo/"
-cp -rn "$RAIZ/extraido_full/mc0" "$RAIZ/extraido_full/mc1" "$OUT/jogo/" 2>/dev/null || true
+cp "$B"/ThirdParty/ffmpeg-prefix/src/ffmpeg_external/bin/*.dll "$OUT/bin/" # FFmpeg e o que ele usa
+# Os arquivos do jogo viram links para extraido_full (o jogo só os lê; copiar a pasta para um pendrive copia o
+# conteúdo). Os memory cards são cópias de verdade, só na primeira vez, e vêm da pasta Linux se você já jogou nela.
+rsync -a --exclude=mc0 --exclude=mc1 --link-dest="$RAIZ/extraido_full/" "$RAIZ/extraido_full/" "$OUT/jogo/"
+saves=$RAIZ/extraido_full
+[[ -d "$RAIZ/portatil/MKSM-linux/jogo/mc0" ]] && saves=$RAIZ/portatil/MKSM-linux/jogo
+cp -rn "$saves/mc0" "$saves/mc1" "$OUT/jogo/" 2>/dev/null || true
 
 crlf() { sed 's/$/\r/'; }
 crlf > "$OUT/Jogar.bat" <<'EOF'
