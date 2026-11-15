@@ -2,7 +2,16 @@
 ```markdown
 # ShaolinMonks: recompilação estática de PS2 com PS2Recomp
 
-Estado em 03/11/2026 (run101). Documento feito para uma IA ou pessoa nova continuar sem contexto. Convenção: **[medido]** = visto em execução, **[lido]** = lido no código, **[memória]** = vem da memória da IA sobre o SDK do PS2, conferir antes de confiar. Este é o documento principal; `PLANO.md` tem o mesmo conteúdo com mais detalhes de investigação.
+Escrito em 03/11/2026 (run101), com resumo atualizado em 15/11 logo abaixo. Documento feito para uma IA ou pessoa nova continuar sem contexto. Convenção: **[medido]** = visto em execução, **[lido]** = lido no código, **[memória]** = vem da memória da IA sobre o SDK do PS2, conferir antes de confiar. Este é o documento principal; `PLANO.md` tem o mesmo conteúdo com mais detalhes de investigação.
+
+## Resumo em 15/11/2026
+
+- **Jogável:** abertura e filmes, menus, Goro's Lair (cutscene e gameplay) com imagem como a do original, som e saves. O resto das fases ainda não foi jogado (N14).
+- **Imagem:** o renderizador novo por lotes, em 2x com uma thread de desenho, é o padrão desde a N13 (`PS2X_GS_HW=0` volta ao antigo, exato), com mipmap por pixel desde a N04. Menu "Gráfico" (R3 nos menus, F1 a qualquer hora) com resolução interna, 16:9, FXAA, filtro, mistura de campos e renderizador, gravando no `mksm.ini` (N21).
+- **Velocidade:** velocidade certa em tudo, sem câmera lenta. Numa GTX 1050, gameplay a ~55–60 quadros/s; dois trechos da cutscene caem para ~35 por alguns segundos nos dois renderizadores (limite da VU1 e do EE, N20). Placa integrada Intel HD 630: ~49 quadros/s com a predefinição "Leve"; sem Vulkan, volta sozinho ao renderizador antigo na CPU.
+- **Testes:** `ps2x_tests` com todas as suítes, 460 passam e 3 falhas conhecidas (`PLANO_DESEMPENHO.md`, R3).
+- **Onde ver o resto:** `PLANO_DESEMPENHO.md` (plano ativo, seções 6 e 8), `ARQUITETURA.md` (como funciona), `PLANO_RPG.md` (modo RPG planejado), `MODDING.md` (endereços).
+- As seções "Bloqueio atual" e "Histórico" abaixo são de antes do jogo ficar jogável e ficam como registro. "Ambiente", "Estrutura", "Reproduzir do zero", "Rodar e ler logs" e "Fatos do ELF" continuam valendo.
 
 ## Objetivo
 

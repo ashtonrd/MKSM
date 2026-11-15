@@ -2,6 +2,8 @@
 ```markdown
 # 🗺️ ShaolinMonks: Plano de Investigação e Diário de Bordo
 
+> **Histórico (encerrado em 13/11/2026).** Este é o diário da investigação até o jogo ficar jogável, com a evidência de cada correção, e continua servindo de referência (as seções 5A são citadas pelo `ARQUITETURA.md` e pelo `PLANO_DESEMPENHO.md`). Não é mais o plano: o trabalho em andamento está no [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) e no [`PLANO_RPG.md`](PLANO_RPG.md). "Estado" e "objetivo atual" abaixo descrevem 03/11.
+
 **Estado:** 03/11/2026 (após `run101`, VU1 recompilada em x86-64).  
 Este é o documento técnico detalhado (diário de bordo e engenharia reversa). O `ESTADO.md` é o resumo técnico de status e o `README.md` a apresentação do projeto.  
 *Convenção:* **[medido]** = visto em execução no log, **[lido]** = lido no código C++ gerado, **[memória]** = conhecimento arquitetural sobre o SDK do PS2.

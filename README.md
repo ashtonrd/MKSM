@@ -17,9 +17,9 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Save screens, main menu, character select | ✅ Done |
 | First 3D stage (Goro's Lair) with HUD, pause and map | ✅ Done |
 | Music and voices (ADX) | ✅ Working |
-| GS on the GPU (Vulkan: compute + exact rasterizer with pixel interlock) | ✅ Working, bit-exact with the CPU renderer |
+| GS on the GPU (Vulkan) | ✅ New batching renderer at 2x by default (per-pixel mipmaps); the old exact renderer stays behind `PS2X_GS_HW=0` |
 | VU1 on its own thread, x86-64 JIT | ✅ Working |
-| Full speed in gameplay (60 fields/s) | ✅ 60 on a GTX 1050; heavy scenes drop frames instead of going into slow motion |
+| Full speed (60 fields/s) | 🟡 Right speed everywhere (no slow motion); on a GTX 1050 gameplay runs ~55–60 frames/s, heavy scenes drop frames instead (`PLANO_DESEMPENHO.md`, N20) |
 | CRI movies (FMV) | ✅ Intro and all 8 movies play; Start skips |
 | Memory card (save and load) | ✅ Working (files in `extraido_full/mc0/`) |
 | Gameplay sound | ✅ 48 kHz without warble; SPU2 reverb approximated (`PS2X_REVERB`) |
@@ -29,7 +29,8 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Windows build | ❌ Not tested |
 | Floors, walls and light rays in Goro's Lair | ✅ As in the original (the VIF now runs ahead of VU1: the game sends each batch's colors right after starting it) |
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
-| Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 fps for a few seconds (N08/N09) |
+| Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |
+| RPG mode (levels and attribute points) | 📝 Planned: [`PLANO_RPG.md`](PLANO_RPG.md) |
 | Fullscreen | ✅ F11 |
 | Higher internal resolution | ✅ New batching renderer at 2x by default, as fast as the old one; `PS2X_GS_HW=0` goes back to the old one, `PS2X_SCALE=1..4` picks the scale |
 | Graphics menu for weaker PCs | ✅ R3 in menus/pause (or F1): internal resolution, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini` |
@@ -63,7 +64,7 @@ Play:
 scripts/jogar.sh
 ```
 
-It reads optional settings from `mksm.ini` in the project root (one `VARIABLE=value` per line; the list is at the top of [`scripts/jogar.sh`](scripts/jogar.sh)). Keys: **F11** fullscreen, **F10** screenshot (`capturas/`), **F9** records the current scene for bug reports (`gsrec/`, game data: don't share it publicly).
+It reads optional settings from `mksm.ini` in the project root (one `VARIABLE=value` per line; the list is at the top of [`scripts/jogar.sh`](scripts/jogar.sh)). Keys: **F11** fullscreen, **F10** screenshot (`capturas/`), **F9** records the current scene for bug reports (`gsrec/`, game data: don't share it publicly). **Graphics menu:** **R3** on the controller in menus, the Select pause and the map, or **F1** anytime (internal resolution, 16:9, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini`). **F12** opens the debug panel.
 
 **Laptops with two GPUs:** the window may open on the integrated GPU. Prefix the command with `prime-run` (or `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`).
 
@@ -76,13 +77,16 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) �
 | `MKSM_SKIP_INTRO=1` | Skips the intro videos |
 | `PS2X_VOL_MASTER`, `PS2X_VOL_MUSIC`, `PS2X_VOL_SFX` | Volumes, 0–100 |
 | `PS2X_REVERB=22` | Echo on sound effects (0 turns it off) |
-| `PS2X_FXAA=1` | Smooths edges in the window |
+| `PS2X_FXAA=0` | No edge smoothing (on by default) |
+| `PS2X_GS_HW=0` | Old renderer (PS2 resolution, bit-exact) instead of the new one |
+| `PS2X_SCALE=1` | Internal resolution of the new renderer, 1–4 (default 2; 1 for weak GPUs) |
+| `PS2X_WIDESCREEN=1` | 16:9 (wider 3D view; 2D/HUD stretches; movies stay 4:3) |
 | `PS2X_RUMBLE=0` | No controller vibration |
 | `PS2X_DEINTERLACE=0` | Shows one field at a time instead of blending both (harsher image) |
 | `PS2X_UNCAPPED=1` | No real-time cap (throughput testing; the game speeds up) |
-| `PS2X_PERF=1` | Prints fps, GS and GPU load every 2 s |
+| `PS2X_PERF=1` | Prints fps, GS and GPU load and where each frame's time goes, every 2 s |
 | `PS2X_PIN=0` | Don't pin the four busy threads to separate physical cores |
-| `PS2X_GS_GPU=0` | CPU renderer only |
+| `PS2X_GS_GPU=0` | With `PS2X_GS_HW=0`: the old renderer on the CPU only |
 | `PS2X_GS_RASTER=0` | GPU compute tiles instead of the rasterizer |
 | `PS2X_VU1_THREAD=0` | VU1 on the game thread |
 
@@ -96,8 +100,9 @@ PS2Recomp is **not vendored**. `scripts/aplicar_patches.sh` clones it at the com
 | `patches/` | Our changes to the PS2Recomp runtime, IOP, recompiler and tests |
 | `scripts/` | Build, patch and test helpers |
 | [`ARQUITETURA.md`](ARQUITETURA.md) | Architecture: threads, locks, the path of a frame, timing, game traps, testing without booting the game. **Start here.** |
-| [`PLANO.md`](PLANO.md) | Log of every fix, with evidence |
-| [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) | Performance plan and measurements |
+| [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) | The active plan: performance, image, open tasks, measurements |
+| [`PLANO_RPG.md`](PLANO_RPG.md) | Plan for the optional RPG mode |
+| [`PLANO.md`](PLANO.md) | History: the investigation log up to 13/11, with the evidence for each fix |
 | [`MODDING.md`](MODDING.md) | Game addresses and formats (level select, stage data, bloom...) |
 | [`ESTADO.md`](ESTADO.md) | Technical state and manual build steps |
 | `notas/` | Investigation notes |

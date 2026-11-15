@@ -17,9 +17,9 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Telas de save, menu principal, seleção de personagem | ✅ Feito |
 | Primeira fase 3D (Goro's Lair) com HUD, pausa e mapa | ✅ Feito |
 | Música e falas (ADX) | ✅ Funcionando |
-| GS na GPU (Vulkan: compute + rasterizador exato com interlock por pixel) | ✅ Funcionando, bit a bit igual ao renderizador da CPU |
+| GS na GPU (Vulkan) | ✅ Renderizador novo por lotes em 2x por padrão (mipmap por pixel); o antigo, exato, fica em `PS2X_GS_HW=0` |
 | VU1 numa thread própria, JIT x86-64 | ✅ Funcionando |
-| Velocidade cheia na gameplay (60 campos/s) | ✅ 60 numa GTX 1050; nas cenas pesadas o jogo pula quadros em vez de ficar em câmera lenta |
+| Velocidade cheia (60 campos/s) | 🟡 Velocidade certa em tudo (sem câmera lenta); numa GTX 1050 a gameplay roda a ~55–60 quadros/s, e nas cenas pesadas o jogo pula quadros (`PLANO_DESEMPENHO.md`, N20) |
 | Filmes CRI (FMV) | ✅ Abertura e os 8 filmes tocam; Start pula |
 | Memory card (salvar e carregar) | ✅ Funcionando (arquivos em `extraido_full/mc0/`) |
 | Som na gameplay | ✅ 48 kHz sem distorção; eco (reverb) do SPU2 aproximado (`PS2X_REVERB`) |
@@ -29,9 +29,12 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Build para Windows | ❌ Não testado |
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
 | Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
-| Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos (N08/N09) |
+| Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos, nos dois renderizadores (limite do EE/VU1, N20) |
 | Tela cheia | ✅ F11 |
-| Resolução interna maior, widescreen | 🟡 Renderizador experimental `PS2X_GS_HW=1 PS2X_SCALE=2` (mais lento); widescreen planejado |
+| Resolução interna maior | ✅ Renderizador novo em 2x por padrão, tão rápido quanto o antigo; `PS2X_GS_HW=0` volta ao antigo, `PS2X_SCALE=1..4` escolhe a escala |
+| Menu de gráfico para PC fraco | ✅ R3 nos menus/pausa (ou F1): resolução interna, 16:9, FXAA, filtro, mistura de campos, renderizador; grava no `mksm.ini` |
+| Widescreen | ✅ 16:9 no menu Gráfico ou `PS2X_WIDESCREEN=1` (o 3D ganha campo nas laterais; o 2D/HUD estica, como no PCSX2; filmes ficam 4:3) |
+| Modo RPG (níveis e pontos de atributo) | 📝 Planejado: [`PLANO_RPG.md`](PLANO_RPG.md) |
 
 Estado detalhado: [`ESTADO.md`](ESTADO.md). Plano de desempenho com medições: [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md).
 
@@ -61,7 +64,7 @@ Para jogar:
 scripts/jogar.sh
 ```
 
-Ele lê configurações opcionais do `mksm.ini` na raiz do projeto (uma `VARIAVEL=valor` por linha; a lista está no começo do [`scripts/jogar.sh`](scripts/jogar.sh)). Teclas: **F11** tela cheia, **F10** captura de tela (`capturas/`), **F9** grava a cena atual para relatar defeito (`gsrec/`; são dados do jogo, não publique).
+Ele lê configurações opcionais do `mksm.ini` na raiz do projeto (uma `VARIAVEL=valor` por linha; a lista está no começo do [`scripts/jogar.sh`](scripts/jogar.sh)). Teclas: **F11** tela cheia, **F10** captura de tela (`capturas/`), **F9** grava a cena atual para relatar defeito (`gsrec/`; são dados do jogo, não publique). **Menu Gráfico:** **R3** no controle nos menus, na pausa do Select e no mapa, ou **F1** a qualquer hora (resolução interna, 16:9, FXAA, filtro de ampliação, mistura de campos, renderizador; grava no `mksm.ini`). **F12** abre o painel de depuração.
 
 **Notebook com duas placas de vídeo:** sem isso a janela pode abrir na placa integrada. Rode com `prime-run` na frente (ou `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`).
 
@@ -74,13 +77,16 @@ Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 | `MKSM_SKIP_INTRO=1` | Pula os vídeos de abertura |
 | `PS2X_VOL_MASTER`, `PS2X_VOL_MUSIC`, `PS2X_VOL_SFX` | Volumes, de 0 a 100 |
 | `PS2X_REVERB=22` | Eco nos efeitos sonoros (0 desliga) |
-| `PS2X_FXAA=1` | Suaviza as bordas na janela |
+| `PS2X_FXAA=0` | Sem suavização de bordas (ligada por padrão) |
+| `PS2X_GS_HW=0` | Renderizador antigo (resolução do PS2, exato) no lugar do novo |
+| `PS2X_SCALE=1` | Resolução interna do renderizador novo, 1 a 4 (padrão 2; 1 para placa fraca) |
+| `PS2X_WIDESCREEN=1` | Tela 16:9 (3D mais largo; o 2D/HUD estica; filmes ficam 4:3) |
 | `PS2X_RUMBLE=0` | Sem vibração no controle |
 | `PS2X_DEINTERLACE=0` | Mostra um campo por vez, sem misturar os dois (imagem mais dura) |
 | `PS2X_UNCAPPED=1` | Sem trava de tempo real (medir vazão; o jogo acelera) |
-| `PS2X_PERF=1` | Mostra fps e carga do GS e da GPU a cada 2 s |
+| `PS2X_PERF=1` | Mostra fps, carga do GS e da GPU e para onde vai o tempo de cada quadro, a cada 2 s |
 | `PS2X_PIN=0` | Não fixa as quatro threads pesadas em núcleos físicos separados |
-| `PS2X_GS_GPU=0` | Só o renderizador da CPU |
+| `PS2X_GS_GPU=0` | Com `PS2X_GS_HW=0`: o renderizador antigo só na CPU |
 | `PS2X_GS_RASTER=0` | Tiles em compute na GPU em vez do rasterizador |
 | `PS2X_VU1_THREAD=0` | VU1 na thread do jogo |
 
@@ -94,8 +100,9 @@ O PS2Recomp **não é copiado para cá**. O `scripts/aplicar_patches.sh` clona-o
 | `patches/` | Nossas mudanças no runtime, IOP, recompilador e testes do PS2Recomp |
 | `scripts/` | Compilação, patches e testes |
 | [`ARQUITETURA.md`](ARQUITETURA.md) | Arquitetura: threads, locks, o caminho de um quadro, tempo, armadilhas do jogo, testes sem bootar o jogo. **Comece por aqui.** |
-| [`PLANO.md`](PLANO.md) | Diário de cada correção, com evidências |
-| [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) | Plano de desempenho e medições |
+| [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) | O plano ativo: desempenho, imagem, tarefas em aberto, medições |
+| [`PLANO_RPG.md`](PLANO_RPG.md) | Plano do modo RPG opcional |
+| [`PLANO.md`](PLANO.md) | Histórico: o diário de investigação até 13/11, com a evidência de cada correção |
 | [`MODDING.md`](MODDING.md) | Endereços e formatos do jogo (level select, dados das fases, bloom...) |
 | [`ESTADO.md`](ESTADO.md) | Estado técnico e passo a passo manual |
 | `notas/` | Notas de investigação |

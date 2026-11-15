@@ -647,7 +647,19 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   - **Achado no caminho:** com a thread ligada, `InvalidateAll` chamado com a trava do renderizador pega travava tudo (ele espera a fila, e a `GSHwWorker` precisa da trava para esvaziá-la). Era o caso do `SetScale`, e também de `Initialize`/`Reset`, que só rodam no boot. Agora usam `invalidateAllLocked`.
 - **Limite honesto:** essas opções aliviam a placa de vídeo (1x desenha ~4× menos pixels que 2x). Num PC com processador fraco, o peso maior é emular o EE e a VU1 (N20), e isso não muda com gráfico mais baixo.
 
-## 8. Onde estamos (14/11, fim do dia)
+## 8. Onde estamos
+
+**15/11 (resumo; a tabela abaixo é de 14/11):**
+- 2x com thread é o padrão (N13), com mipmap por pixel (N04).
+- Menu Gráfico com 16:9 (N21, N19).
+- Velocidade certa em tudo: gameplay ~55–60 quadros/s; dois vales da cutscene a ~35, limite da VU1 e do EE (N20).
+- Testes 460/3 (R3).
+- Intel HD 630 e sem Vulkan testados (N18).
+- Em aberto:
+  - para mim: N20 (60 cravados nos vales: VU1 bem mais rápida), N19 (controle configurável e latência), N18 (build do zero pelo README), modo RPG (`PLANO_RPG.md`);
+  - para o usuário: N14 (jogar adiante com F9/F10), N15 (saves, filmes do fim, dois controles), testar o menu Gráfico e o 16:9 com controle de verdade.
+
+**14/11, fim do dia:**
 
 | Área | Estado | Tarefas |
 |---|---|---|
