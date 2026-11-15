@@ -83,6 +83,7 @@ CONTROLES
 CONFIGURAÇÃO
   mksm.ini (abra no Bloco de Notas) tem todas as opções comentadas (volume, tela 16:9,
   resolução interna, pular os filmes...). O menu Gráfico (F1, ou R3 nos menus) grava as escolhas ali.
+  PC com placa de vídeo fraca: no menu Gráfico, ponha a Predefinição em "Mínimo".
 
 SAVES
   Ficam em jogo\mc0 (memory card 1) e jogo\mc1 (memory card 2). Copie essas pastas para fazer backup.

@@ -10,6 +10,8 @@
 #include <iostream>
 #include <type_traits>
 
+bool applyGlowSetting(GSPrimitiveBatch &batch); // gs_frontend.cpp: the Graphics menu's "Efeitos"
+
 namespace
 {
     constexpr char kMagic[8] = {'P', 'S', '2', 'X', 'G', 'S', 'R', '1'};
@@ -419,7 +421,8 @@ void GSRecording::Replay(GSRasterBackend &backend, const std::function<void(uint
         {
             GSPrimitiveBatch batch;
             read(&batch, sizeof(batch));
-            backend.Submit(batch);
+            if (applyGlowSetting(batch)) // replays honour PS2X_EFFECTS too
+                backend.Submit(batch);
             break;
         }
         case kLoadClut:
