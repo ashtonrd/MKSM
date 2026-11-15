@@ -2,6 +2,7 @@
 
 #include "runtime/gs/gs_backend.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -55,6 +56,7 @@ private:
     uint32_t m_framesLeft;
     uint32_t m_lastMainFbp = ~0u;
     std::FILE *m_file = nullptr;
+    std::atomic<bool> m_active{false}; // m_file is open: Submit takes the lock and writes
     bool m_done = false;
     std::mutex m_mutex;
 };

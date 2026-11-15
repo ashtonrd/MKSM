@@ -137,6 +137,7 @@ void GSRecordingBackend::startRecording()
     std::fwrite(&layout, sizeof(layout), 1, m_file);
     writeBlob(m_file, vram);
     writeBlob(m_file, state);
+    m_active.store(true, std::memory_order_relaxed);
     std::cerr << "[gs:record] started" << std::endl;
 }
 
@@ -151,6 +152,12 @@ void GSRecordingBackend::writeRecord(uint8_t kind, const void *data, size_t size
 
 void GSRecordingBackend::Submit(const GSPrimitiveBatch &batch)
 {
+    // Nothing open and no frame boundary (where F9 starts a recording): nothing to write. The
+    // lock per primitive cost the GS thread ~4% with F9 armed (jogar.sh). m_lastMainFbp is only
+    // written here, on the GS thread.
+    const uint32_t fbp = batch.state.context.frame.fbp;
+    if (!m_active.load(std::memory_order_relaxed) && ((fbp != 0x00u && fbp != 0x46u) || fbp == m_lastMainFbp))
+        return m_inner->Submit(batch);
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         // MKSM double-buffers in frame pages 0x00 and 0x46: switching between them
@@ -171,6 +178,7 @@ void GSRecordingBackend::Submit(const GSPrimitiveBatch &batch)
                     std::fwrite(&end, 1, 1, m_file);
                     std::fclose(m_file);
                     m_file = nullptr;
+                    m_active.store(false, std::memory_order_relaxed);
                     m_done = g_recordDir.empty(); // armed by F9 again in directory mode
                     std::cerr << "[gs:record] finished " << m_path << std::endl;
                 }
