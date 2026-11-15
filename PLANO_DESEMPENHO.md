@@ -567,6 +567,19 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
      - **Pronto quando:** replay de referência com thread ≤ 1,5 s (hoje 1,92).
   6. **GameThread (código do jogo recompilado):** perfil nos vales e corte das funções quentes do jogo (animação/esqueleto, física, partículas). Pode precisar de melhorias no recompilador (ponto flutuante, acesso à memória).
   7. **Ritmo dos quadros:** com o jogo a 60, cada imagem nova vai à tela uma vez, no vsync da janela. Medir o histograma dos intervalos entre imagens novas (contador temporário). **Pronto quando:** < 1% fora de 16,7 ± 2 ms nos trechos a 60.
+- **Item 1 feito (15/11):** `PS2X_PERF` imprime a cada 2 s uma linha `[perf] quadro` com o tempo de cada parte em ms por quadro do jogo: EE esperando a VU1 (`ps2_vu1_thread::sync`), EE e VU1 esperando o frontend do GS (`waitForHead`), VU1 ocupada, frontend decodificando (sem o giro) e `GSHwWorker` desenhando. Cutscene, padrão novo:
+
+  | trecho | jogo/s | VU1 | GSHwWorker | GS decodificando | EE esperando VU1 |
+  |---|---|---|---|---|---|
+  | bom (56 s, 96–100 s) | 60 | 9,5–11 | 9–11 | 4,5–5 | 2–4 |
+  | médio (72–76 s, 86–94 s) | 54–58 | 14–15 | 14–15 | 6,5–7 | 2–4 |
+  | vales (66–68 s, 78–80 s) | 34–37 | **25–27** | **19–23** | 12–14 | 10–14 |
+
+  O EE nunca espera o GS (0,0). Nos vales, a VU1 sozinha passa do orçamento de 16,7 ms, e a `GSHwWorker` também; o EE fica parado esperando a VU1. **A VU1 é o caminho crítico, a `GSHwWorker` vem logo atrás**: o item 3 sobe para antes do item 2.
+  - Perfil da VU1Thread em 64–84 s: código do JIT 26%, despacho `runJitBlock` 20%, `processVIF1Data` 10,5%, interpretador ~14% (`run` 6,9, `execLower` 5,7, `execUpper` 1,4), `commitReadyPipelines` ~4%, compilar/preparar a tabela ~5,7%.
+  - Contadores do JIT (até 110 s): 218 milhões de chamadas do `runJitBlock`, 89% executadas (~12 pares por bloco). As recusas são todas "bloco sem função" (nenhuma por orçamento, FDIV, EFU ou XGKICK). 32 milhões de pares no interpretador (~1,3% dos pares e ~14% do tempo da VU1). Por motivo: **"perto de leitor de flag" 22,6 milhões (~80%)**, bit E 2,8 milhões, instrução de baixo sem suporte 0,9 milhão. Os 16 pares (`kFlagReaderWindow`) antes de cada FSAND/FSOR/FSEQ/FMAND/FMOR/FMEQ ficam fora do JIT porque o código gerado não calcula as flags MAC/status; o laço quente do MKSM (pc 0x90–0xC0, 0x110…) cai nisso a cada vértice.
+  - **Próximo:** compilar esses pares como chamadas ao interpretador dentro do bloco (`upperCall`/`lowerCall`, que já mantêm o pipeline de flags) em vez de sair do JIT par a par; depois enxugar o despacho por bloco e o UNPACK.
+  - Uma vez em ~20 rodadas (cp1, 15/11), o vsync caiu para 12/s de 90 s em diante, com o EE sem esperar VU1 nem GS. Não se repetiu na rodada seguinte; se voltar, perfil da GameThread (`PS2X_PROFILE_THREAD=GameThread`) no trecho.
 - **Pronto quando:** R5 sem variáveis, três rodadas: cutscene e gameplay sem intervalo de 2 s abaixo de 58 quadros/s, e "imagens novas" igual a "jogo".
 - **Estimativa honesta:**
   - Os trechos de 50–57 devem chegar a 60 com os itens 2 e 5.

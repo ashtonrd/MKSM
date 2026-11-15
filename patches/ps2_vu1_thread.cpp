@@ -50,7 +50,10 @@ namespace ps2_vu1_thread
                 g_busy = true;
                 lock.unlock();
                 g_jobFbrst = job.fbrst;
+                const uint64_t start = ps2_perf::enabled() ? ps2_perf::nowNs() : 0u;
                 g_hooks.processVif1(job.data.data(), static_cast<uint32_t>(job.data.size()));
+                if (start)
+                    ps2_perf::counters().vu1BusyNs.fetch_add(ps2_perf::nowNs() - start, std::memory_order_relaxed);
                 lock.lock();
                 g_busy = false;
                 job.data.clear();
@@ -135,8 +138,11 @@ namespace ps2_vu1_thread
             return;
         if (g_pending.load(std::memory_order_acquire))
         {
+            const uint64_t start = ps2_perf::enabled() ? ps2_perf::nowNs() : 0u;
             std::unique_lock<std::mutex> lock(g_mutex);
             g_idle.wait(lock, [] { return g_jobs.empty() && !g_busy; });
+            if (start)
+                ps2_perf::counters().eeWaitingVu1Ns.fetch_add(ps2_perf::nowNs() - start, std::memory_order_relaxed);
         }
         if (g_stopBitsNew.exchange(false, std::memory_order_acq_rel) && g_hooks.applyStopBits)
             g_hooks.applyStopBits(g_stopBits.load(std::memory_order_relaxed));

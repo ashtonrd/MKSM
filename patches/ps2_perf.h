@@ -16,6 +16,13 @@ namespace ps2_perf
         std::atomic<uint64_t> vsyncs{0};
         std::atomic<uint64_t> gsBusyNs{0};
         std::atomic<uint64_t> eeWaitingGsNs{0};
+        // [perf] quadro: where each game frame's time goes (only measured with PS2X_PERF)
+        std::atomic<uint64_t> eeWaitingVu1Ns{0};  // EE in ps2_vu1_thread::sync
+        std::atomic<uint64_t> eeWaitingFrontNs{0}; // EE waiting for the GS frontend (CSR, drain, full ring)
+        std::atomic<uint64_t> vu1WaitingFrontNs{0};
+        std::atomic<uint64_t> vu1BusyNs{0};
+        std::atomic<uint64_t> gsDecodeNs{0};       // GS frontend decoding packets (not its spin)
+        std::atomic<uint64_t> hwWorkerBusyNs{0};   // GSHwWorker drawing
     };
 
     Counters &counters();

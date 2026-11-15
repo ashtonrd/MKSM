@@ -3208,6 +3208,7 @@ void GSHwBackend::workerLoop()
         const uint64_t end = a.queued;
         lock.unlock();
         a.cv.notify_all(); // producers waiting for room
+        const uint64_t busyStart = ps2_perf::enabled() ? ps2_perf::nowNs() : 0u;
         {
             std::lock_guard<std::recursive_mutex> render(m_lock);
             for (const Async::Command &c : work.commands)
@@ -3226,6 +3227,8 @@ void GSHwBackend::workerLoop()
                 }
         }
         work.clear();
+        if (busyStart)
+            ps2_perf::counters().hwWorkerBusyNs.fetch_add(ps2_perf::nowNs() - busyStart, std::memory_order_relaxed);
         lock.lock();
         a.done = end;
         a.cv.notify_all();

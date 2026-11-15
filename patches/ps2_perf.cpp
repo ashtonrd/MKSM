@@ -50,11 +50,18 @@ namespace ps2_perf
                 const uint64_t now = nowNs();
                 const double seconds = static_cast<double>(now - last) / 1e9;
                 last = now;
+                const uint64_t frames = c.gameFrames.exchange(0);
                 std::fprintf(stderr,
                              "[perf] janela %.1f fps (imagens novas %.1f/s) | jogo %.1f quadros/s | vsync %.1f/s | GS ocupado %.0f%% | jogo esperando o GS %.0f%%\n",
-                             c.windowFrames.exchange(0) / seconds, c.newImages.exchange(0) / seconds, c.gameFrames.exchange(0) / seconds,
+                             c.windowFrames.exchange(0) / seconds, c.newImages.exchange(0) / seconds, frames / seconds,
                              c.vsyncs.exchange(0) / seconds, c.gsBusyNs.exchange(0) / (seconds * 1e7),
                              c.eeWaitingGsNs.exchange(0) / (seconds * 1e7));
+                const double perFrame = frames ? 1e-6 / static_cast<double>(frames) : 0.0; // ns -> ms per game frame
+                std::fprintf(stderr,
+                             "[perf] quadro (ms por quadro do jogo): EE esperando VU1 %.1f, EE esperando GS %.1f, VU1 esperando GS %.1f | VU1 ocupada %.1f, GS decodificando %.1f, GSHwWorker %.1f\n",
+                             c.eeWaitingVu1Ns.exchange(0) * perFrame, c.eeWaitingFrontNs.exchange(0) * perFrame,
+                             c.vu1WaitingFrontNs.exchange(0) * perFrame, c.vu1BusyNs.exchange(0) * perFrame,
+                             c.gsDecodeNs.exchange(0) * perFrame, c.hwWorkerBusyNs.exchange(0) * perFrame);
             } })
             .detach();
     }

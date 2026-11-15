@@ -76,12 +76,19 @@ namespace
     void waitForHead(uint64_t wanted) // until head >= wanted
     {
         const auto ready = [wanted] { return g_frontend.head.load() >= wanted; };
-        if (spinUntil(ready))
+        if (ready())
             return;
-        std::unique_lock<std::mutex> lock(g_frontend.sleepMutex);
-        g_frontend.drainers.fetch_add(1u);
-        g_frontend.progress.wait(lock, ready);
-        g_frontend.drainers.fetch_sub(1u);
+        const uint64_t start = ps2_perf::enabled() ? ps2_perf::nowNs() : 0u;
+        if (!spinUntil(ready))
+        {
+            std::unique_lock<std::mutex> lock(g_frontend.sleepMutex);
+            g_frontend.drainers.fetch_add(1u);
+            g_frontend.progress.wait(lock, ready);
+            g_frontend.drainers.fetch_sub(1u);
+        }
+        if (start)
+            (ps2_vu1_thread::onWorker() ? ps2_perf::counters().vu1WaitingFrontNs : ps2_perf::counters().eeWaitingFrontNs)
+                .fetch_add(ps2_perf::nowNs() - start, std::memory_order_relaxed);
     }
 
     void runFrontend()
@@ -105,7 +112,10 @@ namespace
                 head += kRingBytes - head % kRingBytes;
             else
             {
+                const uint64_t start = ps2_perf::enabled() ? ps2_perf::nowNs() : 0u;
                 header.gs->processGIFPacket(&g_frontend.ring[head % kRingBytes + sizeof(header)], static_cast<uint32_t>(header.size));
+                if (start)
+                    ps2_perf::counters().gsDecodeNs.fetch_add(ps2_perf::nowNs() - start, std::memory_order_relaxed);
                 head += sizeof(header) + ((header.size + 15u) & ~15ull);
             }
             g_frontend.head.store(head);
