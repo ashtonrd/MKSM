@@ -795,6 +795,7 @@ struct GSHwBackend::Renderer
     bool mappedRead(const GSPrimitiveBatch &b, Surface *s, Surface *target, BatchState &out);
     bool feedbackLast = false;
     bool feedbackRead = false;              // the resolved texture is a surface's shadow
+    bool partialRead = false;               // decoded only the region this primitive samples
     Surface *feedbackSurface = nullptr;     // the open batch samples this surface's shadow
     float feedbackOffset[2] = {0.0f, 0.0f}; // texture origin inside it (GS pixels)
     bool feedbackServed(const GSPrimitiveBatch &b) const;
@@ -1993,13 +1994,42 @@ bool GSHwBackend::Renderer::resolveTexture(const GSPrimitiveBatch &b, Surface *t
     }
     const bool ok = resolveTextureSlow(b, target, out);
     // Feedback copies must be redone for every draw; everything else can be reused.
-    if (ok && !feedbackRead)
+    if (ok && !feedbackRead && !partialRead)
     {
         lastTexGeneration = generation, lastTex0 = tex, lastTexa = state.texa, lastTexW = w, lastTexH = h, lastTexState = out;
     }
     else
         lastTexGeneration = 0;
     return ok;
+}
+
+namespace
+{
+    // The texels a primitive can sample (its UV box plus the filter's neighbours), when it stays
+    // inside the texture with plain repeat/clamp (no region modes) and covers a small part of it.
+    bool sampledRegion(const GSPrimitiveBatch &b, uint32_t w, uint32_t h, uint32_t &x0, uint32_t &y0, uint32_t &x1, uint32_t &y1)
+    {
+        const uint64_t clamp = b.state.context.clamp;
+        if ((clamp & 3u) > 1u || ((clamp >> 2) & 3u) > 1u)
+            return false;
+        float u0 = 1e9f, v0 = 1e9f, u1 = -1e9f, v1 = -1e9f;
+        for (uint32_t i = 0; i < b.vertexCount; ++i)
+        {
+            const GSVertex &vx = b.vertices[i];
+            if (!b.state.prim.fst && vx.q <= 0.0f)
+                return false;
+            const float u = b.state.prim.fst ? vx.u / 16.0f : vx.s / vx.q * w;
+            const float v = b.state.prim.fst ? vx.v / 16.0f : vx.t / vx.q * h;
+            u0 = std::min(u0, u), u1 = std::max(u1, u), v0 = std::min(v0, v), v1 = std::max(v1, v);
+        }
+        if (!(u0 >= 0.0f && v0 >= 0.0f && u1 <= float(w) && v1 <= float(h)))
+            return false;
+        x0 = static_cast<uint32_t>(std::max(0.0f, std::floor(u0) - 2.0f));
+        y0 = static_cast<uint32_t>(std::max(0.0f, std::floor(v0) - 2.0f));
+        x1 = static_cast<uint32_t>(std::min(float(w), std::ceil(u1) + 2.0f));
+        y1 = static_cast<uint32_t>(std::min(float(h), std::ceil(v1) + 2.0f));
+        return x1 > x0 && y1 > y0 && uint64_t(x1 - x0) * (y1 - y0) * 4u <= uint64_t(w) * h;
+    }
 }
 
 bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surface *target, BatchState &out)
@@ -2009,6 +2039,9 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     const uint32_t w = state.textureWidth, h = state.textureHeight;
     feedbackLast = false;
     feedbackRead = false;
+    partialRead = false;
+    uint32_t rx0 = 0u, ry0 = 0u, rx1 = w, ry1 = h;
+    const bool regionKnown = sampledRegion(b, w, h, rx0, ry0, rx1, ry1);
     uint32_t b0 = 0, b1 = 0;
     blockRange(tex.tbp0, tex.tbw, tex.psm, w, h, b0, b1);
 
@@ -2040,6 +2073,18 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
                     if (!blockCurrent(*s, blk))
                         mirrorCurrent = false;
                 });
+            if (!mirrorCurrent && regionKnown)
+            {
+                // MKSM samples a 32x32 corner of a 1024x1024 texture whose footprint reaches the
+                // Z target: if the corner itself is current in the mirror, decode just that part
+                // instead of reading the target back (was ~2 GPU waits per frame in 2x).
+                mirrorCurrent = true;
+                forEachBlock(tex.tbp0, tex.tbw, tex.psm, rx0, ry0, rx1 - rx0, ry1 - ry0, [&](uint32_t blk) {
+                    if (!blockCurrent(*s, blk))
+                        mirrorCurrent = false;
+                });
+                partialRead = partialRead || mirrorCurrent;
+            }
             if (!mirrorCurrent)
             {
                 // Read it on the GPU through a texel -> target pixel/byte map, from the target
@@ -2104,6 +2149,10 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     }
     else
         key = (key ^ (uint64_t(state.texa.ta0) | (uint64_t(state.texa.ta1) << 8) | (uint64_t(state.texa.aem) << 16))) * 0x100000001B3ull;
+    if (!partialRead)
+        rx0 = 0u, ry0 = 0u, rx1 = w, ry1 = h;
+    else
+        key = (key ^ (uint64_t(rx0) | uint64_t(ry0) << 16 | uint64_t(rx1) << 32 | uint64_t(ry1) << 48)) * 0x100000001B3ull;
     if (auto it = textures.find(key); it != textures.end())
     {
         if (auto c = contentCache.find(it->second.content); c != contentCache.end())
@@ -2122,7 +2171,7 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
             if (!p->gpuNewer || !overlaps(b0, b1, p->b0, p->b1))
                 continue;
             bool current = true;
-            forEachBlock(tex.tbp0, tex.tbw, tex.psm, 0u, 0u, w, h, [&](uint32_t blk) {
+            forEachBlock(tex.tbp0, tex.tbw, tex.psm, rx0, ry0, rx1 - rx0, ry1 - ry0, [&](uint32_t blk) {
                 if (!blockCurrent(*p, blk))
                     current = false;
             });
@@ -2139,7 +2188,7 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     entry.lastUse = ++useCounter;
     {
         std::vector<uint8_t> seen(kVramBlocks, 0u);
-        forEachBlock(tex.tbp0, tex.tbw, tex.psm, 0u, 0u, w, h, [&](uint32_t blk) {
+        forEachBlock(tex.tbp0, tex.tbw, tex.psm, rx0, ry0, rx1 - rx0, ry1 - ry0, [&](uint32_t blk) {
             if (!seen[blk])
                 seen[blk] = 1u, entry.blocks.push_back(static_cast<uint16_t>(blk));
         });
@@ -2178,8 +2227,10 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     if (!dst)
         return false;
     auto *texels = reinterpret_cast<uint32_t *>(dst);
-    for (uint32_t y = 0; y < h; ++y)
-        for (uint32_t x = 0; x < w; ++x)
+    if (partialRead) // texels outside the sampled region are never read
+        std::memset(texels, 0, size_t(w) * h * 4u);
+    for (uint32_t y = ry0; y < ry1; ++y)
+        for (uint32_t x = rx0; x < rx1; ++x)
         {
             uint32_t c = 0;
             switch (tex.psm)
