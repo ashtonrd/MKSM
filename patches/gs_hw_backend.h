@@ -84,6 +84,7 @@ private:
     void syncNow(GSSyncReason reason);
     void presentNow(const GSPresentationRequest &request);
     PresentationFrame presentFallback(const GSPresentationRequest &request);
+    bool onPresentThread() const; // the window, which never waits on the renderer
     void waitIdle() const;
     void workerLoop();
     template <typename F>

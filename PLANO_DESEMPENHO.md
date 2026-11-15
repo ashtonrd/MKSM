@@ -224,7 +224,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 
 **Fase 5: imagem nítida**
 - [ ] N10 Renderizador novo: menos custo por troca de estado
-- [ ] N11 Renderizador novo: janela sem esperar a GPU, sem câmera lenta quando o GS atrasa, thread própria sem falha
+- [x] N11 Renderizador novo: janela sem esperar a GPU, sem câmera lenta quando o GS atrasa, thread própria sem falha — 14/11, em 2x na cutscene: janela 60 fps estável (antes 12–48) com imagens novas = quadros do jogo; vsync ~60 (antes 15–35); thread própria sem falha em 3 rodadas de 150–160 s (era vazamento de memória de vídeo: 4 GB em 50 s, agora ~670 MB estáveis). O jogo desenha 16–24 quadros/s em 2x: isso é a N12. Barreiras estreitas passam para a N12 (decidir pelo perfil de GPU)
 - [ ] N12 Renderizador novo a 60/s em 2x (menos cópias de feedback e lotes, perfil de GPU por passo)
 - [ ] N13 Renderizador novo como padrão, com escala 2x (o usuário já escolheu o 2x em 14/11)
 
@@ -463,6 +463,11 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   3. Troque o `fullBarrier` (ALL_COMMANDS→ALL_COMMANDS) por barreiras estreitas (cópia→fragmento, fragmento→cópia).
   4. **`GSHwWorker` (`PS2X_GS_HW_THREAD=1`):** corrigir a falha de segmentação intermitente (1 em 3 rodadas em 14/11; rodar com `gdb -batch -ex run -ex bt` até pegar) e medir de novo (15–17 quadros/s em 2x em 14/11, abaixo dos 19 sem thread).
 - **Pronto quando:** em 2x na cutscene do Raiden, janela a 60 fps sem piscar, vsync 60 (velocidade certa) e três rodadas com a thread ligada sem falha.
+- **Feito (14/11):**
+  1. Janela: cópia do campo completo na troca `0x00`↔`0x46`, gravada pela thread do GS num anel de `kSlots + 2` cópias; o `Present` pega a mais nova já terminada, sem trava e sem esperar (`record`/`noteDraw`/`takeNewest`). Com uma só cópia publicada, a GPU um ou dois campos atrás deixava a janela sem imagem nova (contadores: cópias publicadas, nenhuma pronta). Janela 60 fps; imagens novas = quadros do jogo.
+  2. Câmera lenta: o relógio de vsync recomeçava depois de 2 campos de atraso; o EE espera o GS ~30–130 ms por quadro em 2x (medido: ~1,2 s a cada 2 s em `gsAsyncWaitLastVblank`, uma espera por quadro). Agora recomeça só depois de 30 campos (meio segundo). Testados 8/15/30: média de vsync 47/54/58 na cutscene. Renderizador atual sem mudança (vsync 60, carga igual).
+  3. Thread própria: a falha era `vkAllocateMemory` sem memória (-2) e o driver caindo no `createImage`: o `contentCache` só tinha teto de 3000 entradas, e leituras parciais de texturas 1024×1024 (4 MB) mudam a cada quadro. Teto de 512 MB no `contentCache` e 128 MB no `recycled`. Memória de vídeo ~670 MB estável (antes subia até 3,9 GB e caía). Com a thread: janela 60 fps, 17–23 quadros/s, parecido com sem thread (16–24).
+  4. Item 3 (barreiras estreitas) fica para a N12, decidido pelo perfil de GPU.
 
 ### N12 Renderizador novo a 60/s em 2x
 - **Por quê:** com N11 feita, o que sobra é custo real: o GSFrontend gasta 59% em driver/libc gravando comandos (~260–310 lotes e 36–39 cópias de feedback por quadro, cada cópia fecha o passo de render) e a GPU fica em 55–67%.
@@ -473,6 +478,10 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   4. **Menos banda em 2x:** RGBA8 em vez de RGBA16F nas superfícies onde o resultado é exato (CT32/CT24 sem blend com sobra), conferindo PSNR.
   5. **Gravação de comandos mais barata:** perfil (`perf`) do frontend em 2x; push constants/descritores reaproveitados no lugar do que aparecer no topo.
 - **Pronto quando:** cutscene e fase em 2x ≥ 58/s em três rodadas, PSNR das cenas igual, capturas nítidas e certas.
+- **Feito (15/11):**
+  1. Perfil de GPU por tipo (`PS2X_PERF`: `[perf] GPU novo`). Primeira medida em 2x: envio 400–700 ms/s, desenho 100–230, sombra 30–77; GPU 60–100%.
+  2. O envio era quase todo o `refreshPending` (blocos de transferências sobre superfícies): uma cópia + barreira completa + ampliação **por bloco** em 2x, e todos os blocos pendentes de todas as superfícies a cada transferência (o `download` com lista vazia chamava o reenvio completo). 70–145 mil blocos/s, quase todos em `0x2980` (CT32 e Z24, 640×128, regravada em ~30 transferências por campo). Agora: em lote (uma cópia e uma ampliação por superfície, rascunho próprio, sem repetir bloco) e sob demanda (só quando a superfície é usada). Média do jogo na cutscene em 2x (60–108 s): **19 → 25,5 quadros/s**; GPU ~33% (desenho ~150 ms/s, sombra ~50). A GPU deixou de ser o limite: agora é a CPU do GSFrontend.
+  3. Próximo: perfil de CPU do GSFrontend em 2x (R7) e cortar o que pesa (gravação de comandos, `drawState`, decodificação de texturas).
 
 ### N13 Renderizador novo como padrão, com escala 2x
 - **Escolha do usuário (14/11):** "o 2x realmente fica muito melhor"; ele quer a imagem 2x no jogo normal. Não precisa perguntar de novo.

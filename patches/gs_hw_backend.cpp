@@ -1,3 +1,5 @@
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <tuple>
 #include <pthread.h>
@@ -328,6 +330,11 @@ struct GSHwBackend::Renderer
     // Decoded textures by content (texel bytes + palette + shape): MKSM re-uploads each texture
     // into the same VRAM slot right before drawing it, so address-keyed entries die every draw.
     std::unordered_map<uint64_t, ContentEntry> contentCache;
+    // Bounded in bytes, not only entries: partial reads of 1024x1024 textures change content
+    // every frame (4 MB each), and 3000 of them filled the 4 GB card (driver crash in 50 s).
+    static constexpr uint64_t kContentBudget = 512ull << 20, kRecycledBudget = 128ull << 20;
+    uint64_t contentBytes = 0, recycledBytes = 0;
+    static uint64_t textureBytes(const Image &img) { return uint64_t(img.w) * img.h * 4u; } // RGBA8
     struct BatchState
     {
         Surface *color = nullptr, *depth = nullptr;
@@ -416,7 +423,8 @@ struct GSHwBackend::Renderer
     // Blocks a host transfer rewrote inside GPU surfaces, refreshed from the mirror once the
     // CPU backend applied the transfer (instead of a full download and re-upload per CLUT).
     std::vector<std::pair<Surface *, uint32_t>> pendingBlocks;
-    void refreshPending();
+    Image blockStage; // scratch for refreshPending at scale > 1
+    void refreshPending(Surface *only = nullptr); // only: that surface's blocks
     // Texture images are recycled by size: allocating and freeing device memory for every
     // re-uploaded texture (MKSM's menus stream textures each frame) cost most of the GS thread.
     struct Recycled
@@ -432,9 +440,11 @@ struct GSHwBackend::Renderer
             return;
         cmd();
         recycled.push_back({img, slot, slots[slot].serial});
+        recycledBytes += textureBytes(img);
         img = Image{};
-        if (recycled.size() > 512u) // keep the pool bounded
+        while (recycled.size() > 512u || recycledBytes > kRecycledBudget) // keep the pool bounded
         {
+            recycledBytes -= textureBytes(recycled.front().image);
             retire(recycled.front().image);
             recycled.erase(recycled.begin());
         }
@@ -455,6 +465,7 @@ struct GSHwBackend::Renderer
             {
                 Image img = recycled[i].image;
                 recycled.erase(recycled.begin() + static_cast<std::ptrdiff_t>(i));
+                recycledBytes -= textureBytes(img);
                 return img;
             }
         return createImage(w, h, VK_FORMAT_R8G8B8A8_UNORM, 0);
@@ -611,6 +622,7 @@ struct GSHwBackend::Renderer
         barrier.subresourceRange = view.subresourceRange;
         barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
         endPass();
+        gpuKind(GkOther);
         vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
         if (!depthFormat)
         {
@@ -660,6 +672,49 @@ struct GSHwBackend::Renderer
         img = Image{};
     }
 
+    // GPU time by kind of work (PS2X_PERF): a timestamp at each change of kind, read when the
+    // slot is reused (its fence is done), summed and printed every 2 s.
+    enum GpuKind : uint8_t
+    {
+        GkDraw,
+        GkShadow,
+        GkUpload,
+        GkDownload,
+        GkPresent,
+        GkOther,
+        GkStart
+    };
+    static constexpr uint32_t kStampsPerSlot = 1024u;
+    VkQueryPool stampPool = VK_NULL_HANDLE;
+    double stampNs = 1.0;
+    uint32_t stampsUsed[kSlots]{};
+    uint8_t stampKinds[kSlots][kStampsPerSlot]{};
+    int gpuKindNow = -1;
+    double gpuNs[GkStart]{}, gpuBusyNs = 0.0;
+    uint64_t gpuStampsLost = 0;
+    int64_t gpuReportMs = 0;
+    void gpuStamp(int kind) // ends the current segment, of `kind`
+    {
+        uint32_t &n = stampsUsed[slot];
+        if (n >= kStampsPerSlot)
+        {
+            ++gpuStampsLost;
+            return;
+        }
+        vkCmdWriteTimestamp(slots[slot].cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, stampPool, slot * kStampsPerSlot + n);
+        stampKinds[slot][n++] = static_cast<uint8_t>(kind);
+    }
+    void gpuKind(int kind)
+    {
+        if (!stampPool || kind == gpuKindNow)
+            return;
+        cmd();
+        if (gpuKindNow >= 0)
+            gpuStamp(gpuKindNow);
+        gpuKindNow = kind;
+    }
+    void gpuCollect(uint32_t index);
+
     VkCommandBuffer cmd()
     {
         Slot &s = slots[slot];
@@ -670,6 +725,8 @@ struct GSHwBackend::Renderer
                 vkWaitForFences(device, 1, &s.fence, VK_TRUE, UINT64_MAX);
                 s.pending = false;
             }
+            if (stampPool)
+                gpuCollect(slot);
             vkResetFences(device, 1, &s.fence);
             for (Image &img : s.garbage)
                 freeImage(img);
@@ -683,6 +740,12 @@ struct GSHwBackend::Renderer
             begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
             vkBeginCommandBuffer(s.cmd, &begin);
             s.recording = true;
+            if (stampPool)
+            {
+                vkCmdResetQueryPool(s.cmd, stampPool, slot * kStampsPerSlot, kStampsPerSlot);
+                gpuKindNow = -1;
+                gpuStamp(GkStart);
+            }
         }
         return s.cmd;
     }
@@ -713,6 +776,8 @@ struct GSHwBackend::Renderer
         if (s.recording)
         {
             endPass();
+            if (gpuKindNow >= 0)
+                gpuStamp(gpuKindNow), gpuKindNow = -1;
             vkEndCommandBuffer(s.cmd);
             VkSubmitInfo info{VK_STRUCTURE_TYPE_SUBMIT_INFO};
             info.commandBufferCount = 1;
@@ -749,24 +814,39 @@ struct GSHwBackend::Renderer
         return static_cast<uint8_t *>(s.staging.mapped) + offset;
     }
 
-    // Presentation straight from the display surface, one frame late so the window never waits
-    // for the GPU: frame N's copy is recorded and submitted, frame N-1's is returned.
+    // Copies of finished fields for the window. The GS side records one when MKSM switches frame
+    // pages (the field is complete, like the CPU backend's capture) or, in scenes that do not
+    // flip, when the window asks; the window takes the newest copy the GPU finished, without the
+    // renderer lock and without waiting. (It took the lock and waited on the copy's fence, and
+    // copied half-drawn fields: 12-48 fps and flicker at 2x.)
     struct PresentCopy
     {
         Image image;   // RGBA8 at the surface scale
         Buffer buffer; // host copy of it
         uint32_t w = 0, h = 0, slot = 0;
-        uint64_t serial = 0;
-        bool valid = false, doubleRows = false;
+        uint64_t serial = 0, seq = 0;
+        bool doubleRows = false;
         uint32_t fbp = 0;
     };
-    PresentCopy presentCopies[3]; // the third: the worker thread records one while the window reads another
-    uint32_t presentNext = 0;
-    bool present(const GSPresentationRequest &request, PresentationFrame &out);
-    void finishPresent(PresentationFrame &out);
+    // Up to kSlots copies can be in flight (one submit each), one is read: two more keep a
+    // finished one when the GPU lags (with three, a GPU two fields behind showed nothing new).
+    static constexpr int kPresentCopies = int(kSlots) + 2;
+    PresentCopy presentCopies[kPresentCopies];
+    std::mutex presentMutex;      // guards the indices, seq, presentGeom and presentFailed
+    int published = -1, reading = -1;
+    uint64_t publishedSeq = 0;
+    GSPresentationRequest presentGeom{}; // the window's last request (display geometry)
+    bool hasPresentGeom = false, presentFailed = false;
+    std::atomic<int64_t> lastFieldCaptureMs{0};
+    uint32_t lastMainFbp = ~0u; // GS side
+    std::atomic<std::thread::id> presentThread{};
+    uint64_t shownSeq = 0; // window side
+    PresentationFrame shown;
+    bool record(const GSPresentationRequest &request, uint32_t sourceFbp);
+    void noteDraw(uint32_t fbp);
+    bool takeNewest(PresentationFrame &out);
+    bool copyDone(const PresentCopy &copy) const;
     void convertPresent(const PresentCopy &ready, PresentationFrame &out) const;
-    PresentCopy *readyCopy = nullptr;
-    VkFence readyFence = VK_NULL_HANDLE;
 
     bool init();
     void destroy();
@@ -862,6 +942,16 @@ bool GSHwBackend::Renderer::init()
     if (vkCreateDevice(physical, &deviceInfo, nullptr, &device) != VK_SUCCESS)
         return false;
     vkGetDeviceQueue(device, family, 0, &queue);
+    if (std::getenv("PS2X_PERF") && families[family].timestampValidBits != 0u)
+    {
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(physical, &props);
+        stampNs = props.limits.timestampPeriod;
+        VkQueryPoolCreateInfo queries{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+        queries.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        queries.queryCount = kSlots * kStampsPerSlot;
+        vkCreateQueryPool(device, &queries, nullptr, &stampPool);
+    }
 
     VkCommandPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -977,6 +1067,8 @@ void GSHwBackend::Renderer::destroy()
     if (!device)
         return;
     vkDeviceWaitIdle(device);
+    if (stampPool)
+        vkDestroyQueryPool(device, stampPool, nullptr);
     for (auto &s : surfaces)
         freeImage(s->image), freeImage(s->shadow);
     surfaces.clear();
@@ -1011,6 +1103,7 @@ void GSHwBackend::Renderer::destroy()
     palettes.clear();
     freeImage(dummyMap);
     freeImage(dummyPalette);
+    freeImage(blockStage);
     for (PresentCopy &pc : presentCopies)
     {
         freeImage(pc.image);
@@ -1150,6 +1243,7 @@ void GSHwBackend::Renderer::beginPass(Surface *color, Surface *depth)
     info.framebuffer = framebuffer(color, depth);
     info.renderArea.extent = {depth ? std::min(color->image.w, depth->image.w) : color->image.w,
                               depth ? std::min(color->image.h, depth->image.h) : color->image.h};
+    gpuKind(GkDraw);
     vkCmdBeginRenderPass(cmd(), &info, VK_SUBPASS_CONTENTS_INLINE);
     inPass = true;
     passColorSurface = color;
@@ -1296,6 +1390,9 @@ GSHwBackend::Renderer::Surface *GSHwBackend::Renderer::surface(uint32_t block, u
 
 void GSHwBackend::Renderer::upload(Surface &s)
 {
+    // Transferred blocks reach a surface when it is used (MKSM rewrites 0x2980 in ~30 small
+    // transfers a field; refreshing every surface at every draw state was ~1200 refreshes/s).
+    refreshPending(&s);
     if (!s.mirrorNewer)
         return;
     ++generation;
@@ -1337,11 +1434,13 @@ void GSHwBackend::Renderer::upload(Surface &s)
     region.bufferOffset = offset;
     region.imageSubresource = {aspect, 0, 0, 1};
     region.imageExtent = {s.w, s.h, 1};
+    gpuKind(GkUpload);
     if (scale == 1u)
         vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, s.image.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
     else
     {
         Image temp = createImage(s.w, s.h, s.image.format, 0);
+        gpuKind(GkUpload);
         vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, temp.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
         fullBarrier();
         VkImageBlit blit{};
@@ -1361,8 +1460,9 @@ void GSHwBackend::Renderer::download(const std::vector<Surface *> &list)
 {
     const int reason = why; // consumed here, even when nothing needs copying
     why = WhyOther;
-    if (!pendingBlocks.empty())
-        refreshPending(); // the surface must hold the transferred blocks before it overwrites the mirror
+    for (Surface *s : list)
+        refreshPending(s); // the surface must hold the transferred blocks before it overwrites the mirror
+                           // (only these: every transfer calls this, mostly with an empty list)
     std::vector<Surface *> dirty;
     for (Surface *s : list)
         if (s->gpuNewer)
@@ -1392,6 +1492,7 @@ void GSHwBackend::Renderer::download(const std::vector<Surface *> &list)
             blit.srcSubresource = blit.dstSubresource = {aspect, 0, 0, 1};
             blit.srcOffsets[1] = {static_cast<int32_t>(s->w * scale), static_cast<int32_t>(s->h * scale), 1};
             blit.dstOffsets[1] = {static_cast<int32_t>(s->w), static_cast<int32_t>(s->h), 1};
+            gpuKind(GkDownload);
             vkCmdBlitImage(c, s->image.image, VK_IMAGE_LAYOUT_GENERAL, temp.image, VK_IMAGE_LAYOUT_GENERAL, 1, &blit, VK_FILTER_NEAREST);
             fullBarrier();
             source = temp.image;
@@ -1399,6 +1500,7 @@ void GSHwBackend::Renderer::download(const std::vector<Surface *> &list)
         VkBufferImageCopy region{};
         region.imageSubresource = {aspect, 0, 0, 1};
         region.imageExtent = {s->w, s->h, 1};
+        gpuKind(GkDownload);
         vkCmdCopyImageToBuffer(c, source, VK_IMAGE_LAYOUT_GENERAL, readback.buffer, 1, &region);
         if (temp.image)
             retire(temp);
@@ -1539,6 +1641,7 @@ bool GSHwBackend::Renderer::downloadBlocks(Surface &s, const std::vector<uint32_
         r.imageExtent = {8u * scale, 8u * scale, 1};
         regions.push_back(r);
     }
+    gpuKind(GkDownload);
     vkCmdCopyImageToBuffer(c, s.image.image, VK_IMAGE_LAYOUT_GENERAL, readback.buffer, static_cast<uint32_t>(regions.size()), regions.data());
     submit(true);
     const auto *base = static_cast<const uint8_t *>(readback.mapped);
@@ -1691,6 +1794,7 @@ bool GSHwBackend::Renderer::mappedRead(const GSPrimitiveBatch &b, Surface *s, Su
             region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             region.imageExtent = {w, h, 1};
             endPass();
+            gpuKind(GkUpload);
             vkCmdCopyBufferToImage(cmd(), slots[slot].staging.buffer, entry.image.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
             fullBarrier();
         }
@@ -1749,6 +1853,7 @@ bool GSHwBackend::Renderer::mappedRead(const GSPrimitiveBatch &b, Surface *s, Su
             region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             region.imageExtent = {256, 1, 1};
             endPass();
+            gpuKind(GkUpload);
             vkCmdCopyBufferToImage(cmd(), slots[slot].staging.buffer, image.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
             fullBarrier();
             pal = palettes.emplace(hash, image).first;
@@ -1765,81 +1870,142 @@ bool GSHwBackend::Renderer::mappedRead(const GSPrimitiveBatch &b, Surface *s, Su
     return true;
 }
 
-void GSHwBackend::Renderer::refreshPending()
+void GSHwBackend::Renderer::refreshPending(Surface *only)
 {
-    if (pendingBlocks.empty())
+    if (pendingBlocks.empty() ||
+        (only && std::none_of(pendingBlocks.begin(), pendingBlocks.end(), [only](const auto &e) { return e.first == only; })))
         return;
     syncInner();
     flushBatch();
     endPass();
+    // Pixels keep one order inside every 256-byte block (ps2x_tests gs: "keep one order").
+    static const auto tables = [] {
+        struct T { uint32_t order[2][64]; uint16_t color[256], alpha[256]; } t{};
+        const uint32_t psms[2] = {GS_PSM_CT32, GS_PSM_Z32};
+        for (int f = 0; f < 2; ++f)
+        {
+            const uint32_t base = GSMem::PixelAddress(psms[f], 0u, 1u, 0u, 0u) & ~63u;
+            for (uint32_t i = 0; i < 64u; ++i)
+                t.order[f][i] = GSMem::PixelAddress(psms[f], 0u, 1u, i % 8u, i / 8u) - base;
+        }
+        for (uint32_t i = 0; i < 256u; ++i)
+            t.color[i] = floatToHalf(i / 255.0f), t.alpha[i] = floatToHalf(i / 128.0f);
+        return t;
+    }();
+    struct Item
+    {
+        Surface *s;
+        uint32_t x0, y0, block;
+    };
+    std::vector<Item> items;
+    items.reserve(pendingBlocks.size());
     for (const auto &[s, block] : pendingBlocks)
     {
+        if (only && s != only)
+            continue;
         if (std::find_if(surfaces.begin(), surfaces.end(), [s = s](auto &p) { return p.get() == s; }) == surfaces.end())
             continue;
         uint32_t x0 = 0, y0 = 0;
         if (!blockOrigin(s->block, s->fbw, s->psm, block, x0, y0) || x0 + 8u > s->w || y0 + 8u > s->h)
             continue;
-        s->shadowFull = false; // the image changes (and at scale > 1 the shadow is the staging copy)
+        items.push_back({s, x0, y0, block});
+    }
+    // Grouped by surface, each block once: every copy reads the mirror as it is now, so repeats
+    // carry the same bytes, and regions of one copy or blit must not overlap.
+    std::sort(items.begin(), items.end(), [](const Item &l, const Item &r) { return l.s != r.s ? l.s < r.s : l.block < r.block; });
+    items.erase(std::unique(items.begin(), items.end(), [](const Item &l, const Item &r) { return l.s == r.s && l.block == r.block; }), items.end());
+
+    // All blocks staged in one piece: one copy per surface at scale 1; at larger scales one copy
+    // into a scratch image and one blit per surface. (A copy, a full barrier and a blit per block,
+    // through one corner of the shadow, kept the GPU draining 400-700 ms a second at 2x.)
+    constexpr uint32_t kRow = 64u, kChunk = kRow * kRow; // 512x512 scratch: 4096 blocks
+    for (size_t first = 0; first < items.size(); first += kChunk)
+    {
+        const size_t n = std::min<size_t>(kChunk, items.size() - first);
         VkDeviceSize offset = 0;
-        uint8_t *dst = stage(8u * 8u * 8u, offset);
+        uint8_t *dst = stage(VkDeviceSize(n) * 512u, offset);
         if (!dst)
-            continue;
-        // Pixels keep one order inside every 256-byte block (ps2x_tests gs: "keep one order").
-        static const auto tables = [] {
-            struct T { uint32_t order[2][64]; uint16_t color[256], alpha[256]; } t{};
-            const uint32_t psms[2] = {GS_PSM_CT32, GS_PSM_Z32};
-            for (int f = 0; f < 2; ++f)
-            {
-                const uint32_t base = GSMem::PixelAddress(psms[f], 0u, 1u, 0u, 0u) & ~63u;
-                for (uint32_t i = 0; i < 64u; ++i)
-                    t.order[f][i] = GSMem::PixelAddress(psms[f], 0u, 1u, i % 8u, i / 8u) - base;
-            }
-            for (uint32_t i = 0; i < 256u; ++i)
-                t.color[i] = floatToHalf(i / 255.0f), t.alpha[i] = floatToHalf(i / 128.0f);
-            return t;
-        }();
-        const bool z = s->psm == GS_PSM_Z32 || s->psm == GS_PSM_Z24;
-        const uint32_t keep = (s->psm == GS_PSM_CT24 || s->psm == GS_PSM_Z24) ? 0x00FFFFFFu : 0xFFFFFFFFu;
-        const uint32_t force = keep == 0xFFFFFFFFu ? 0u : 0x80000000u;
-        const uint8_t *words = vram + size_t(block % kVramBlocks) * 256u;
-        for (uint32_t i = 0; i < 64u; ++i)
+            break;
+        for (size_t i = 0; i < n; ++i)
         {
-            uint32_t c = 0;
-            std::memcpy(&c, words + tables.order[z][i] * 4u, 4);
-            c = (c & keep) | force;
-            const uint16_t h[4] = {tables.color[c & 0xFFu], tables.color[(c >> 8) & 0xFFu], tables.color[(c >> 16) & 0xFFu], tables.alpha[c >> 24]};
-            std::memcpy(dst + i * 8u, h, 8);
+            const Item &it = items[first + i];
+            const bool z = it.s->psm == GS_PSM_Z32 || it.s->psm == GS_PSM_Z24;
+            const uint32_t keep = (it.s->psm == GS_PSM_CT24 || it.s->psm == GS_PSM_Z24) ? 0x00FFFFFFu : 0xFFFFFFFFu;
+            const uint32_t force = keep == 0xFFFFFFFFu ? 0u : 0x80000000u;
+            const uint8_t *words = vram + size_t(it.block % kVramBlocks) * 256u;
+            uint8_t *out = dst + i * 512u;
+            for (uint32_t p = 0; p < 64u; ++p)
+            {
+                uint32_t c = 0;
+                std::memcpy(&c, words + tables.order[z][p] * 4u, 4);
+                c = (c & keep) | force;
+                const uint16_t h[4] = {tables.color[c & 0xFFu], tables.color[(c >> 8) & 0xFFu], tables.color[(c >> 16) & 0xFFu], tables.alpha[c >> 24]};
+                std::memcpy(out + p * 8u, h, 8);
+            }
+            it.s->noteDrawn(int(it.x0), int(it.y0), int(it.x0) + 7, int(it.y0) + 7); // the shadow misses these pixels
         }
         VkCommandBuffer c = cmd();
+        gpuKind(GkUpload);
+        std::vector<VkBufferImageCopy> copies(n);
+        for (size_t i = 0; i < n; ++i)
+        {
+            const Item &it = items[first + i];
+            VkBufferImageCopy &region = copies[i];
+            region = VkBufferImageCopy{};
+            region.bufferOffset = offset + i * 512u;
+            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            region.imageExtent = {8, 8, 1};
+            if (scale == 1u)
+                region.imageOffset = {static_cast<int32_t>(it.x0), static_cast<int32_t>(it.y0), 0};
+            else
+                region.imageOffset = {static_cast<int32_t>(i % kRow * 8u), static_cast<int32_t>(i / kRow * 8u), 0};
+        }
         if (scale == 1u)
         {
-            VkBufferImageCopy region{};
-            region.bufferOffset = offset;
-            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            region.imageOffset = {static_cast<int32_t>(x0), static_cast<int32_t>(y0), 0};
-            region.imageExtent = {8, 8, 1};
-            vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, s->image.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+            for (size_t i = 0; i < n;)
+            {
+                size_t j = i;
+                while (j < n && items[first + j].s == items[first + i].s)
+                    ++j;
+                vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, items[first + i].s->image.image, VK_IMAGE_LAYOUT_GENERAL,
+                                       static_cast<uint32_t>(j - i), copies.data() + i);
+                i = j;
+            }
+            continue;
         }
-        else
+        if (!blockStage.image)
+            blockStage = createImage(kRow * 8u, kRow * 8u, kColorFormat, 0);
+        vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, blockStage.image, VK_IMAGE_LAYOUT_GENERAL, static_cast<uint32_t>(n), copies.data());
+        fullBarrier();
+        std::vector<VkImageBlit> blits(n);
+        for (size_t i = 0; i < n; ++i)
         {
-            if (!s->shadow.image)
-                s->shadow = createImage(s->image.w, s->image.h, s->image.format, 0);
-            VkBufferImageCopy region{};
-            region.bufferOffset = offset;
-            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            region.imageExtent = {8, 8, 1};
-            vkCmdCopyBufferToImage(c, slots[slot].staging.buffer, s->shadow.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
-            fullBarrier();
-            VkImageBlit blit{};
+            const Item &it = items[first + i];
+            VkImageBlit &blit = blits[i];
+            blit = VkImageBlit{};
             blit.srcSubresource = blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            blit.srcOffsets[1] = {8, 8, 1};
-            blit.dstOffsets[0] = {static_cast<int32_t>(x0 * scale), static_cast<int32_t>(y0 * scale), 0};
-            blit.dstOffsets[1] = {static_cast<int32_t>((x0 + 8u) * scale), static_cast<int32_t>((y0 + 8u) * scale), 1};
-            vkCmdBlitImage(c, s->shadow.image, VK_IMAGE_LAYOUT_GENERAL, s->image.image, VK_IMAGE_LAYOUT_GENERAL, 1, &blit, VK_FILTER_NEAREST);
+            blit.srcOffsets[0] = copies[i].imageOffset;
+            blit.srcOffsets[1] = {copies[i].imageOffset.x + 8, copies[i].imageOffset.y + 8, 1};
+            blit.dstOffsets[0] = {static_cast<int32_t>(it.x0 * scale), static_cast<int32_t>(it.y0 * scale), 0};
+            blit.dstOffsets[1] = {static_cast<int32_t>((it.x0 + 8u) * scale), static_cast<int32_t>((it.y0 + 8u) * scale), 1};
         }
+        for (size_t i = 0; i < n;)
+        {
+            size_t j = i;
+            while (j < n && items[first + j].s == items[first + i].s)
+                ++j;
+            vkCmdBlitImage(c, blockStage.image, VK_IMAGE_LAYOUT_GENERAL, items[first + i].s->image.image, VK_IMAGE_LAYOUT_GENERAL,
+                           static_cast<uint32_t>(j - i), blits.data() + i, VK_FILTER_NEAREST);
+            i = j;
+        }
+        fullBarrier(); // the next chunk reuses the scratch image
     }
     fullBarrier();
-    pendingBlocks.clear();
+    if (only)
+        pendingBlocks.erase(std::remove_if(pendingBlocks.begin(), pendingBlocks.end(), [only](const auto &e) { return e.first == only; }),
+                            pendingBlocks.end());
+    else
+        pendingBlocks.clear();
     ++generation;
 }
 
@@ -1935,6 +2101,37 @@ uint32_t GSHwBackend::Renderer::clutColor(const GSDrawState &state, uint32_t ind
 
 // Brings the shadow up to the image: only the rectangles drawn since the last copy when it was
 // whole (the whole image is ~9 MB at 2x, and the stage needed ~55 copies a frame).
+void GSHwBackend::Renderer::gpuCollect(uint32_t index)
+{
+    const uint32_t n = stampsUsed[index];
+    stampsUsed[index] = 0u;
+    if (n >= 2u)
+    {
+        uint64_t t[kStampsPerSlot];
+        if (vkGetQueryPoolResults(device, stampPool, index * kStampsPerSlot, n, n * sizeof(uint64_t), t, sizeof(uint64_t),
+                                  VK_QUERY_RESULT_64_BIT) == VK_SUCCESS)
+        {
+            for (uint32_t i = 1; i < n; ++i)
+                if (stampKinds[index][i] < GkStart && t[i] >= t[i - 1])
+                    gpuNs[stampKinds[index][i]] += double(t[i] - t[i - 1]) * stampNs;
+            if (t[n - 1] >= t[0])
+                gpuBusyNs += double(t[n - 1] - t[0]) * stampNs;
+        }
+    }
+    const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (gpuReportMs == 0)
+        gpuReportMs = now;
+    if (now - gpuReportMs < 2000)
+        return;
+    const double perSecond = 1e-6 * 1000.0 / double(now - gpuReportMs); // ns -> ms per second
+    std::fprintf(stderr, "[perf] GPU novo (ms por s): desenho %.0f, sombra %.0f, envio %.0f, leitura %.0f, janela %.0f, outros %.0f | ocupada %.0f%%%s\n",
+                 gpuNs[GkDraw] * perSecond, gpuNs[GkShadow] * perSecond, gpuNs[GkUpload] * perSecond, gpuNs[GkDownload] * perSecond,
+                 gpuNs[GkPresent] * perSecond, gpuNs[GkOther] * perSecond, gpuBusyNs * perSecond / 10.0, gpuStampsLost ? " (marcas perdidas)" : "");
+    for (double &v : gpuNs)
+        v = 0.0;
+    gpuBusyNs = 0.0, gpuStampsLost = 0u, gpuReportMs = now;
+}
+
 void GSHwBackend::Renderer::refreshShadow(Surface &s)
 {
     flushBatch();
@@ -1963,6 +2160,7 @@ void GSHwBackend::Renderer::refreshShadow(Surface &s)
     }
     if (!regions.empty())
     {
+        gpuKind(GkShadow);
         vkCmdCopyImage(cmd(), s.image.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL,
                        static_cast<uint32_t>(regions.size()), regions.data());
         fullBarrier();
@@ -2208,19 +2406,21 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
         textures.emplace(key, std::move(entry));
         return true;
     }
-    if (contentCache.size() > 3000u)
+    if (contentCache.size() > 3000u || contentBytes + uint64_t(w) * h * 4u > kContentBudget)
     {
-        // Drop the least recently used half.
+        // Drop the least recently used down to 3/4 of both limits (textures entries that point
+        // at a dropped one miss on their next lookup).
         std::vector<std::pair<uint64_t, uint64_t>> ages;
         for (auto &c : contentCache)
             ages.emplace_back(c.second.lastUse, c.first);
         std::sort(ages.begin(), ages.end());
-        for (size_t i = 0; i < ages.size() / 2u; ++i)
+        for (size_t i = 0; i < ages.size() && (contentCache.size() > 2250u || contentBytes > kContentBudget / 4u * 3u); ++i)
         {
-            recycle(contentCache[ages[i].second].image);
-            contentCache.erase(ages[i].second);
+            auto dropped = contentCache.find(ages[i].second);
+            contentBytes -= textureBytes(dropped->second.image);
+            recycle(dropped->second.image);
+            contentCache.erase(dropped);
         }
-        textures.clear(); // entries may point at dropped images
     }
     VkDeviceSize offset = 0;
     uint8_t *dst = stage(VkDeviceSize(w) * h * 4u, offset);
@@ -2259,9 +2459,11 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     region.imageExtent = {w, h, 1};
     endPass();
+    gpuKind(GkUpload);
     vkCmdCopyBufferToImage(cmd(), slots[slot].staging.buffer, decoded.image.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
     fullBarrier();
     out.set = decoded.image.set;
+    contentBytes += textureBytes(decoded.image);
     contentCache.emplace(content, decoded);
     textures.emplace(key, std::move(entry));
     return true;
@@ -2363,7 +2565,6 @@ bool GSHwBackend::Renderer::dateServed(const GSPrimitiveBatch &b) const
 
 bool GSHwBackend::Renderer::drawState(const GSPrimitiveBatch &b)
 {
-    refreshPending();
     feedbackSurface = nullptr;
     dateSurface = nullptr;
     const GSDrawState &state = b.state;
@@ -2557,15 +2758,37 @@ void GSHwBackend::Renderer::appendVertices(const GSPrimitiveBatch &b)
 }
 
 
-bool GSHwBackend::Renderer::present(const GSPresentationRequest &request, PresentationFrame &out)
+namespace
 {
+    int64_t steadyMs()
+    {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    // The frame page the display circuit shows (CRT1 first).
+    uint32_t shownFramePage(const GSPresentationRequest &request)
+    {
+        return static_cast<uint32_t>(((request.pmode & 1u) ? request.dispfb1 : request.dispfb2) & 0x1FFu);
+    }
+}
+
+// Records a copy of the display area of `sourceFbp` (~0u: the page the request shows) and
+// publishes it once submitted. Called with the renderer lock held.
+bool GSHwBackend::Renderer::record(const GSPresentationRequest &request, uint32_t sourceFbp)
+{
+    const auto failed = [this] {
+        std::lock_guard<std::mutex> lock(presentMutex);
+        presentFailed = true;
+        return false;
+    };
     refreshPending();
     const bool crt1 = request.pmode & 1u, crt2 = (request.pmode >> 1) & 1u;
     if (!crt1 && !crt2)
-        return false;
+        return failed();
     const uint64_t dispfb = crt1 ? request.dispfb1 : request.dispfb2;
     const uint64_t display = crt1 ? request.display1 : request.display2;
-    const uint32_t fbp = static_cast<uint32_t>(dispfb & 0x1FFu), fbw = static_cast<uint32_t>((dispfb >> 9) & 0x3Fu);
+    const uint32_t fbp = sourceFbp != ~0u ? sourceFbp : static_cast<uint32_t>(dispfb & 0x1FFu);
+    const uint32_t fbw = static_cast<uint32_t>((dispfb >> 9) & 0x3Fu);
     const uint32_t ox = static_cast<uint32_t>((dispfb >> 32) & 0x7FFu), oy = static_cast<uint32_t>((dispfb >> 43) & 0x7FFu);
     uint32_t w = (static_cast<uint32_t>((display >> 32) & 0xFFFu) + 1u) / (static_cast<uint32_t>((display >> 23) & 0xFu) + 1u);
     uint32_t h = static_cast<uint32_t>((display >> 44) & 0x7FFu) + 1u;
@@ -2578,16 +2801,25 @@ bool GSHwBackend::Renderer::present(const GSPresentationRequest &request, Presen
         if (!p->depth && p->block == block && p->fbw == std::max(fbw, 1u))
             src = p.get();
     if (!src)
-        return false;
+        return failed();
     flushBatch();
     upload(*src);
     w = std::min(w, src->w > ox ? src->w - ox : 0u);
     h = std::min(h, src->h > oy ? src->h - oy : 0u);
     if (w == 0u || h == 0u)
-        return false;
+        return failed();
 
-    // Record this frame's copy.
-    PresentCopy &cur = presentCopies[presentNext];
+    // Overwrite the oldest copy that is neither the newest nor being read: the one before the
+    // newest stays readable while the GPU, often a field or two behind, finishes the newest.
+    int next = -1;
+    {
+        std::lock_guard<std::mutex> lock(presentMutex);
+        for (int i = 0; i < kPresentCopies; ++i)
+            if (i != published && i != reading && (next < 0 || presentCopies[i].seq < presentCopies[next].seq))
+                next = i;
+        presentCopies[next].seq = 0u; // not readable while recorded
+    }
+    PresentCopy &cur = presentCopies[next];
     const uint32_t pw = w * scale, ph = h * scale;
     if (cur.image.w != pw || cur.image.h != ph)
     {
@@ -2604,6 +2836,7 @@ bool GSHwBackend::Renderer::present(const GSPresentationRequest &request, Presen
     blit.srcOffsets[0] = {static_cast<int32_t>(ox * scale), static_cast<int32_t>(oy * scale), 0};
     blit.srcOffsets[1] = {static_cast<int32_t>((ox + w) * scale), static_cast<int32_t>((oy + h) * scale), 1};
     blit.dstOffsets[1] = {static_cast<int32_t>(pw), static_cast<int32_t>(ph), 1};
+    gpuKind(GkPresent);
     vkCmdBlitImage(c, src->image.image, VK_IMAGE_LAYOUT_GENERAL, cur.image.image, VK_IMAGE_LAYOUT_GENERAL, 1, &blit, VK_FILTER_NEAREST);
     fullBarrier();
     VkBufferImageCopy region{};
@@ -2613,22 +2846,70 @@ bool GSHwBackend::Renderer::present(const GSPresentationRequest &request, Presen
     cur.slot = slot;
     submit(false);
     cur.serial = slots[cur.slot].serial;
-    cur.w = pw, cur.h = ph, cur.doubleRows = doubleRows, cur.fbp = fbp, cur.valid = true;
-    presentNext = (presentNext + 1u) % 2u; // the worker thread picks its own index
-
-    // Return the previous one (or this one on the first frame).
-    readyCopy = presentCopies[presentNext].valid ? &presentCopies[presentNext] : &cur;
-    Slot &rs = slots[readyCopy->slot];
-    readyFence = (rs.pending && rs.serial == readyCopy->serial) ? rs.fence : VK_NULL_HANDLE;
+    cur.w = pw, cur.h = ph, cur.doubleRows = doubleRows, cur.fbp = fbp;
+    std::lock_guard<std::mutex> lock(presentMutex);
+    cur.seq = ++publishedSeq;
+    published = next;
+    presentFailed = false;
     return true;
 }
 
-// Without the renderer lock: waits for the copy and converts it, while the GS thread draws on.
-void GSHwBackend::Renderer::finishPresent(PresentationFrame &out)
+// GS side, before each draw: MKSM draws one field per vsync, alternating frame pages 0x00 and
+// 0x46 (bloom, depth copies and HUD in between); switching pages means the previous field is
+// complete, so that is the copy the window gets.
+void GSHwBackend::Renderer::noteDraw(uint32_t fbp)
 {
-    if (readyFence)
-        vkWaitForFences(device, 1, &readyFence, VK_TRUE, UINT64_MAX);
-    convertPresent(*readyCopy, out);
+    if ((fbp != 0x00u && fbp != 0x46u) || fbp == lastMainFbp)
+        return;
+    const uint32_t done = lastMainFbp;
+    lastMainFbp = fbp;
+    GSPresentationRequest geom;
+    {
+        std::lock_guard<std::mutex> lock(presentMutex);
+        if (done == ~0u || !hasPresentGeom)
+            return;
+        geom = presentGeom;
+    }
+    const uint32_t shown = shownFramePage(geom);
+    if (shown != 0x00u && shown != 0x46u)
+        return; // the screen shows another page (menus): the window asks for its own copies
+    if (record(geom, done))
+        lastFieldCaptureMs.store(steadyMs(), std::memory_order_relaxed);
+}
+
+// The slot's fence, or the slot moving on (it is only reused after its fence), means done.
+// shortcut: reads the GS side's serial and fence without the renderer lock, as the worker path did.
+bool GSHwBackend::Renderer::copyDone(const PresentCopy &copy) const
+{
+    const Slot &s = slots[copy.slot];
+    return __atomic_load_n(&s.serial, __ATOMIC_ACQUIRE) != copy.serial || vkGetFenceStatus(device, s.fence) == VK_SUCCESS;
+}
+
+// Window side: the newest finished copy, or the last one shown while the GPU is still on it.
+bool GSHwBackend::Renderer::takeNewest(PresentationFrame &out)
+{
+    int index = -1;
+    {
+        std::lock_guard<std::mutex> lock(presentMutex);
+        for (int i = 0; i < kPresentCopies; ++i)
+            if (presentCopies[i].seq > shownSeq && (index < 0 || presentCopies[i].seq > presentCopies[index].seq) &&
+                copyDone(presentCopies[i]))
+                index = i;
+        reading = index;
+    }
+    if (index >= 0)
+    {
+        const PresentCopy &copy = presentCopies[index];
+        convertPresent(copy, shown);
+        shownSeq = copy.seq;
+        ps2_perf::counters().newImages.fetch_add(1u, std::memory_order_relaxed);
+        std::lock_guard<std::mutex> lock(presentMutex);
+        reading = -1;
+    }
+    if (shownSeq == 0u)
+        return false;
+    out = shown;
+    return true;
 }
 
 void GSHwBackend::Renderer::convertPresent(const PresentCopy &ready, PresentationFrame &out) const
@@ -2716,12 +2997,6 @@ struct GSHwBackend::Async
     Work pending;
     uint64_t queued = 0, done = 0; // commands handed over / finished by the worker
     bool stop = false;
-    // Present copies the worker recorded, in stream order; the window reads the newest.
-    std::mutex presentMutex;
-    int published = -1, reading = -1;
-    uint32_t slot = 0;
-    uint64_t serial = 0;
-    VkFence fence = VK_NULL_HANDLE;
 };
 
 template <typename F>
@@ -2787,28 +3062,7 @@ void GSHwBackend::workerLoop()
     }
 }
 
-void GSHwBackend::presentNow(const GSPresentationRequest &request)
-{
-    Renderer &r = *m_renderer;
-    Async &a = *m_async;
-    int next = 0;
-    {
-        std::lock_guard<std::mutex> lock(a.presentMutex);
-        while (next == a.published || next == a.reading)
-            ++next; // three copies: one is always free
-    }
-    r.presentNext = static_cast<uint32_t>(next);
-    PresentationFrame unused;
-    const bool recorded = r.present(request, unused);
-    std::lock_guard<std::mutex> lock(a.presentMutex);
-    if (!recorded)
-    {
-        a.published = -1;
-        return;
-    }
-    const Renderer::PresentCopy &copy = r.presentCopies[next];
-    a.published = next, a.slot = copy.slot, a.serial = copy.serial, a.fence = r.slots[copy.slot].fence;
-}
+void GSHwBackend::presentNow(const GSPresentationRequest &request) { m_renderer->record(request, ~0u); }
 #else
 struct GSHwBackend::Async
 {
@@ -2857,8 +3111,19 @@ void GSHwBackend::UploadImage(const uint8_t *data, uint32_t sizeBytes)
     uploadImageNow(data, sizeBytes);
 }
 
+bool GSHwBackend::onPresentThread() const
+{
+#if defined(PS2X_HAVE_VULKAN)
+    return m_renderer && m_renderer->presentThread.load(std::memory_order_relaxed) == std::this_thread::get_id();
+#else
+    return false;
+#endif
+}
+
 void GSHwBackend::Flush()
 {
+    if (onPresentThread())
+        return; // the window's latch: Present takes copies without the renderer lock or the queue
     if (m_async)
         return enqueue([&](Async::Work &w) { w.commands.push_back({Async::KFlush, 0u, {}}); });
     flushNow();
@@ -2873,7 +3138,9 @@ void GSHwBackend::TextureFlush()
 
 void GSHwBackend::Sync(GSSyncReason reason)
 {
-    // FINISH and the window's latch only flush: nothing reads state back.
+    if (reason == GSSyncReason::Presentation && onPresentThread())
+        return; // see Flush
+    // FINISH only flushes: nothing reads state back.
     if (m_async && (reason == GSSyncReason::Finish || reason == GSSyncReason::Presentation))
         return enqueue([&](Async::Work &w) {
             w.commands.push_back({Async::KSync, static_cast<uint32_t>(w.syncs.size()), {}});
@@ -3011,6 +3278,7 @@ void GSHwBackend::submitNow(const GSPrimitiveBatch &batch)
     }
 #if defined(PS2X_HAVE_VULKAN)
     ++m_stats.primitives;
+    m_renderer->noteDraw(batch.state.context.frame.fbp);
     if (!m_renderer->draw(batch))
         m_renderer->fallback(batch);
 #endif
@@ -3108,6 +3376,8 @@ void GSHwBackend::beginTransferNow(const GSTransferCommand &command)
                     if (blk >= sp->b0 && blk < sp->b1)
                         r.pendingBlocks.emplace_back(sp, blk);
             }
+            if (r.pendingBlocks.size() > 65536u) // surfaces nobody uses: bound the list (repeats merge)
+                r.refreshPending();
             if (lo < hi)
                 r.invalidateTexturesExact(written, lo, hi);
         }
@@ -3165,71 +3435,47 @@ uint64_t gsGameFrameSerial(); // gs_frontend.cpp
 
 PresentationFrame GSHwBackend::Present(const GSPresentationRequest &request)
 {
-    { // PS2X_PERF "new images": the window shows a game frame it had not shown yet
-        thread_local uint64_t shown = 0u;
-        if (const uint64_t serial = gsGameFrameSerial(); serial != shown)
-            shown = serial, ps2_perf::counters().newImages.fetch_add(1u, std::memory_order_relaxed);
-    }
 #if defined(PS2X_HAVE_VULKAN)
-    if (m_async)
+    if (m_renderer)
     {
-        // A marker in the stream: the worker records the copy after every draw queued before
-        // it. The window shows the newest copy it published (one present behind).
+        Renderer &r = *m_renderer;
+        r.presentThread.store(std::this_thread::get_id(), std::memory_order_relaxed);
+        bool failed = false;
+        {
+            std::lock_guard<std::mutex> lock(r.presentMutex);
+            r.presentGeom = request, r.hasPresentGeom = true;
+            failed = r.presentFailed;
+        }
         ++m_stats.frames;
         if (m_stats.frames % 120u == 0u && std::getenv("PS2X_GS_HW_STATS"))
-            report();
-        enqueue([&](Async::Work &w) {
-            w.commands.push_back({Async::KPresent, static_cast<uint32_t>(w.presents.size()), {}});
-            w.presents.push_back(request);
-        });
-        Async &a = *m_async;
-        int index = -1;
-        uint32_t slot = 0;
-        uint64_t serial = 0;
-        VkFence fence = VK_NULL_HANDLE;
-        {
-            std::lock_guard<std::mutex> lock(a.presentMutex);
-            index = a.published;
-            if (index >= 0)
-                a.reading = index, slot = a.slot, serial = a.serial, fence = a.fence;
-        }
-        if (index >= 0)
-        {
-            Renderer &r = *m_renderer;
-            // shortcut: waits on the slot's fence without the renderer lock, as the one-thread
-            // path does; once the worker reuses the slot (serial moves on) the copy is done.
-            while (__atomic_load_n(&r.slots[slot].serial, __ATOMIC_ACQUIRE) == serial &&
-                   vkWaitForFences(r.device, 1, &fence, VK_TRUE, 2000000ull) == VK_TIMEOUT)
-            {
-            }
-            PresentationFrame frame;
-            r.convertPresent(r.presentCopies[index], frame);
-            std::lock_guard<std::mutex> lock(a.presentMutex);
-            a.reading = -1;
+            if (std::unique_lock<std::recursive_mutex> lock(m_lock, std::try_to_lock); lock.owns_lock())
+                report();
+        // Without field copies (menus, a scene that does not flip pages) the window asks for one:
+        // in stream order on the worker, or here if the GS side is not holding the renderer.
+        const uint32_t shown = shownFramePage(request);
+        const bool fields = (shown == 0x00u || shown == 0x46u) &&
+                            steadyMs() - r.lastFieldCaptureMs.load(std::memory_order_relaxed) < 250;
+        if (!fields && m_async)
+            enqueue([&](Async::Work &w) {
+                w.commands.push_back({Async::KPresent, static_cast<uint32_t>(w.presents.size()), {}});
+                w.presents.push_back(request);
+            });
+        else if (!fields)
+            if (std::unique_lock<std::recursive_mutex> lock(m_lock, std::try_to_lock); lock.owns_lock())
+                failed = !r.record(request, ~0u);
+        PresentationFrame frame;
+        if (!failed && r.takeNewest(frame))
             return frame;
-        }
         --m_stats.frames;
         waitIdle(); // no display surface (movies, 512-wide menus): the mirror, in stream order
         return presentFallback(request);
     }
-    if (m_renderer)
-    {
-        PresentationFrame frame;
-        std::unique_lock<std::recursive_mutex> lock(m_lock);
-        ++m_stats.frames;
-        if (m_stats.frames % 120u == 0u && std::getenv("PS2X_GS_HW_STATS"))
-            report();
-        if (m_renderer->present(request, frame))
-        {
-            // shortcut: the copy being read is the one recorded a frame ago; only this window
-            // thread touches presentCopies, so reading it unlocked is safe.
-            lock.unlock();
-            m_renderer->finishPresent(frame);
-            return frame;
-        }
-        --m_stats.frames;
-    }
 #endif
+    { // PS2X_PERF "new images": the window shows a game frame it had not shown yet
+        thread_local uint64_t shownSerial = 0u;
+        if (const uint64_t serial = gsGameFrameSerial(); serial != shownSerial)
+            shownSerial = serial, ps2_perf::counters().newImages.fetch_add(1u, std::memory_order_relaxed);
+    }
     return presentFallback(request);
 }
 
