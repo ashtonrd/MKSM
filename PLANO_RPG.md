@@ -11,7 +11,9 @@
   - **Um save RPG fica RPG para sempre:** a pessoa não muda mais.
   - **Perto do nome do personagem, na tela de jogo:** o nível e quanto falta para o próximo, tipo "0/300" no começo, mudando com o tempo.
   - **O RPG é sempre no Hard** (sem Normal), e o começo deve ser **mais difícil que o Hard**, porque o jogador fica muito forte a longo prazo.
-  - **Mais atributos:** só três parece pouco.
+  - **Mais atributos:** só três parece pouco. Dos propostos, tirar o Crítico; manter o resto. 1 ponto por nível por enquanto.
+  - **Nível máximo geral: 100.**
+  - **Ativar na tela de dificuldade com L3, com o cursor no Hard,** e a marca "RPG" em cima do Hard: para ficar claro que o RPG é uma variante do Hard.
 
 **Como usar este plano:**
 - Faça as tarefas da seção 7 **na ordem, uma por vez**, no formato de cada uma (Faça / Verifique / Pronto quando).
@@ -31,9 +33,8 @@
 4. **O save continua o original:** abre num jogo sem o modo e num PS2. Os dados do RPG ficam num arquivo próprio (3.7).
 5. **Sem velocidade:** nada que altere animação, movimento, hitbox ou quadros de golpe. O modo mexe só em dano, vida (máxima e atual), XP para o nível e na tela por cima.
 6. **A economia do jogo não muda:** o jogo dá o mesmo XP, os golpes custam o mesmo e o saldo de XP gasta igual. O RPG só lê o XP (a Sabedoria de 3.3 acelera só o nível, não o saldo).
-7. **Sorteios próprios:** o que for aleatório no RPG (Crítico) usa um sorteio do runtime, nunca o do jogo, para não mudar a sequência de sorteios que o jogo faz.
-8. **Números ajustáveis sem recompilar:** chaves `RPG_*` no `mksm.ini` (lista em 3.10), lidas no começo do jogo.
-9. **Regras do projeto** (`CLAUDE.md`):
+7. **Números ajustáveis sem recompilar:** chaves `RPG_*` no `mksm.ini` (lista em 3.10), lidas no começo do jogo.
+8. **Regras do projeto** (`CLAUDE.md`):
    - Commits só do usuário.
    - Nada do jogo no git.
    - `PS2Recomp/` só por `scripts/atualizar_patches.sh`; arquivo novo entra no `patches/arquivos.txt`.
@@ -85,27 +86,27 @@ Com 300, 100 e 50, os custos são 300, 400, 550, 750, 1000…: cada degrau aumen
 | Custo do degrau | 300 | 400 | 550 | 750 | 1.000 | 1.300 | 1.650 | 2.050 | 2.500 | 3.550 | 5.500 |
 | XP ganho total | 300 | 700 | 1.250 | 2.000 | 3.000 | 4.300 | 5.950 | 8.000 | 10.500 | 17.050 | 31.500 |
 
-- **Nível** = maior n com XP ganho ≥ soma dos custos até n. Sem teto de jogo; `RPG_NIVEL_MAX` = 99 é só um limite técnico.
-- A A1 mede quanto XP o jogo inteiro dá, para dizer ao usuário até que nível se chega com esses números. Mudar a curva é só mexer nas três chaves.
+- **Nível** = maior n com XP ganho ≥ soma dos custos até n, até o **nível máximo 100** (`RPG_NIVEL_MAX`, pedido do usuário). No 100, o indicador mostra "Nv 100 · MÁX".
+- **Quanto custa chegar lá com 300/100/50:** nível 20 = 71.250 de XP ganho; 30 = 232.000; 50 = 1.053.500; 100 = 8.357.250.
+- A A1 mede quanto XP o jogo inteiro dá. Se ficar longe dessas contas, o usuário decide entre deixar o 100 como meta quase inalcançável ou achatar a curva (`RPG_XP_ACELERA` menor). Mudar a curva é só mexer nas três chaves.
 
 ### 3.3 Pontos e atributos
 
-Sete atributos, todos sem mexer em velocidade. Os três primeiros foram aprovados pelo usuário; os quatro novos são a proposta de 15/11 para "só três parece pouco".
+Seis atributos, todos sem mexer em velocidade, aprovados pelo usuário em 15/11 (o Crítico, proposto junto, saiu).
 
 | Atributo | Efeito por ponto | Teto (por enquanto) | Como entra no jogo |
 |---|---|---|---|
 | **Força** | +5% de dano causado | 20 pontos (+100%) | Multiplica o dano em que o atacante é o jogador (A4) |
 | **Defesa** | −3% de dano recebido | 20 pontos (−60%) | Multiplica o dano em que o alvo é o jogador, com mínimo de 1 (A4) |
 | **Vida** | +5% de vida máxima | 20 pontos (+100%) | Vida máxima do jogador ao começar a sala, ao subir de nível e ao gastar ponto (A3) |
-| **Crítico** *(novo)* | +1,5% de chance de o golpe causar o dobro | 20 pontos (30%) | Sorteio próprio (regra 7) no gancho de dano, quando o atacante é o jogador (A4) |
 | **Roubo de vida** *(novo)* | Cura 1% do dano causado | 20 pontos (20%) | Gancho de dano: soma à vida atual do jogador, sem passar da máxima (A3, A4) |
 | **Regeneração** *(novo)* | Recupera 0,1% da vida máxima por segundo | 20 pontos (2%/s) | A cada quadro de gameplay, fora de pausa, menu e cutscene (A3, A7) |
 | **Sabedoria** *(novo)* | +3% de XP para o nível | 20 pontos (+60%) | Só no XP ganho do RPG; o saldo de XP do jogo não muda (regra 6) |
 
 - **Talvez um oitavo, Fúria:** o medidor especial/de fatality enche +5% mais rápido por ponto. Só entra se a A8 achar o medidor e ele puder ser acelerado sem mexer em velocidade.
-- **Ordem do cálculo do dano causado:** base × (1 + Força) × (2 se crítico) ÷ (1 + vida extra dos inimigos, 3.11). O Roubo de vida cura sobre o resultado.
-- **Tetos:** o usuário vai tirar os tetos depois. `RPG_TETO_ATRIBUTO=0` desliga o teto. Mesmo sem teto, a Defesa para em −90% (o dano nunca some), o Crítico em 100% e a Regeneração em 10%/s.
-- **Pontos por nível:** com sete atributos, 1 ponto por nível pode espalhar pouco. `RPG_PONTOS_POR_NIVEL` (1) fica para a D3 decidir com o usuário.
+- **Ordem do cálculo do dano causado:** base × (1 + Força) ÷ (1 + vida extra dos inimigos, 3.11). O Roubo de vida cura sobre o resultado.
+- **Tetos:** o usuário vai tirar os tetos depois. `RPG_TETO_ATRIBUTO=0` desliga o teto. Mesmo sem teto, a Defesa para em −90% (o dano nunca some) e a Regeneração em 10%/s.
+- **Pontos por nível:** 1 (usuário, 15/11; `RPG_PONTOS_POR_NIVEL`). No nível 100 são 99 pontos.
 - **Arredondamento:** dano e vida arredondados para o inteiro mais próximo; o dano nunca vai a 0.
 - **Exceções:** morte instantânea do jogo (abismo, fatality) não passa pelos multiplicadores.
 - **Redistribuir:** livre, a qualquer momento em que a aba RPG abre. "Redistribuir pontos" devolve todos os pontos gastos (confirmação com X duas vezes).
@@ -122,7 +123,6 @@ O menu Gráfico vira uma janela com **duas abas lado a lado**. O uso pedido: sub
   Força          3   +15% de dano causado            X: +1 ponto
   Defesa         2   −6% de dano recebido
   Vida           0   +0% de vida máxima
-  Crítico        1   1,5% de chance de dano dobrado
   Roubo de vida  0   cura 0% do dano causado
   Regeneração    0   0,0% da vida por segundo
   Sabedoria      0   +0% de XP para o nível
@@ -157,9 +157,19 @@ O menu Gráfico vira uma janela com **duas abas lado a lado**. O uso pedido: sub
 
 ### 3.6 Escolher o modo (só num jogo novo)
 
-- **Onde:** na tela de escolha de dificuldade de um jogo novo, a dica "R3: Modo RPG · Desligado" por cima. R3 alterna entre Desligado e Ligado.
-- **Sempre no Hard:** com o modo ligado, a dica vira "R3: Modo RPG · Ligado (Hard)". O jogo vai para o Hard e o Normal fica indisponível: o cursor do jogo é posto no Hard, as setas não o tiram de lá, e "Normal" aparece riscado por cima. Por cima do Hard ainda vale o Desafio RPG (3.11). Desligar o modo devolve a escolha normal.
-- **Quando vale:** confirmada a dificuldade, o jogo novo nasce RPG (no Hard) ou normal.
+O RPG é uma **variante do Hard**, escolhida em cima dele (pedido do usuário):
+
+- **Onde:** na tela de escolha de dificuldade de um jogo novo.
+- **Como:**
+  - Com o cursor no **Hard**, aparece ao lado a dica "L3: Modo RPG".
+  - **L3** liga e desliga (no teclado, F2; o teclado não tem L3). Ligado, aparece a marca dourada **"RPG"** em cima da palavra Hard.
+  - O L3 não vai para o jogo nessa hora.
+- **Só no Hard:**
+  - Com o cursor no Normal, nem a dica nem o L3 existem.
+  - Levar o cursor do Hard para o Normal desliga o RPG, e a marca some.
+  - O jogo não é forçado em nada: a pessoa escolhe o Hard como sempre.
+- **Por que L3 e não R3:** nos menus, o R3 abre a janela de opções (Gráfico/RPG).
+- **Quando vale:** confirmar o Hard com a marca "RPG" cria um jogo RPG (no Hard, com o Desafio RPG de 3.11); sem a marca, um jogo normal.
   - Num jogo RPG, o perfil nasce na memória (nível 1, XP ganho 0) e vai para o arquivo no primeiro save do jogo (3.7).
   - Num jogo normal, nenhum perfil.
 - **Depois disso é fixo:**
@@ -201,16 +211,15 @@ O menu Gráfico vira uma janela com **duas abas lado a lado**. O uso pedido: sub
 | `RPG_XP_PRIMEIRO` | 300 | Custo do nível 1 → 2 |
 | `RPG_XP_AUMENTO` | 100 | Quanto o 2º degrau custa a mais que o 1º |
 | `RPG_XP_ACELERA` | 50 | Quanto cada aumento cresce em relação ao anterior |
-| `RPG_NIVEL_MAX` | 99 | Limite técnico |
+| `RPG_NIVEL_MAX` | 100 | Nível máximo (usuário, 15/11) |
 | `RPG_FORCA_POR_PONTO` | 5 | % de dano causado por ponto |
 | `RPG_DEFESA_POR_PONTO` | 3 | % de dano recebido a menos por ponto |
 | `RPG_VIDA_POR_PONTO` | 5 | % de vida máxima por ponto |
-| `RPG_CRITICO_POR_PONTO` | 1,5 | % de chance de dano dobrado por ponto |
 | `RPG_ROUBO_POR_PONTO` | 1 | % do dano causado que vira vida |
 | `RPG_REGEN_POR_PONTO` | 0,1 | % da vida máxima por segundo |
 | `RPG_SABEDORIA_POR_PONTO` | 3 | % de XP a mais para o nível |
 | `RPG_TETO_ATRIBUTO` | 20 | Pontos por atributo; 0 = sem teto |
-| `RPG_PONTOS_POR_NIVEL` | 1 | Pontos ganhos a cada nível |
+| `RPG_PONTOS_POR_NIVEL` | 1 | Pontos ganhos a cada nível (usuário, 15/11) |
 | `RPG_INIMIGO_DANO` | 30 | % de dano a mais que os inimigos causam (3.11) |
 | `RPG_INIMIGO_VIDA` | 30 | % de vida a mais dos inimigos (3.11) |
 | `RPG_INIMIGO_POR_NIVEL` | 0 | % a mais nos dois, por nível do jogador (3.11) |
@@ -219,7 +228,7 @@ O menu Gráfico vira uma janela com **duas abas lado a lado**. O uso pedido: sub
 
 O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo começa **mais difícil que o Hard** e vai ficando mais fácil conforme ele evolui.
 
-- **Base:** sempre Hard (3.6).
+- **Base:** sempre Hard (o RPG só existe em cima dele; 3.6).
 - **Desafio RPG, por cima do Hard:**
   - os inimigos causam +30% de dano (`RPG_INIMIGO_DANO`);
   - aguentam +30% de dano (`RPG_INIMIGO_VIDA`).
@@ -233,7 +242,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   | Momento | Dano que o jogador causa | Dano que recebe | Comparado ao Hard |
   |---|---|---|---|
   | Nível 1, sem pontos | 77% | 130% | Bem mais difícil |
-  | Nível ~15 (5 Força, 4 Defesa, 3 Vida, 2 Crítico) | ~99% | ~114%, com +15% de vida | Mais ou menos o Hard |
+  | Nível ~15 (5 Força, 4 Defesa, 3 Vida, 2 Roubo de vida) | ~96% | ~114%, com +15% de vida e curando 2% do que bate | Mais ou menos o Hard |
   | Nível 25 em diante | acima de 100% | abaixo de 100% | Mais fácil que o Hard: o jogador ficou forte |
 
 - **Escala por nível (desligada, `RPG_INIMIGO_POR_NIVEL=0`):** inimigos ficando mais fortes a cada nível do jogador anulariam a evolução. Com +1% por nível nos dois valores, um jogador no nível 15 que espalhou os pontos ficaria mais fraco, em relação aos inimigos, do que no nível 1. Fica disponível para a D3, se o usuário achar o fim fácil demais.
@@ -315,7 +324,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
 - [ ] **A4 Dano**
   - **Faça:**
     - Ache a função que desconta a vida: quem grava a vida atual da A3 no código gerado, e o tratador do comando `applydamage` (registrado como o `addexperience`).
-    - Descubra nos argumentos (`a0`–`a3`) quem ataca, quem recebe e a quantia. O RPG precisa separar os quatro casos: jogador → inimigo (Força, Crítico, Roubo, vida extra dos inimigos), inimigo → jogador (Defesa, dano extra dos inimigos), e o resto (armadilha → jogador conta como inimigo; inimigo → inimigo fica igual).
+    - Descubra nos argumentos (`a0`–`a3`) quem ataca, quem recebe e a quantia. O RPG precisa separar os quatro casos: jogador → inimigo (Força, Roubo, vida extra dos inimigos), inimigo → jogador (Defesa, dano extra dos inimigos), e o resto (armadilha → jogador conta como inimigo; inimigo → inimigo fica igual).
     - Veja o que o `pickupdoubledamage` liga: se for um multiplicador no jogador, anote; pode servir de referência para a Força.
     - Liste as fontes de dano que passam por ali: golpes, armas, projéteis, armadilhas, quedas.
   - **Verifique:** com uma chave temporária `RPG_TESTE_DANO=2`, um wrapper dobra o dano quando o atacante é o jogador 1. Num roteiro de golpes fixo, a vida tirada do inimigo dobra; sem a chave, fica igual.
@@ -339,7 +348,9 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
 - [ ] **A7 Telas: dificuldade (jogo novo) e cutscene**
   - **Faça:**
     - Cópias da RAM antes, durante e depois da tela de dificuldade num jogo novo (Single Player → personagem → dificuldade). Anote:
-      - o cursor da tela (Normal/Hard) e o valor da dificuldade escolhida, com o valor do Hard;
+      - o cursor da tela (Normal/Hard), o valor da dificuldade escolhida e o do Hard;
+      - onde a palavra "Hard" aparece na imagem (para a marca "RPG" em cima dela);
+      - se o jogo usa L3 nessa tela;
       - se essa tela aparece em outros caminhos (Konten, carregar).
     - Cópias numa cutscene e na gameplay logo depois (Goro's Lair), procurando um valor que separe as duas (HUD visível).
   - **Verifique:** o valor da tela de dificuldade muda só nela, em três rodadas, e dá para saber que é jogo novo; o de cutscene separa as duas em três rodadas.
@@ -360,8 +371,9 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Verifique:** asserção que roda uma vez:
     - nível 1 com XP 0, 2 com 300, 3 com 700, 4 com 1.250, 5 com 2.000 (tabela de 3.2);
     - o nível sobe exatamente no limite e nunca desce;
-    - multiplicadores dos sete atributos com 0, 1 e 20 pontos batem com a tabela de 3.3, e sem teto a Defesa para em −90%, o Crítico em 100% e a Regeneração em 10%/s;
-    - a ordem do dano causado (3.3) com o Desafio RPG (3.11): 100 de base, 4 de Força, sem crítico → 100 × 1,2 ÷ 1,3 = 92.
+    - nível 100 com 8.357.250 de XP ganho e nunca 101;
+    - multiplicadores dos seis atributos com 0, 1 e 20 pontos batem com a tabela de 3.3, e sem teto a Defesa para em −90% e a Regeneração em 10%/s;
+    - a ordem do dano causado (3.3) com o Desafio RPG (3.11): 100 de base, 4 de Força → 100 × 1,2 ÷ 1,3 = 92.
     - Testes `ps2x_tests` iguais.
   - **Pronto quando:** módulo compilando no Linux e no Windows (`scripts/build_windows.sh`), com as asserções passando.
 
@@ -391,19 +403,17 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Verifique:** roteiro de golpes fixo com 0, 5 e 10 pontos em cada atributo; dano causado, dano recebido e vida máxima batem com a tabela (±1 de arredondamento); barra de vida desenhada certo.
   - **Pronto quando:** a tabela medida anotada aqui.
 
-- [ ] **B5 Efeitos: Crítico, Roubo de vida, Regeneração e Sabedoria (e Fúria, se a A8 achou)**
+- [ ] **B5 Efeitos: Roubo de vida, Regeneração e Sabedoria (e Fúria, se a A8 achou)**
   - **Faça:**
-    - Crítico e Roubo no gancho de dano.
+    - Roubo de vida no gancho de dano.
     - Regeneração por quadro de gameplay (A7 para pausa e cutscene).
     - Sabedoria sobre o XP que entra no XP ganho (B2).
     - Fúria no que enche o medidor (A8).
   - **Verifique:**
     - roteiro fixo com 10 pontos em cada um;
-    - Crítico: ~15% dos golpes dobrados em 200 golpes;
     - Roubo: vida sobe 10% do dano causado;
     - Regeneração: 1% da máxima por segundo parado;
-    - Sabedoria: XP ganho = 130% do saldo ganho;
-    - a sequência de sorteios do jogo igual à de antes (mesmo roteiro, mesmos inimigos).
+    - Sabedoria: XP ganho = 130% do saldo ganho.
   - **Pronto quando:** medido e anotado aqui.
 
 - [ ] **B6 Desafio RPG e Hard**
@@ -423,7 +433,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
 
 - [ ] **C2 Aba RPG**
   - **Faça:** o conteúdo de 3.4:
-    - nível, barra de XP, pontos livres, os sete atributos com efeito (oito com a Fúria);
+    - nível, barra de XP, pontos livres, os seis atributos com efeito (sete com a Fúria);
     - X gasta, linha cinza sem pontos ou no teto;
     - "Redistribuir pontos" com confirmação;
     - abrir na aba RPG quando há pontos livres;
@@ -440,13 +450,17 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Pronto quando:** capturas anotadas.
 
 - [ ] **C4 Escolha na tela de dificuldade**
-  - **Faça:** com os endereços da A7, a dica "R3: Modo RPG · Desligado/Ligado (Hard)" por cima da tela de dificuldade, só num jogo novo. R3 alterna, com o controle bloqueado só durante a troca.
-    - Com o modo ligado: cursor do jogo no Hard, setas sem efeito para o jogo, "Normal" riscado por cima (3.6).
-    - Confirmar a dificuldade cria (ou não) o perfil.
+  - **Faça:** com os endereços da A7, o que está em 3.6:
+    - dica "L3: Modo RPG" ao lado do Hard só com o cursor nele;
+    - L3 (F2 no teclado) liga e desliga, sem chegar ao jogo;
+    - marca "RPG" em cima do Hard;
+    - cursor no Normal desliga;
+    - confirmar o Hard com a marca cria o perfil.
+    - O roteiro de teste ganha um passo para L3.
   - **Verifique:**
-    - começar um jogo com e sem o modo por roteiro; o indicador só aparece no primeiro;
-    - com o modo ligado, apertar para cima/baixo e confirmar sempre dá Hard (valor da A7 conferido);
-    - desligar o modo na mesma tela devolve o Normal;
+    - começar um jogo com e sem o modo por roteiro; o indicador só aparece no primeiro, e a dificuldade do jogo RPG é Hard (valor da A7);
+    - no Normal, L3 não faz nada; ligar no Hard e descer para o Normal tira a marca;
+    - capturas da marca em 4:3 e 16:9, sem cobrir o texto do jogo;
     - o primeiro save do jogo RPG cria o `rpg_*.ini`;
     - num save normal carregado, não há como ligar.
   - **Pronto quando:** os três casos testados.
@@ -477,7 +491,8 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Faça:** o usuário joga um jogo RPG do começo e diz se os níveis vêm no ritmo certo e se ficou fácil ou difícil. Ajustar pelas chaves `RPG_*`:
     - curva, efeitos e tetos (ele já disse que vai tirar os tetos depois);
     - o Desafio RPG (`RPG_INIMIGO_DANO`/`VIDA`): o começo tem que ser mais duro que o Hard;
-    - pontos por nível (1 ou 2, com sete atributos);
+    - pontos por nível (1 por enquanto);
+    - se o nível 100 está ao alcance com o XP do jogo (A1), ou se a curva achata;
     - se o fim ficar fácil demais: `RPG_INIMIGO_POR_NIVEL` ou a escala por área (3.11).
     - Se o jogador ficar forte demais no fim, considerar inimigos mais fortes por nível (nova tarefa; não entra sem pedido).
   - **Pronto quando:** o usuário aprovar.
@@ -507,16 +522,17 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
 | Saves RPG visíveis | Tag "RPG · Nv N" nas telas de load e save | Usuário, 15/11 |
 | Morrer e recarregar | O perfil volta à foto do save | Igual ao que o jogo faz com o XP e os golpes |
 | Desligar num save RPG | Não dá; o save é RPG para sempre | Usuário confirmou, 15/11 |
-| Dificuldade | Sempre Hard; Normal indisponível no modo RPG | Usuário, 15/11 |
+| Dificuldade | Sempre Hard: o RPG se liga com L3 em cima do Hard, com a marca "RPG" | Usuário, 15/11 |
+| Nível máximo | 100 | Usuário, 15/11 |
+| Pontos por nível | 1 | Usuário, 15/11 ("por enquanto") |
 | Começo mais duro que o Hard | Desafio RPG: inimigos +30% de dano e +30% de vida, desde o nível 1, sem crescer com o nível | Usuário pediu ("mais difícil que o Hard no começo"); valores e forma são proposta |
-| Atributos | Força, Defesa, Vida + Crítico, Roubo de vida, Regeneração, Sabedoria (Fúria se houver medidor) | Usuário pediu mais que três; os quatro novos são proposta |
+| Atributos | Força, Defesa, Vida, Roubo de vida, Regeneração, Sabedoria (Fúria se houver medidor) | Usuário, 15/11 (Crítico tirado) |
 | Na tela de jogo | "Nv 7 · 600/1.650" ao lado do nome do personagem; progresso do nível atual, zera a cada nível | Usuário, 15/11 ("0/300 no começo e vai mudando") |
 | Inimigos mais fortes | Não | Fora do pedido; ver D3 |
 
 ## 9. Perguntas para o usuário (juntar aqui; não parar por elas)
 
-- Os quatro atributos novos (Crítico, Roubo de vida, Regeneração, Sabedoria) estão bons, ou troca algum?
-- Com sete atributos, 1 ponto por nível ou 2?
+- Nenhuma em aberto.
 - (Se o usuário preferir o XP total no indicador, "4.900/5.950" em vez do progresso do nível, é só trocar o texto na C3.)
 
 ## 10. Riscos conhecidos
@@ -528,4 +544,4 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
 - **Tela de load/save:** se a lista rola e a posição de cada save não aparece na RAM, a tag fica só sobre o save selecionado (A6 decide).
 - **Cutscene × gameplay:** sem um valor que separe as duas (A7), o indicador aparece também nas cutscenes, e a Regeneração continua nelas.
 - **Escrever na vida atual:** se o jogo reescreve a vida de uma cópia a cada quadro (A3), Regeneração e Roubo de vida precisam escrever na cópia ou passar pelo gancho de dano com valor negativo.
-- **Forçar o Hard:** se o cursor da tela de dificuldade não for um valor simples na RAM (A7), o Hard é imposto ao confirmar (gravando o valor da dificuldade escolhida), e a tela mostra o aviso por cima.
+- **Cursor da tela de dificuldade:** se não for um valor simples na RAM (A7), a marca "RPG" passa a depender da posição do destaque na imagem; e se o jogo usar L3 nessa tela, o atalho vira outro botão livre.
