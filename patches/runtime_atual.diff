@@ -7775,6 +7775,46 @@ index 6974254..314523a 100644
          applyDest(vd, result, dest);
          return;
  
+diff --git a/ps2xRuntime/src/main.cpp b/ps2xRuntime/src/main.cpp
+index 563bcbd..ce2b717 100644
+--- a/ps2xRuntime/src/main.cpp
++++ b/ps2xRuntime/src/main.cpp
+@@ -9,6 +9,7 @@
+ #endif
+ 
+ #include <iostream>
++#include <thread>
+ #include <string>
+ #include <filesystem>
+ #include <exception>
+@@ -164,8 +165,27 @@ namespace
+     }
+ }
+ 
++// A setting the user left out of the environment (and of mksm.ini) gets this value.
++static void defaultEnv(const char *name, const char *value)
++{
++    if (std::getenv(name))
++        return;
++#if defined(_WIN32)
++    _putenv_s(name, value);
++#else
++    setenv(name, value, 0);
++#endif
++}
++
+ int main(int argc, char *argv[])
+ {
++    // The batching Vulkan renderer at 2x on its own thread is the default: as fast as the CPU
++    // one in MKSM (the slow stretches are the EE/VU1 in both) and much sharper. PS2X_GS_HW=0 goes
++    // back; without Vulkan it falls back by itself. Tests and the replay tool keep their defaults.
++    defaultEnv("PS2X_GS_HW", "1");
++    defaultEnv("PS2X_SCALE", "2");
++    if (std::thread::hardware_concurrency() >= 4u)
++        defaultEnv("PS2X_GS_HW_THREAD", "1");
+ #if defined(__ANDROID__)
+     redirectStdioToLogcat();
+ #endif
 diff --git a/ps2xTest/CMakeLists.txt b/ps2xTest/CMakeLists.txt
 index 3eaa8b3..d9eca70 100644
 --- a/ps2xTest/CMakeLists.txt

@@ -14,8 +14,9 @@
 #   PS2X_DEADZONE=25      zona morta do analógico em % (aumente se o personagem anda sozinho)
 #   PS2X_MOVIE_AUDIO=0    som dos filmes pelo caminho emulado (o padrão toca direto do .SFD)
 #   PS2X_GS_CSR_LAG=0     o jogo espera o GS terminar cada quadro (mais lento; só para comparar)
-#   PS2X_GS_HW=1          renderizador novo (experimental: mais fiel, mais lento na fase)
-#   PS2X_SCALE=2          resolução interna 2x/3x/4x (só com PS2X_GS_HW=1)
+#   PS2X_GS_HW=0          renderizador antigo, só na resolução do PS2 (o padrão é o novo, por lotes, em 2x)
+#   PS2X_SCALE=2          resolução interna do renderizador novo: 1 a 4 (padrão 2)
+#   PS2X_GS_HW_THREAD=0   renderizador novo numa thread só (o padrão usa uma thread a mais com 4+ núcleos lógicos)
 # Dois controles: o segundo joga na porta 2; o teclado só no primeiro jogador.
 # F11 alterna tela cheia. F9 grava a cena (2 quadros do GS) em gsrec/cena_<data>.gsr; F10 salva a tela em capturas/.
 set -euo pipefail

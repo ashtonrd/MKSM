@@ -70,7 +70,7 @@ private:
         uint64_t target = 0, texture = 0, blend = 0, test = 0, other = 0;
     };
     struct Renderer; // Vulkan state (gs_hw_backend.cpp)
-    // PS2X_GS_HW_THREAD=1 (off by default): draws, CLUT loads, transfers and flushes run in order on a thread
+    // PS2X_GS_HW_THREAD=1 (the game runner turns it on with 4+ hardware threads): draws, CLUT loads, transfers and flushes run in order on a thread
     // of their own (GSHwWorker), so decoding the GS and drawing overlap. Calls that read state
     // back wait for what was queued before them; Present is a marker in the stream.
     struct Async;

@@ -31,7 +31,8 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 fps for a few seconds (N08/N09) |
 | Fullscreen | ✅ F11 |
-| Higher internal resolution, widescreen | 🟡 Experimental renderer `PS2X_GS_HW=1 PS2X_SCALE=2` (slower); widescreen planned |
+| Higher internal resolution | ✅ New batching renderer at 2x by default, as fast as the old one; `PS2X_GS_HW=0` goes back to the old one, `PS2X_SCALE=1..4` picks the scale |
+| Widescreen | ❌ Planned |
 
 Detailed state: [`ESTADO.md`](ESTADO.md). Performance plan with measurements: [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md).
 

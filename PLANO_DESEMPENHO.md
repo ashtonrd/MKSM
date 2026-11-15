@@ -232,7 +232,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [ ] N10 Renderizador novo: menos custo por troca de estado
 - [x] N11 Renderizador novo: janela sem esperar a GPU, sem câmera lenta quando o GS atrasa, thread própria sem falha — 14/11, em 2x na cutscene: janela 60 fps estável (antes 12–48) com imagens novas = quadros do jogo; vsync ~60 (antes 15–35); thread própria sem falha em 3 rodadas de 150–160 s (era vazamento de memória de vídeo: 4 GB em 50 s, agora ~670 MB estáveis). O jogo desenha 16–24 quadros/s em 2x: isso é a N12. Barreiras estreitas passam para a N12 (decidir pelo perfil de GPU)
 - [ ] N12 Renderizador novo a 60/s em 2x (menos cópias de feedback e lotes, perfil de GPU por passo)
-- [ ] N13 Renderizador novo como padrão, com escala 2x (o usuário já escolheu o 2x em 14/11)
+- [x] N13 Renderizador novo como padrão, com escala 2x (o usuário já escolheu o 2x em 14/11) — 15/11: o `main.cpp` do runner põe `PS2X_GS_HW=1`, `PS2X_SCALE=2` e `PS2X_GS_HW_THREAD=1` (com 4+ threads de hardware) quando não vierem do ambiente/`mksm.ini`; `PS2X_GS_HW=0` volta ao antigo; testes e replay sem mudança. R5 sem variável nenhuma: cutscene 49,6 de média (antigo 50,2), gameplay 57,7 (mín 50; antigo 55,9 na mesma rodada de roteiro); abertura, avisos e título certos; 5,5 min de combate sem falha, memória da placa estável (~215 MiB) e do processo estável (~754 MB). Não é 60 fixo: os vales são do EE/VU1 nos dois renderizadores (N20)
 
 **Fase 6: o resto do jogo (com o usuário)**
 - [ ] N14 Avançar no jogo, apontando defeitos com F9 (antigas T15, T17)
@@ -540,7 +540,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 | Goro's Lair, velocidade | Sem câmera lenta: vsync 60 na cutscene e em combate; o jogo pula quadros nos trechos pesados (34–38 quadros/s em dois momentos da cutscene, ~52 em combate); uma hora seguida sem travar, memória estável em ~430 MB | N09 |
 | Goro's Lair, imagem | **Chão, paredes e raios corrigidos** (VIF na frente da VU1); usuário aprovou os prints | N03b, N05–N07 |
 | Liu Kang | Mortal parado corrigido (instrução MMI `PABSW` lia o registrador errado) | N04b |
-| Nitidez | 640×224 por campo; janela com ampliação bicúbica; escala 2x/3x só no renderizador novo, que está lento | N10–N13 |
+| Nitidez | Renderizador novo em 2x por padrão (15/11), tão rápido quanto o antigo; janela com ampliação bicúbica | N04, N19 |
 | Som | Bom (usuário); volumes no `mksm.ini`; eco 22 aprovado | — |
 | Controle | Dois controles (falta testar); vibração por porta | N15 |
 | Saves | Carregar funciona; autosave no meio da fase não testado | N15 |

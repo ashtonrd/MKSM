@@ -3338,8 +3338,8 @@ GSHwBackend::GSHwBackend(GSRasterBackend &inner, Mode mode) : m_inner(inner), m_
                 m_renderer->destroy();
                 m_renderer.reset();
             }
-            // shortcut: off by default; the worker waits on the GPU and fills its queue in the
-            // stage (16-28/s against 20-32/s on one thread). Worth retrying once the GPU has room.
+            // Decoding the GS and drawing overlap (+16-21% in the cutscene at 2x); the game runner
+            // turns it on by default (main.cpp), tests and the replay tool do not.
             const char *threaded = std::getenv("PS2X_GS_HW_THREAD");
             if (m_renderer && threaded && threaded[0] == '1')
             {
