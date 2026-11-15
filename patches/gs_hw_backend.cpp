@@ -258,8 +258,10 @@ namespace
         float texOffset[2];
         float depthScale;
         uint32_t texa;
+        uint32_t mip; // flag 32768: mxl | mmin << 3 | mmag << 6 | L << 7 | LCM << 9 | K (12 bits, 1/16) << 12
+        uint32_t pad[3];
     };
-    static_assert(sizeof(HwPush) == 64, "push constant layout must match gs_hw.vert/frag");
+    static_assert(sizeof(HwPush) == 80, "push constant layout must match gs_hw.vert/frag");
 
     constexpr uint32_t kSlots = 3u;
     constexpr VkDeviceSize kVertexBytes = 32ull << 20;
@@ -580,6 +582,7 @@ struct GSHwBackend::Renderer
     // Last texture resolved, reused while nothing it depends on changed (most primitives).
     uint64_t generation = 1;   // bumped when a surface or texture changes (the CLUT has clutSerial)
     uint64_t lastTexGeneration = 0, lastTexClutSerial = 0;
+    uint64_t lastTexTex1 = 0, lastTexMiptbp1 = 0, lastTexMiptbp2 = 0;
     GSTex0Reg lastTex0{};
     GSTexaReg lastTexa{};
     uint32_t lastTexW = 0, lastTexH = 0;
@@ -2375,12 +2378,14 @@ bool GSHwBackend::Renderer::resolveTexture(const GSPrimitiveBatch &b, Surface *t
     // A CLUT load only matters to paletted textures (it was most of the misses here and in draw).
     if (lastTexGeneration == generation && (!isPaletted(tex.psm) || lastTexClutSerial == clutSerial) &&
         std::memcmp(&lastTex0, &tex, sizeof(tex)) == 0 && lastTexW == w && lastTexH == h &&
-        lastTexa.ta0 == state.texa.ta0 && lastTexa.ta1 == state.texa.ta1 && lastTexa.aem == state.texa.aem)
+        lastTexa.ta0 == state.texa.ta0 && lastTexa.ta1 == state.texa.ta1 && lastTexa.aem == state.texa.aem &&
+        lastTexTex1 == state.context.tex1 && lastTexMiptbp1 == state.context.miptbp1 && lastTexMiptbp2 == state.context.miptbp2)
     {
         out.set = lastTexState.set;
         out.set1 = lastTexState.set1;
         std::memcpy(out.push.texOffset, lastTexState.push.texOffset, sizeof(out.push.texOffset));
-        out.push.flags |= lastTexState.push.flags & (16u | 128u | 1024u | 4096u);
+        out.push.flags |= lastTexState.push.flags & (16u | 128u | 1024u | 4096u | 32768u);
+        out.push.mip = lastTexState.push.mip;
         out.push.depthScale = lastTexState.push.depthScale;
         out.push.texa = lastTexState.push.texa;
         return true;
@@ -2390,6 +2395,7 @@ bool GSHwBackend::Renderer::resolveTexture(const GSPrimitiveBatch &b, Surface *t
     if (ok && !feedbackRead && !partialRead)
     {
         lastTexGeneration = generation, lastTexClutSerial = clutSerial, lastTex0 = tex, lastTexa = state.texa, lastTexW = w, lastTexH = h, lastTexState = out;
+        lastTexTex1 = state.context.tex1, lastTexMiptbp1 = state.context.miptbp1, lastTexMiptbp2 = state.context.miptbp2;
     }
     else
         lastTexGeneration = 0;
@@ -2540,6 +2546,63 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
         rx0 = 0u, ry0 = 0u, rx1 = w, ry1 = h;
     else
         key = (key ^ (uint64_t(rx0) | uint64_t(ry0) << 16 | uint64_t(rx1) << 32 | uint64_t(ry1) << 48)) * 0x100000001B3ull;
+    // Mipmap per pixel (TEX1 bit 10, set by the frontend): levels 1..MXL from MIPTBP1/2, same
+    // format and palette, go in an atlas below level 0 (level n at x = widths of 1..n-1); the
+    // shader picks the level from Q as the GS does. Before, one level per primitive (N04).
+    struct MipLevel
+    {
+        uint32_t tbp, tbw, w, h, x, y;
+    };
+    std::array<MipLevel, 7> levels{};
+    levels[0] = {tex.tbp0, tex.tbw, w, h, 0u, 0u};
+    uint32_t levelCount = 1u;
+    const uint64_t tex1 = state.context.tex1;
+    if ((tex1 & (1ull << 10)) != 0u && !partialRead)
+    {
+        const uint32_t mxl = std::min<uint32_t>(static_cast<uint32_t>((tex1 >> 2) & 7u), 6u);
+        for (uint32_t n = 1u, x = 0u; n <= mxl; ++n)
+        {
+            const uint64_t reg = n <= 3u ? state.context.miptbp1 : state.context.miptbp2;
+            const uint32_t shift = ((n - 1u) % 3u) * 20u;
+            const uint32_t tbp = static_cast<uint32_t>((reg >> shift) & 0x3FFFu), tbw = static_cast<uint32_t>((reg >> (shift + 14u)) & 0x3Fu);
+            if (tbp == 0u || tbw == 0u)
+                break;
+            const uint32_t lw = std::max(w >> n, 1u), lh = std::max(h >> n, 1u);
+            // MKSM leaves MIPTBP of levels it never reaches pointing at render targets: reading
+            // them meant a GPU readback per texture (cutscene 50 -> 31 frames/s). Stop there.
+            uint32_t l0 = 0u, l1 = 0u;
+            blockRange(tbp, tbw, tex.psm, lw, lh, l0, l1);
+            bool onTarget = false;
+            for (auto &sp : surfaces)
+                onTarget = onTarget || overlaps(l0, l1, sp->b0, sp->b1);
+            if (onTarget)
+                break;
+            levels[levelCount++] = {tbp, tbw, lw, lh, x, h};
+            x += lw;
+        }
+    }
+    if (levelCount > 1u)
+    {
+        key = (key ^ (state.context.miptbp1 * 0x9E3779B97F4A7C15ull) ^ (state.context.miptbp2 << 7) ^ levelCount) * 0x100000001B3ull;
+        out.push.flags |= 32768u;
+        const uint32_t k12 = static_cast<uint32_t>(tex1 >> 32) & 0xFFFu;
+        out.push.mip = (levelCount - 1u) | (static_cast<uint32_t>((tex1 >> 6) & 7u) << 3) | (static_cast<uint32_t>((tex1 >> 5) & 1u) << 6) |
+                       (static_cast<uint32_t>((tex1 >> 19) & 3u) << 7) | (static_cast<uint32_t>(tex1 & 1u) << 9) | (k12 << 12);
+        for (uint32_t n = 1u; n < levelCount; ++n)
+        {
+            uint32_t l0 = 0u, l1 = 0u;
+            blockRange(levels[n].tbp, levels[n].tbw, tex.psm, levels[n].w, levels[n].h, l0, l1);
+            b0 = std::min(b0, l0), b1 = std::max(b1, l1);
+        }
+    }
+    // Every block the texels come from, mip levels included.
+    const auto forEachTexBlock = [&](auto &&fn)
+    {
+        forEachBlock(tex.tbp0, tex.tbw, tex.psm, rx0, ry0, rx1 - rx0, ry1 - ry0, fn);
+        for (uint32_t n = 1u; n < levelCount; ++n)
+            forEachBlock(levels[n].tbp, levels[n].tbw, tex.psm, 0u, 0u, levels[n].w, levels[n].h, fn);
+    };
+    const uint32_t imageH = levelCount > 1u ? h + levels[1].h : h;
     if (auto it = textures.find(key); it != textures.end())
     {
         if (auto c = contentCache.find(it->second.content); c != contentCache.end())
@@ -2558,7 +2621,7 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
             if (!p->gpuNewer || !overlaps(b0, b1, p->b0, p->b1))
                 continue;
             bool current = true;
-            forEachBlock(tex.tbp0, tex.tbw, tex.psm, rx0, ry0, rx1 - rx0, ry1 - ry0, [&](uint32_t blk) {
+            forEachTexBlock([&](uint32_t blk) {
                 if (!blockCurrent(*p, blk))
                     current = false;
             });
@@ -2575,7 +2638,7 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
     entry.lastUse = ++useCounter;
     {
         std::vector<uint8_t> seen(kVramBlocks, 0u);
-        forEachBlock(tex.tbp0, tex.tbw, tex.psm, rx0, ry0, rx1 - rx0, ry1 - ry0, [&](uint32_t blk) {
+        forEachTexBlock([&](uint32_t blk) {
             if (!seen[blk])
                 seen[blk] = 1u, entry.blocks.push_back(static_cast<uint16_t>(blk));
         });
@@ -2595,7 +2658,7 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
         textures.emplace(key, std::move(entry));
         return true;
     }
-    if (contentCache.size() > 3000u || contentBytes + uint64_t(w) * h * 4u > kContentBudget)
+    if (contentCache.size() > 3000u || contentBytes + uint64_t(w) * imageH * 4u > kContentBudget)
     {
         // Drop the least recently used down to 3/4 of both limits (textures entries that point
         // at a dropped one miss on their next lookup).
@@ -2612,41 +2675,46 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
         }
     }
     VkDeviceSize offset = 0;
-    uint8_t *dst = stage(VkDeviceSize(w) * h * 4u, offset);
+    uint8_t *dst = stage(VkDeviceSize(w) * imageH * 4u, offset);
     if (!dst)
         return false;
     auto *texels = reinterpret_cast<uint32_t *>(dst);
-    if (partialRead) // texels outside the sampled region are never read
-        std::memset(texels, 0, size_t(w) * h * 4u);
+    if (partialRead || levelCount > 1u) // texels outside the sampled region (or the levels) are never read
+        std::memset(texels, 0, size_t(w) * imageH * 4u);
     // A row at a time through GSMem::ReadRow (the read per texel was ~5% of the GS thread at 2x),
     // decoded in ordinary memory: the staging buffer is write-combined, reading it back is slow.
     const uint32_t *colors = paletted ? paletteFor(state).colors.data() : nullptr;
-    const uint32_t n = rx1 > rx0 ? rx1 - rx0 : 0u;
     thread_local std::vector<uint32_t> rowBuffer;
+    for (uint32_t level = 0u; level < levelCount; ++level)
+    {
+    const MipLevel &lv = levels[level];
+    const uint32_t lx0 = level == 0u ? rx0 : 0u, ly0 = level == 0u ? ry0 : 0u;
+    const uint32_t lx1 = level == 0u ? rx1 : lv.w, ly1 = level == 0u ? ry1 : lv.h;
+    const uint32_t n = lx1 > lx0 ? lx1 - lx0 : 0u;
     rowBuffer.resize(n);
     uint32_t *row = rowBuffer.data();
-    for (uint32_t y = ry0; y < ry1 && n != 0u; ++y)
+    for (uint32_t y = ly0; y < ly1 && n != 0u; ++y)
     {
         switch (tex.psm)
         {
         case GS_PSM_T4: case GS_PSM_T4HL: case GS_PSM_T4HH: case GS_PSM_T8: case GS_PSM_T8H:
         {
-            GSMem::ReadRow(vram, tex.psm, tex.tbp0, tex.tbw, rx0, y, row, n);
+            GSMem::ReadRow(vram, tex.psm, lv.tbp, lv.tbw, lx0, y, row, n);
             const uint32_t mask = isFourBit(tex.psm) ? 0xFu : 0xFFu;
             for (uint32_t i = 0; i < n; ++i)
                 row[i] = colors[row[i] & mask];
             break;
         }
         case GS_PSM_CT32: case GS_PSM_Z32:
-            GSMem::ReadRow(vram, tex.psm, tex.tbp0, tex.tbw, rx0, y, row, n);
+            GSMem::ReadRow(vram, tex.psm, lv.tbp, lv.tbw, lx0, y, row, n);
             break;
         case GS_PSM_CT24: case GS_PSM_Z24:
-            GSMem::ReadRow(vram, tex.psm, tex.tbp0, tex.tbw, rx0, y, row, n);
+            GSMem::ReadRow(vram, tex.psm, lv.tbp, lv.tbw, lx0, y, row, n);
             for (uint32_t i = 0; i < n; ++i)
                 row[i] = applyTexa(state.texa, tex.psm, row[i]);
             break;
         case GS_PSM_CT16: case GS_PSM_CT16S: case GS_PSM_Z16:
-            GSMem::ReadRow(vram, tex.psm, tex.tbp0, tex.tbw, rx0, y, row, n);
+            GSMem::ReadRow(vram, tex.psm, lv.tbp, lv.tbw, lx0, y, row, n);
             for (uint32_t i = 0; i < n; ++i)
                 row[i] = expand5551(row[i], state.texa);
             break;
@@ -2654,15 +2722,16 @@ bool GSHwBackend::Renderer::resolveTextureSlow(const GSPrimitiveBatch &b, Surfac
             std::fill(row, row + n, 0xFFFF00FFu);
             break;
         }
-        std::memcpy(texels + size_t(y) * w + rx0, row, size_t(n) * 4u);
+        std::memcpy(texels + size_t(lv.y + y) * w + lv.x + lx0, row, size_t(n) * 4u);
+    }
     }
     ContentEntry decoded;
-    decoded.image = textureImage(w, h);
+    decoded.image = textureImage(w, imageH);
     decoded.lastUse = useCounter;
     VkBufferImageCopy region{};
     region.bufferOffset = offset;
     region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    region.imageExtent = {w, h, 1};
+    region.imageExtent = {w, imageH, 1};
     endPass();
     gpuKind(GkUpload);
     vkCmdCopyBufferToImage(cmd(), slots[slot].staging.buffer, decoded.image.image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
@@ -3447,7 +3516,7 @@ static bool g_hwRendering = false;
 bool gsMipPerPixel()
 {
     static const bool enabled = [] { const char *v = std::getenv("PS2X_MIP_PIXEL"); return !(v && v[0] == '0'); }();
-    return enabled && !g_hwRendering;
+    return enabled; // both renderers sample the levels per pixel (the batching one since N04)
 }
 
 std::unique_ptr<GSRasterBackend> GSHwBackend::WrapFromEnvironment(std::unique_ptr<GSRasterBackend> inner)

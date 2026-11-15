@@ -26,6 +26,8 @@ layout(push_constant) uniform PC
     vec2 texOffset;
     float depthScale;
     uint texa; // ta0 | aem << 8 | 512 = 24-bit texture (alpha from TEXA)
+    uint mip;  // flag 32768: mxl | mmin << 3 | mmag << 6 | L << 7 | LCM << 9 | K (12 bits, 1/16) << 12
+    uint pad0, pad1, pad2;
 } pc;
 
 layout(location = 0, index = 0) out vec4 outColor;
@@ -84,9 +86,56 @@ vec4 fetchTexel(ivec2 c)
     return t;
 }
 
+// Mip level n of a decoded texture: an atlas with level 0 on top and levels 1..n in a row below
+// it. Half the size per level, region bounds scaled the same way (as gs_tiles.comp).
+vec4 fetchLevel(ivec2 c, uint level)
+{
+    ivec2 size0 = ivec2(pc.texSize);
+    ivec2 size = max(size0 >> int(level), ivec2(1));
+    ivec2 origin = ivec2(0, level > 0u ? size0.y : 0);
+    for (uint i = 1u; i < level; ++i)
+        origin.x += max(size0.x >> int(i), 1);
+    c.x = wrapCoord(c.x, size.x, pc.wrap & 3u, (pc.clampU & 0xFFFFu) >> level, (pc.clampU >> 16) >> level);
+    c.y = wrapCoord(c.y, size.y, (pc.wrap >> 2) & 3u, (pc.clampV & 0xFFFFu) >> level, (pc.clampV >> 16) >> level);
+    ivec2 limit = textureSize(tex, 0) - 1;
+    return texelFetch(tex, clamp(origin + clamp(c, ivec2(0), size - 1), ivec2(0), limit), 0) * 255.0;
+}
+
+vec4 sampleLevel(vec2 uv, uint level, bool bilinear)
+{
+    vec2 luv = uv / float(1u << level);
+    if (!bilinear)
+        return floor(fetchLevel(ivec2(floor(luv)), level));
+    vec2 f = luv - 0.5;
+    ivec2 c = ivec2(floor(f));
+    vec2 w = floor((f - floor(f)) * 256.0) / 256.0;
+    vec4 top = mix(floor(fetchLevel(c, level)), floor(fetchLevel(c + ivec2(1, 0), level)), w.x);
+    vec4 bottom = mix(floor(fetchLevel(c + ivec2(0, 1), level)), floor(fetchLevel(c + ivec2(1, 1), level)), w.x);
+    return floor(mix(top, bottom, w.y));
+}
+
 vec4 sampleTexture()
 {
     vec2 uv = (pc.flags & 2u) != 0u ? vStq.xy : vStq.xy / abs(vStq.z) * pc.texSize;
+    // Mipmap per pixel: the GS LOD is (log2(1/|Q|) << L) + K, or K with LCM. MMIN 4/5 filter
+    // inside a level, 3/5 blend two (weights in 1/256).
+    if ((pc.flags & 32768u) != 0u && (pc.flags & 2u) == 0u)
+    {
+        uint mxl = pc.mip & 7u, mmin = (pc.mip >> 3) & 7u, mmag = (pc.mip >> 6) & 1u, lshift = (pc.mip >> 7) & 3u;
+        float k = float(int(pc.mip << 8) >> 20) / 16.0;
+        float aq = max(abs(vStq.z), 1e-30);
+        float lod = ((pc.mip >> 9) & 1u) != 0u ? k : log2(1.0 / aq) * float(1u << lshift) + k;
+        if (lod <= 0.0)
+            return sampleLevel(uv, 0u, mmag != 0u);
+        bool inLevelLinear = mmin >= 4u;
+        float maxLevel = float(mxl);
+        if (mmin == 2u || mmin == 4u)
+            return sampleLevel(uv, uint(clamp(floor(lod + 0.5), 0.0, maxLevel)), inLevelLinear);
+        float l0 = min(floor(lod), maxLevel);
+        uint a = uint(l0), b = uint(min(l0 + 1.0, maxLevel));
+        float weight = floor(clamp((lod - l0) * 256.0, 0.0, 255.0)) / 256.0;
+        return floor(mix(sampleLevel(uv, a, inLevelLinear), sampleLevel(uv, b, inLevelLinear), weight));
+    }
     if ((pc.flags & 4u) == 0u)
         return floor(fetchTexel(ivec2(floor(uv))));
     vec2 f = uv - 0.5;

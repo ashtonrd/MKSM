@@ -216,7 +216,13 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [x] N02 Confirmar a causa: um nível de mipmap por triângulo — confirmado: com o nível pelo maior Q do triângulo, o chão do fundo fica fino em vez de blocos
 - [x] N03 Mipmap por pixel (trilinear) no renderizador padrão — feito e ligado (`PS2X_MIP_PIXEL=0` desliga); sem custo (gameplay 59,6 → 59,9/s); hashes antigos iguais. Na cena gravada, o fundo fica um pouco mais suave, mas o xadrez forte do print 2 não aparece nela → N03b
 - [x] N03b Chão quadriculado — **corrigido** (14/11): o VIF agora anda na frente da VU1 (`PS2X_VIF_AHEAD`, ligado). O jogo manda as cores e o TEX0 de cada lote logo depois do MSCNT, direto no pacote que o programa envia; rodando o programa na hora, cada lote saía com as cores do lote de dois antes. Chão, paredes e fundo da cutscene agora batem com as referências do original
-- [ ] N04 Mipmap por pixel no renderizador novo
+- [x] N04 Mipmap por pixel no renderizador novo — 15/11:
+  - O frontend passa o nível 0 com a marca (bit 10 do `TEX1`) também para o renderizador novo.
+  - O `resolveTextureSlow` decodifica os níveis 1..MXL (de `MIPTBP1/2`) num atlas abaixo do nível 0, na mesma imagem e no mesmo cache por conteúdo, com os blocos de todos os níveis.
+  - O `gs_hw.frag` calcula o LOD por pixel como o `gs_tiles.comp`: log2(1/|Q|)·2^L + K, ou K com LCM; MMIN 2/4 pega um nível, 3/5 mistura dois; limites de região divididos por nível.
+  - Armadilha: o MKSM deixa `MIPTBP` de níveis que nunca alcança apontando para alvos de desenho. Decodificar esses níveis trazia o alvo de volta da GPU a cada textura (cutscene 50 → 31 quadros/s). A cadeia agora para no primeiro nível que cai num alvo, e o custo ficou igual ao de um nível por primitivo (48,6 contra 49,1).
+  - Gravações novas (as antigas guardaram a escolha de nível do frontend): cutscene novo × antigo 29,7 dB, gameplay 28,4/28,1. Nas cenas medidas a diferença visível é pequena; o efeito aparece no chão ao longe.
+  - Hashes 2x, R4 e testes iguais (as gravações de referência não têm a marca).
 - [x] N04b Liu Kang "girando" parado — **corrigido** (14/11): a instrução MMI `PABSW` era traduzida lendo o registrador errado (rs em vez de rt). O jogo usa `PABSW` para escolher o caminho mais curto entre dois quadros-chave de ângulo (`0x2AD378`); com o valor errado, na volta do laço da animação de espera os ossos davam uma volta de 360° em 4 quadros. Corrigidas também `PROT3W`, `PEXEW`, `PEXEH`, `PEXCH`, `PEXCW`, `PREVH`, `PINTH`, `PINTEH`, `PADDUH`, `PSUBUH` no recompilador. Nas gravações dos tempos em que o mortal sempre aparecia, ele fica parado. Resíduo a conferir: dois quadros soltos com pose de pulo na janela logo no começo da gameplay (~0,1 s, na entrada), que não aparecem na gravação do GS
 
 **Fase 3: luzes**

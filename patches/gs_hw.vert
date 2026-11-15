@@ -19,6 +19,8 @@ layout(push_constant) uniform PC
     vec2 texOffset;
     float depthScale;
     uint texa; // ta0 | aem << 8 | 512 = 24-bit texture (alpha from TEXA)
+    uint mip;  // see gs_hw.frag
+    uint pad0, pad1, pad2;
 } pc;
 
 layout(location = 0) noperspective out vec4 vColor;
