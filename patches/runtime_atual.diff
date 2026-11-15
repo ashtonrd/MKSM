@@ -5171,7 +5171,7 @@ index f0ad507..ed0e7a6 100644
      };
  
 diff --git a/ps2xRuntime/src/lib/gs/gs_frontend.cpp b/ps2xRuntime/src/lib/gs/gs_frontend.cpp
-index 9281d5f..0776ea3 100644
+index 9281d5f..18913ee 100644
 --- a/ps2xRuntime/src/lib/gs/gs_frontend.cpp
 +++ b/ps2xRuntime/src/lib/gs/gs_frontend.cpp
 @@ -1,6 +1,9 @@
@@ -5184,18 +5184,27 @@ index 9281d5f..0776ea3 100644
  #include "runtime/ps2_memory.h"
  #include <atomic>
  #include <algorithm>
-@@ -10,6 +13,10 @@
+@@ -10,6 +13,19 @@
  #include <iostream>
  #include <sstream>
  
 +
 +static std::atomic<uint64_t> g_gsGameFrameSerial{0u};
++
++// The debug history only fills while the debug panel reads it (within the last 120 vsyncs):
++// an entry for every register write, GIF tag and primitive cost the GS thread ~10% at 2x.
++static std::atomic<uint64_t> g_debugHistoryReadTick{~0ull};
++static bool debugHistoryWanted(uint64_t tick)
++{
++    const uint64_t read = g_debugHistoryReadTick.load(std::memory_order_relaxed);
++    return read != ~0ull && tick - read < 120u;
++}
 +uint64_t gsGameFrameSerial() { return g_gsGameFrameSerial.load(std::memory_order_relaxed); }
 +
  namespace
  {
      static constexpr uint32_t kHostFrameWidth = 640u;
-@@ -106,7 +113,7 @@ namespace
+@@ -106,7 +122,7 @@ namespace
  
  
  GS::GS()
@@ -5204,7 +5213,15 @@ index 9281d5f..0776ea3 100644
  {
      reset();
  }
-@@ -314,9 +321,14 @@ GSDebugHistoryEntry GS::makeDebugEventUnlocked(GSDebugEventKind kind) const
+@@ -266,6 +282,7 @@ GSDebugSnapshot GS::getDebugSnapshot() const
+ std::vector<GSDebugHistoryEntry> GS::getDebugHistory() const
+ {
+     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
++    g_debugHistoryReadTick.store(m_privRegs ? m_privRegs->vsyncTick.load(std::memory_order_relaxed) : 0u, std::memory_order_relaxed);
+ 
+     std::vector<GSDebugHistoryEntry> out;
+     out.reserve(m_debugHistoryCount);
+@@ -314,15 +331,20 @@ GSDebugHistoryEntry GS::makeDebugEventUnlocked(GSDebugEventKind kind) const
      entry.bitbltbuf = m_bitbltbuf;
      entry.trxpos = m_trxpos;
      entry.trxreg = m_trxreg;
@@ -5222,7 +5239,59 @@ index 9281d5f..0776ea3 100644
      return entry;
  }
  
-@@ -526,18 +538,34 @@ GSPresentationRequest GS::buildPresentationRequestUnlocked() const
+ void GS::recordDebugEventUnlocked(GSDebugHistoryEntry entry)
+ {
+-    if (m_debugHistoryPaused)
++    if (m_debugHistoryPaused || !debugHistoryWanted(m_privRegs ? m_privRegs->vsyncTick.load(std::memory_order_relaxed) : 0u))
+     {
+         return;
+     }
+@@ -352,7 +374,7 @@ void GS::recordDebugEventUnlocked(GSDebugHistoryEntry entry)
+ 
+ void GS::recordGifTagDebugEventUnlocked(uint32_t sizeBytes, uint32_t nloop, uint8_t flg, uint32_t nreg)
+ {
+-    if (m_debugHistoryPaused)
++    if (m_debugHistoryPaused || !debugHistoryWanted(m_privRegs ? m_privRegs->vsyncTick.load(std::memory_order_relaxed) : 0u))
+     {
+         return;
+     }
+@@ -367,7 +389,7 @@ void GS::recordGifTagDebugEventUnlocked(uint32_t sizeBytes, uint32_t nloop, uint
+ 
+ void GS::recordRegisterDebugEventUnlocked(uint8_t regAddr, uint64_t value)
+ {
+-    if (m_debugHistoryPaused)
++    if (m_debugHistoryPaused || !debugHistoryWanted(m_privRegs ? m_privRegs->vsyncTick.load(std::memory_order_relaxed) : 0u))
+     {
+         return;
+     }
+@@ -410,7 +432,7 @@ void GS::recordRegisterDebugEventUnlocked(uint8_t regAddr, uint64_t value)
+ 
+ void GS::recordDrawDebugEventUnlocked(int vertexCount)
+ {
+-    if (m_debugHistoryPaused)
++    if (m_debugHistoryPaused || !debugHistoryWanted(m_privRegs ? m_privRegs->vsyncTick.load(std::memory_order_relaxed) : 0u))
+     {
+         return;
+     }
+@@ -447,7 +469,7 @@ void GS::recordDrawDebugEventUnlocked(int vertexCount)
+ 
+ void GS::recordTransferDebugEventUnlocked()
+ {
+-    if (m_debugHistoryPaused)
++    if (m_debugHistoryPaused || !debugHistoryWanted(m_privRegs ? m_privRegs->vsyncTick.load(std::memory_order_relaxed) : 0u))
+     {
+         return;
+     }
+@@ -459,7 +481,7 @@ void GS::recordTransferDebugEventUnlocked()
+ 
+ void GS::recordPresentDebugEventUnlocked(uint32_t displayFbp, uint32_t sourceFbp, uint32_t width, uint32_t height, bool usedPreferred)
+ {
+-    if (m_debugHistoryPaused)
++    if (m_debugHistoryPaused || !debugHistoryWanted(m_privRegs ? m_privRegs->vsyncTick.load(std::memory_order_relaxed) : 0u))
+     {
+         return;
+     }
+@@ -526,18 +548,34 @@ GSPresentationRequest GS::buildPresentationRequestUnlocked() const
  
  void GS::latchHostPresentationFrame()
  {
@@ -5260,7 +5329,7 @@ index 9281d5f..0776ea3 100644
      }
  
      PresentationFrame frame{};
-@@ -570,8 +598,10 @@ void GS::latchHostPresentationFrame()
+@@ -570,8 +608,10 @@ void GS::latchHostPresentationFrame()
  
      if (hasFrame)
      {
@@ -5273,7 +5342,7 @@ index 9281d5f..0776ea3 100644
      }
  }
  
-@@ -610,7 +640,12 @@ bool GS::copyLatchedHostPresentationFrame(std::vector<uint8_t> &outPixels,
+@@ -610,7 +650,12 @@ bool GS::copyLatchedHostPresentationFrame(std::vector<uint8_t> &outPixels,
      outPixels.resize(packedRowBytes * static_cast<size_t>(outHeight));
      if (outWidth != 0u && outHeight != 0u)
      {
@@ -5287,7 +5356,7 @@ index 9281d5f..0776ea3 100644
          for (uint32_t y = 0; y < outHeight; ++y)
          {
              const size_t srcOffset = static_cast<size_t>(y) * sourceRowBytes;
-@@ -1577,6 +1612,18 @@ void GS::vertexKick(bool drawing)
+@@ -1577,6 +1622,18 @@ void GS::vertexKick(bool drawing)
      {
          GSPrimitiveBatch batch = buildDrawBatch(needed);
          updatePreferredDisplaySourceForDraw(batch);
@@ -5306,7 +5375,7 @@ index 9281d5f..0776ea3 100644
          m_backend->Submit(batch);
          recordDrawDebugEventUnlocked(needed);
      }
-@@ -1693,12 +1740,64 @@ GSPrimitiveBatch GS::buildDrawBatch(int vertexCount) const
+@@ -1693,12 +1750,64 @@ GSPrimitiveBatch GS::buildDrawBatch(int vertexCount) const
      batch.state.fogR = m_fogR;
      batch.state.fogG = m_fogG;
      batch.state.fogB = m_fogB;

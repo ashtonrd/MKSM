@@ -532,15 +532,15 @@ struct GSHwBackend::Renderer
     uint32_t paletteNext = 0;
     uint32_t clutCbp[2]{~0u, ~0u};
     // Last texture resolved, reused while nothing it depends on changed (most primitives).
-    uint64_t generation = 1;   // bumped when a surface, texture or the CLUT changes
-    uint64_t lastTexGeneration = 0;
+    uint64_t generation = 1;   // bumped when a surface or texture changes (the CLUT has clutSerial)
+    uint64_t lastTexGeneration = 0, lastTexClutSerial = 0;
     GSTex0Reg lastTex0{};
     GSTexaReg lastTexa{};
     uint32_t lastTexW = 0, lastTexH = 0;
     BatchState lastTexState{};
     // Last draw state: identical state (most primitives) goes straight to the vertex copy.
     GSDrawState lastDrawState{};
-    uint64_t lastDrawGeneration = 0;
+    uint64_t lastDrawGeneration = 0, lastDrawClutSerial = 0;
     uint8_t lastDrawCount = 0;
 
     Renderer(GSHwBackend &o, GSCpuBackend &c) : owner(o), cpu(c) {}
@@ -2136,6 +2136,7 @@ void GSHwBackend::Renderer::loadClut(const GSTex0Reg &tex0, const GSTexClutReg &
     else
         GSMem::ReadRow(vram, readPsm, tex0.cbp, texclut.cbw ? texclut.cbw : 1u, static_cast<uint32_t>(texclut.cou) << 4u, texclut.cov,
                        texelsRead, entryCount);
+    bool clutChanged = false;
     for (uint32_t entry = firstEntry; entry < entryCount; ++entry)
     {
         const uint32_t raw = tex0.csm == 0u ? texelsRead[(entry & ~0x18u) | ((entry & 0x08u) << 1u) | ((entry & 0x10u) >> 1u)]
@@ -2143,11 +2144,13 @@ void GSHwBackend::Renderer::loadClut(const GSTex0Reg &tex0, const GSTexClutReg &
         const uint32_t d = (csm1Suffix ? entry : destinationBase + entry) & (sixteenBit ? 0x1FFu : 0x0FFu);
         const uint16_t lo = static_cast<uint16_t>(sixteenBit ? raw : (raw & 0xFFFFu)), hi = static_cast<uint16_t>(raw >> 16u);
         if (clut[d] != lo || (!sixteenBit && clut[d + 256u] != hi))
-            ++generation, ++clutSerial;
+            clutChanged = true;
         clut[d] = lo;
         if (!sixteenBit)
             clut[d + 256u] = hi;
     }
+    if (clutChanged)
+        ++clutSerial;
 }
 
 // The CLUT converted for how this draw reads it, redone only when the CLUT or that changes (256
@@ -2268,7 +2271,9 @@ bool GSHwBackend::Renderer::resolveTexture(const GSPrimitiveBatch &b, Surface *t
     out.push.texSize[0] = static_cast<float>(w);
     out.push.texSize[1] = static_cast<float>(h);
     out.push.scale = static_cast<float>(scale);
-    if (lastTexGeneration == generation && std::memcmp(&lastTex0, &tex, sizeof(tex)) == 0 && lastTexW == w && lastTexH == h &&
+    // A CLUT load only matters to paletted textures (it was most of the misses here and in draw).
+    if (lastTexGeneration == generation && (!isPaletted(tex.psm) || lastTexClutSerial == clutSerial) &&
+        std::memcmp(&lastTex0, &tex, sizeof(tex)) == 0 && lastTexW == w && lastTexH == h &&
         lastTexa.ta0 == state.texa.ta0 && lastTexa.ta1 == state.texa.ta1 && lastTexa.aem == state.texa.aem)
     {
         out.set = lastTexState.set;
@@ -2283,7 +2288,7 @@ bool GSHwBackend::Renderer::resolveTexture(const GSPrimitiveBatch &b, Surface *t
     // Feedback copies must be redone for every draw; everything else can be reused.
     if (ok && !feedbackRead && !partialRead)
     {
-        lastTexGeneration = generation, lastTex0 = tex, lastTexa = state.texa, lastTexW = w, lastTexH = h, lastTexState = out;
+        lastTexGeneration = generation, lastTexClutSerial = clutSerial, lastTex0 = tex, lastTexa = state.texa, lastTexW = w, lastTexH = h, lastTexState = out;
     }
     else
         lastTexGeneration = 0;
@@ -2600,13 +2605,14 @@ bool GSHwBackend::Renderer::draw(const GSPrimitiveBatch &b)
 {
     const GSDrawState &state = b.state;
     const bool same = batchCount != 0u && batch.color && lastDrawGeneration == generation && lastDrawCount == b.vertexCount &&
+                      (!(state.prim.tme && isPaletted(state.context.tex0.psm)) || lastDrawClutSerial == clutSerial) &&
                       !feedbackLast && std::memcmp(&lastDrawState, &state, sizeof(state)) == 0 && (!feedbackSurface || feedbackServed(b)) && (!dateSurface || dateServed(b));
     if (!same)
     {
         if (!drawState(b))
             return false;
         std::memcpy(&lastDrawState, &state, sizeof(state));
-        lastDrawGeneration = generation;
+        lastDrawGeneration = generation, lastDrawClutSerial = clutSerial;
         lastDrawCount = b.vertexCount;
     }
     appendVertices(b);
