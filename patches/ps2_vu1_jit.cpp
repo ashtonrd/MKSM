@@ -1418,11 +1418,32 @@ void VU1Interpreter::prepareJitTable(const uint8_t *vuCode, uint32_t codeSize, P
             continue;
         }
         const uint8_t opHi = (lower >> 25) & 0x7Fu;
-        const bool readsArithmeticFlags = opHi == 0x14u || opHi == 0x16u || opHi == 0x17u ||
-                                          opHi == 0x18u || opHi == 0x1Au || opHi == 0x1Bu;
-        if (!readsArithmeticFlags || (upper & 0x80000000u) != 0u)
+        const bool readsStatus = opHi == 0x14u || opHi == 0x16u || opHi == 0x17u;
+        const bool readsMac = opHi == 0x18u || opHi == 0x1Au || opHi == 0x1Bu;
+        if ((!readsStatus && !readsMac) || (upper & 0x80000000u) != 0u)
             continue;
-        const uint32_t first = index > kFlagReaderWindow ? index - kFlagReaderWindow : 0u;
+        uint32_t first = index > kFlagReaderWindow ? index - kFlagReaderWindow : 0u;
+        if (readsMac)
+        {
+            // A MAC flag write lands 4 cycles after its FMAC and a pair takes at least one cycle:
+            // the reader sees nothing older than the first flag-writing pair 4 or more pairs back,
+            // whose write supersedes everything before it (MKSM's vertex loop reads MAC flags,
+            // and the 16-pair window sent ~80% of its interpreted pairs there). The status
+            // flags keep the whole window: their sticky bits come from every earlier FMAC.
+            for (uint32_t back = 1u; back <= kFlagReaderWindow && back <= index; ++back)
+            {
+                uint32_t previous = 0u;
+                std::memcpy(&previous, vuCode + (index - back) * 8u + 4u, 4u);
+                const UpperKind kind = decodeUpper(previous).kind;
+                const bool writesMac = kind == UpperKind::Add || kind == UpperKind::Sub || kind == UpperKind::Mul ||
+                                       kind == UpperKind::Madd || kind == UpperKind::Msub;
+                if (back >= 4u && writesMac)
+                {
+                    first = index - back;
+                    break;
+                }
+            }
+        }
         for (uint32_t covered = first; covered <= index; ++covered)
             jit.tables->nearFlagReader[covered] = true;
     }
