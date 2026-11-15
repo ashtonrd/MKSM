@@ -211,7 +211,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [x] N03 Mipmap por pixel (trilinear) no renderizador padrão — feito e ligado (`PS2X_MIP_PIXEL=0` desliga); sem custo (gameplay 59,6 → 59,9/s); hashes antigos iguais. Na cena gravada, o fundo fica um pouco mais suave, mas o xadrez forte do print 2 não aparece nela → N03b
 - [x] N03b Chão quadriculado — **corrigido** (14/11): o VIF agora anda na frente da VU1 (`PS2X_VIF_AHEAD`, ligado). O jogo manda as cores e o TEX0 de cada lote logo depois do MSCNT, direto no pacote que o programa envia; rodando o programa na hora, cada lote saía com as cores do lote de dois antes. Chão, paredes e fundo da cutscene agora batem com as referências do original
 - [ ] N04 Mipmap por pixel no renderizador novo
-- [!] N04b Liu Kang "girando" parado — **reproduzido e caracterizado, causa não achada** (14/11): parado, ele dá um mortal completo para a frente em 3 quadros e volta a ficar parado, a cada 6 "segundos" do roteiro (300 leituras do pad), sempre igual. Descartados com medida: VU1 em thread, CSR lag, idle skip, tempo real (`PS2X_UNCAPPED`), ordem VIF/VU1, arredondamento da FPU, JIT da VU0, modos de DMA do scratchpad, flags MAC. Detalhes e próximos passos na seção 7
+- [x] N04b Liu Kang "girando" parado — **corrigido** (14/11): a instrução MMI `PABSW` era traduzida lendo o registrador errado (rs em vez de rt). O jogo usa `PABSW` para escolher o caminho mais curto entre dois quadros-chave de ângulo (`0x2AD378`); com o valor errado, na volta do laço da animação de espera os ossos davam uma volta de 360° em 4 quadros. Corrigidas também `PROT3W`, `PEXEW`, `PEXEH`, `PEXCH`, `PEXCW`, `PREVH`, `PINTH`, `PINTEH`, `PADDUH`, `PSUBUH` no recompilador. Nas gravações dos tempos em que o mortal sempre aparecia, ele fica parado. Resíduo a conferir: dois quadros soltos com pose de pulo na janela logo no começo da gameplay (~0,1 s, na entrada), que não aparecem na gravação do GS
 
 **Fase 3: luzes**
 - [x] N05 Raios: eram o mesmo defeito do chão (N03b). Os passes "opacos" dos raios tinham o alfa de vértice de outro lote; com o VIF na frente da VU, o `softenLightRay` não disparava mais (0 de 1,94 milhão de candidatos em 165 s; 290 mil sem a correção) e foi apagado junto com `PS2X_RAYS`. Raios da abertura da cutscene macios como no `goro_0_raios_teto.png`
@@ -369,7 +369,13 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   - A pose errada já está nos dados do GS: vem das matrizes do esqueleto (EE/VU0, antes da VU1).
   - **Descartados com medida:** `PS2X_VU1_THREAD=0`, `PS2X_GS_CSR_LAG=0`, `MKSM_NO_IDLE_SKIP=1`, `PS2X_VIF_AHEAD=0`, `PS2X_UNCAPPED=1`, arredondamento para zero na GameThread (teste temporário com `fesetround`), VU0 sem JIT (teste temporário), DMA do scratchpad (o jogo só usa o modo normal, já tratado), flags MAC da VU0 no modo macro (as 73 leituras de `CFC2 vi17` vêm todas depois de um `VSUB`, que já calcula as flags). O CVT.W.S já trunca e satura (inline no `fpu_translator.cpp`).
   - **Hipótese principal:** volta do laço da animação de espera (período de 300 leituras do pad). Ou o índice do quadro passa do fim por 3 quadros e lê a animação seguinte (o pulo com mortal do Liu Kang), ou a interpolação entre o último e o primeiro quadro-chave vai pelo caminho longo (quatérnio com o sinal trocado, giro de 360°).
-  - **Próximo:** achar a função que amostra a animação. Despejar a RAM (`PS2X_DUMP_RAM_AT`) no quadro antes e no quadro do mortal, procurar o estado da animação do Liu Kang (tempo/índice que dá a volta) e seguir quem o lê no `output/`. Comparar com a instrução da EE envolvida (suspeitas restantes: `MAX.S`/`MIN.S` com `std::max`, MMI de 128 bits, `DIV`/`MULT1`, conversões no VU0 macro `VFTOI`/`VITOF`).
+  - **Causa e correção (14/11, mais tarde):**
+    1. RAM despejada no mesmo ponto de cada quadro (primeira leitura do `VIF1_STAT`) em volta de um mortal: uma matriz de rotação de osso (`0xF84680`, Liu Kang) recebe, nos 4 quadros do mortal, rotações extras de 0°, ~86°, 180°, ~274° em torno do mesmo eixo, ou seja, uma volta completa.
+    2. Vigia de escrita (`mprotect` + passo único) na matriz: quem escreve é `0x214E60` (matriz a partir de 3 ângulos, seno/cosseno por microprogramas da VU0), chamada de `0x2AD530`.
+    3. Antes da chamada, `0x2AD31C`–`0x2AD440` interpola ângulos de 12 bits entre quadros-chave: calcula a diferença `d` e `d + 0x800`, embrulha em 12 bits (`psllw`/`psraw` 20), tira o valor absoluto com **`pabsw`**, soma as 3 componentes e fica com a menor.
+    4. O código gerado tinha `PS2_PABSW(GPR_VEC(ctx, 0))`: o tradutor lia rs (sempre `$zero` aqui) em vez de rt, então as duas somas davam 0 e a escolha ficava errada em certas voltas do laço.
+    5. Corrigido no `mmi_translation_helpers.cpp` (e as outras permutações de MMI com ordem errada); teste novo "MMI permutations use the R5900 element order" e `PABSW`/`PABSH` no teste de leitura de rt. Código regenerado: 51 arquivos mudaram (correções de MMI e o `VMAX`/`VMINI` da VU0 que nunca tinha sido regenerado); com o `sm.toml` do repositório, a geração nova é idêntica ao que foi compilado.
+  - **Próximo (antigo):** achar a função que amostra a animação. Despejar a RAM (`PS2X_DUMP_RAM_AT`) no quadro antes e no quadro do mortal, procurar o estado da animação do Liu Kang (tempo/índice que dá a volta) e seguir quem o lê no `output/`. Comparar com a instrução da EE envolvida (suspeitas restantes: `MAX.S`/`MIN.S` com `std::max`, MMI de 128 bits, `DIV`/`MULT1`, conversões no VU0 macro `VFTOI`/`VITOF`).
 
 ### N04 Mipmap por pixel no renderizador novo
 - **Faça:** a antiga T10b (apêndice): o LOD pelo Q interpolado no `gs_hw.frag` e os níveis num atlas. Use a mesma consulta e o mesmo interruptor da N03. Antes, compare as capturas dos dois renderizadores na mesma cena gravada **depois** da N03.
@@ -476,7 +482,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 | Menus | 60/s; sem tremida (usuário confirmou); todas as opções abrem e voltam | — |
 | Goro's Lair, velocidade | Sem câmera lenta: vsync 60 na cutscene e em combate; o jogo pula quadros nos trechos pesados (34–38 quadros/s em dois momentos da cutscene, ~52 em combate); uma hora seguida sem travar, memória estável em ~430 MB | N09 |
 | Goro's Lair, imagem | **Chão, paredes e raios corrigidos** (VIF na frente da VU1); usuário aprovou os prints | N03b, N05–N07 |
-| Liu Kang | Mortal de 3 quadros a cada ~5 s parado; reproduzido e determinístico, causa não achada | N04b [!] |
+| Liu Kang | Mortal parado corrigido (instrução MMI `PABSW` lia o registrador errado) | N04b |
 | Nitidez | 640×224 por campo; janela com ampliação bicúbica; escala 2x/3x só no renderizador novo, que está lento | N10–N13 |
 | Som | Bom (usuário); volumes no `mksm.ini`; eco 22 aprovado | — |
 | Controle | Dois controles (falta testar); vibração por porta | N15 |
@@ -506,7 +512,7 @@ Perguntas que só o usuário pode responder. **Não pare o trabalho por elas.** 
 - (N04b, respondido 14/11) Gira toda vez que para, em qualquer lugar.
 - (N03b, respondido 14/11) Os quadrados existem desde sempre, inclusive na cutscene do Raiden; o usuário acha que falta suavização/textura/upscale. Depois de resolver, seguir o plano inteiro.
 - (14/11) A imagem na janela agora é ampliada com filtro bicúbico (mais nítido que o bilinear). Ficou melhor? Algum halo em volta do texto do HUD? (`PS2X_UPSCALE=0` no `mksm.ini` volta ao antigo.)
-- (N04b, 14/11) O Liu Kang "girando" é um mortal completo de 3 quadros que se repete a cada ~5 s com ele parado, igual ao seu print 05494? Acontece também andando, ou só parado?
+- (N04b, 14/11, respondido: só parado) Corrigido depois: o Liu Kang ainda gira parado em algum lugar?
 - (N03b/N05–N07, 14/11) O chão ainda aparece quadriculado em algum lugar? O raio arco-íris e os raios com degraus sumiram? (A cutscene e a primeira sala ficaram como as referências do original nas capturas.)
 - (N09, quando pronta) Ainda sente engasgo na cutscene?
 

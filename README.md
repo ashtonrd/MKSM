@@ -28,7 +28,7 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Every other stage tested start to finish | ❌ To do |
 | Windows build | ❌ Not tested |
 | Floors, walls and light rays in Goro's Lair | ✅ As in the original (the VIF now runs ahead of VU1: the game sends each batch's colors right after starting it) |
-| Liu Kang flips for 3 frames every few seconds while standing | ❌ Open ([`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md), N04b) |
+| Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 fps for a few seconds (N08/N09) |
 | Fullscreen | ✅ F11 |
 | Higher internal resolution, widescreen | 🟡 Experimental renderer `PS2X_GS_HW=1 PS2X_SCALE=2` (slower); widescreen planned |

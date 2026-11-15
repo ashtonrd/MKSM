@@ -824,6 +824,125 @@ index 435db3a..f709a32 100644
              case COP1_S_RSQRT:
                  // RSQRT.S fd, fs, ft computes fs / sqrt(ft), not 1 / sqrt(fs).
                  return fmt::format("ctx->f[{}] = FPU_RSQRT_S(ctx->f[{}], ctx->f[{}]);", fd, fs, ft);
+diff --git a/ps2xRecomp/src/lib/mmi_translation_helpers.cpp b/ps2xRecomp/src/lib/mmi_translation_helpers.cpp
+index a2bcb77..b29a690 100644
+--- a/ps2xRecomp/src/lib/mmi_translation_helpers.cpp
++++ b/ps2xRecomp/src/lib/mmi_translation_helpers.cpp
+@@ -81,7 +81,9 @@ namespace ps2recomp
+         switch (subfunc)
+         {
+         case MMI1_PABSW:
+-            return fmt::format("SET_GPR_VEC(ctx, {}, PS2_PABSW(GPR_VEC(ctx, {})));", rd, rs);
++            // Source is rt; |0x80000000| saturates to 0x7FFFFFFF. Reading rs here made MKSM's shortest-path
++            // test for keyframe angles always see 0, so idle loops spun bones 360 degrees.
++            return fmt::format("SET_GPR_VEC(ctx, {}, _mm_min_epu32(_mm_abs_epi32(GPR_VEC(ctx, {})), _mm_set1_epi32(0x7FFFFFFF)));", rd, rt);
+         case MMI1_PCEQW:
+             return fmt::format("SET_GPR_VEC(ctx, {}, PS2_PCEQW(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
+         case MMI1_PMINW:
+@@ -89,7 +91,7 @@ namespace ps2recomp
+         case MMI1_PADSBH:
+             return translatePADSBH(inst);
+         case MMI1_PABSH:
+-            return fmt::format("SET_GPR_VEC(ctx, {}, PS2_PABSH(GPR_VEC(ctx, {})));", rd, rs);
++            return fmt::format("SET_GPR_VEC(ctx, {}, _mm_min_epu16(_mm_abs_epi16(GPR_VEC(ctx, {})), _mm_set1_epi16(0x7FFF)));", rd, rt);
+         case MMI1_PCEQH:
+             return fmt::format("SET_GPR_VEC(ctx, {}, PS2_PCEQH(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
+         case MMI1_PMINH:
+@@ -105,9 +107,9 @@ namespace ps2recomp
+         case MMI1_PEXTUW:
+             return fmt::format("SET_GPR_VEC(ctx, {}, PS2_PEXTUW(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
+         case MMI1_PADDUH:
+-            return fmt::format("SET_GPR_VEC(ctx, {}, _mm_add_epi16(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
++            return fmt::format("SET_GPR_VEC(ctx, {}, _mm_adds_epu16(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
+         case MMI1_PSUBUH:
+-            return fmt::format("SET_GPR_VEC(ctx, {}, _mm_sub_epi16(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
++            return fmt::format("SET_GPR_VEC(ctx, {}, _mm_subs_epu16(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
+         case MMI1_PEXTUH:
+             return fmt::format("SET_GPR_VEC(ctx, {}, PS2_PEXTUH(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
+         case MMI1_PADDUB:
+@@ -145,7 +147,8 @@ namespace ps2recomp
+         case MMI2_PMFLO:
+             return fmt::format("SET_GPR_U64(ctx, {}, ctx->lo);", rd);
+         case MMI2_PINTH:
+-            return fmt::format("SET_GPR_VEC(ctx, {}, PS2_PINTH(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
++            // rt's lower halfwords interleaved with rs's upper ones (h0=rt.h0, h1=rs.h4, h2=rt.h1, ...).
++            return fmt::format("SET_GPR_VEC(ctx, {}, _mm_unpacklo_epi16(GPR_VEC(ctx, {}), _mm_unpackhi_epi64(GPR_VEC(ctx, {}), GPR_VEC(ctx, {}))));", rd, rt, rs, rs);
+         case MMI2_PMULTW:
+             return translatePMULTW(inst);
+         case MMI2_PDIVW:
+@@ -199,7 +202,8 @@ namespace ps2recomp
+         case MMI3_PMTLO:
+             return translatePMTLO(inst);
+         case MMI3_PINTEH:
+-            return fmt::format("SET_GPR_VEC(ctx, {}, PS2_PINTEH(GPR_VEC(ctx, {}), GPR_VEC(ctx, {})));", rd, rs, rt);
++            // Even halfwords interleaved: each word = rt.low16 | rs.low16 << 16.
++            return fmt::format("SET_GPR_VEC(ctx, {}, _mm_or_si128(_mm_and_si128(GPR_VEC(ctx, {}), _mm_set1_epi32(0xFFFF)), _mm_slli_epi32(GPR_VEC(ctx, {}), 16)));", rd, rt, rs);
+         case MMI3_PMULTUW:
+             return translatePMULTUW(inst);
+         case MMI3_PDIVUW:
+@@ -454,16 +458,16 @@ namespace ps2recomp
+ 
+     std::string CodeGenerator::translatePEXEH(const Instruction &inst)
+     {
+-        // Swaps halfwords 1<->3 and 5<->7 within the 128-bit register
+-        return fmt::format("SET_GPR_VEC(ctx, {}, _mm_shufflelo_epi16(_mm_shufflehi_epi16(GPR_VEC(ctx, {}), _MM_SHUFFLE(2,3,0,1)), _MM_SHUFFLE(2,3,0,1)));",
++        // Exchanges even halfwords in each doubleword: (h2, h1, h0, h3)
++        return fmt::format("SET_GPR_VEC(ctx, {}, _mm_shufflelo_epi16(_mm_shufflehi_epi16(GPR_VEC(ctx, {}), _MM_SHUFFLE(3,0,1,2)), _MM_SHUFFLE(3,0,1,2)));",
+                            inst.rd, inst.rt);
+     }
+ 
+ 
+     std::string CodeGenerator::translatePREVH(const Instruction &inst)
+     {
+-        // Reverses the order of the 8 halfwords
+-        return fmt::format("{{ __m128i mask = _mm_setr_epi8(14,15, 12,13, 10,11, 8,9, 6,7, 4,5, 2,3, 0,1); "
++        // Reverses the 4 halfwords of each doubleword
++        return fmt::format("{{ __m128i mask = _mm_setr_epi8(6,7, 4,5, 2,3, 0,1, 14,15, 12,13, 10,11, 8,9); "
+                            "SET_GPR_VEC(ctx, {}, PS2_SHUFFLE_EPI8(GPR_VEC(ctx, {}), mask)); }}",
+                            inst.rd, inst.rt);
+     }
+@@ -513,15 +517,16 @@ namespace ps2recomp
+ 
+     std::string CodeGenerator::translatePEXEW(const Instruction &inst)
+     {
+-        return fmt::format("SET_GPR_VEC(ctx, {}, PS2_PEXEW(GPR_VEC(ctx, {})));",
++        // Exchanges even words: (w2, w1, w0, w3)
++        return fmt::format("SET_GPR_VEC(ctx, {}, _mm_shuffle_epi32(GPR_VEC(ctx, {}), _MM_SHUFFLE(3,0,1,2)));",
+                            inst.rd, inst.rt);
+     }
+ 
+ 
+     std::string CodeGenerator::translatePROT3W(const Instruction &inst)
+     {
+-        // Rotates words left by 3: [d,c,b,a] -> [a,d,c,b]
+-        return fmt::format("SET_GPR_VEC(ctx, {}, _mm_shuffle_epi32(GPR_VEC(ctx, {}), _MM_SHUFFLE(0,3,2,1)));",
++        // Rotates the three low words, word 3 stays: (w1, w2, w0, w3)
++        return fmt::format("SET_GPR_VEC(ctx, {}, _mm_shuffle_epi32(GPR_VEC(ctx, {}), _MM_SHUFFLE(3,0,2,1)));",
+                            inst.rd, inst.rt);
+     }
+ 
+@@ -560,8 +565,8 @@ namespace ps2recomp
+ 
+     std::string CodeGenerator::translatePEXCH(const Instruction &inst)
+     {
+-        // Parallel Exchange Center Halfword (same as MMI2 PEXEH)
+-        return fmt::format("SET_GPR_VEC(ctx, {}, _mm_shufflelo_epi16(_mm_shufflehi_epi16(GPR_VEC(ctx, {}), _MM_SHUFFLE(2,3,0,1)), _MM_SHUFFLE(2,3,0,1)));",
++        // Exchanges the center halfwords of each doubleword: (h0, h2, h1, h3)
++        return fmt::format("SET_GPR_VEC(ctx, {}, _mm_shufflelo_epi16(_mm_shufflehi_epi16(GPR_VEC(ctx, {}), _MM_SHUFFLE(3,1,2,0)), _MM_SHUFFLE(3,1,2,0)));",
+                            inst.rd, inst.rt);
+     }
+ 
+@@ -577,8 +582,8 @@ namespace ps2recomp
+ 
+     std::string CodeGenerator::translatePEXCW(const Instruction &inst)
+     {
+-        // Parallel Exchange Center Word (Swaps words 0<>2, 1<>3)
+-        return fmt::format("SET_GPR_VEC(ctx, {}, _mm_shuffle_epi32(GPR_VEC(ctx, {}), _MM_SHUFFLE(1,0,3,2)));",
++        // Exchanges the center words: (w0, w2, w1, w3)
++        return fmt::format("SET_GPR_VEC(ctx, {}, _mm_shuffle_epi32(GPR_VEC(ctx, {}), _MM_SHUFFLE(3,1,2,0)));",
+                            inst.rd, inst.rt);
+     }
+ 
 diff --git a/ps2xRecomp/src/lib/ps2_recompiler.cpp b/ps2xRecomp/src/lib/ps2_recompiler.cpp
 index 8c1c7c5..1c7b7a3 100644
 --- a/ps2xRecomp/src/lib/ps2_recompiler.cpp
@@ -7237,7 +7356,7 @@ index 3eaa8b3..d9eca70 100644
  if(PRINT_GENERATED_CODE)
  
 diff --git a/ps2xTest/src/code_generator_tests.cpp b/ps2xTest/src/code_generator_tests.cpp
-index 463b6cf..f49d9a1 100644
+index 463b6cf..49db9c3 100644
 --- a/ps2xTest/src/code_generator_tests.cpp
 +++ b/ps2xTest/src/code_generator_tests.cpp
 @@ -269,6 +269,50 @@ void register_code_generator_tests()
@@ -7291,6 +7410,59 @@ index 463b6cf..f49d9a1 100644
      tc.Run("R5900 MULT writes rd when rd is non-zero", [](TestCase &t) {
          CodeGenerator gen({}, {});
  
+@@ -1245,6 +1289,8 @@ void register_code_generator_tests()
+                 {"PEXCH", MMI_MMI3, MMI3_PEXCH},
+                 {"PCPYH", MMI_MMI3, MMI3_PCPYH},
+                 {"PEXCW", MMI_MMI3, MMI3_PEXCW},
++                {"PABSW", MMI_MMI1, MMI1_PABSW},
++                {"PABSH", MMI_MMI1, MMI1_PABSH},
+             };
+ 
+             for (const UnaryMmiCase &item : cases)
+@@ -1266,6 +1312,43 @@ void register_code_generator_tests()
+             }
+         });
+ 
++        tc.Run("MMI permutations use the R5900 element order", [](TestCase &t) {
++            CodeGenerator gen({}, {});
++            struct Case
++            {
++                const char *name;
++                uint8_t function;
++                uint8_t subfunction;
++                const char *expected;
++            };
++            // PROT3W (w1,w2,w0,w3), PEXEW (w2,w1,w0,w3), PEXCW (w0,w2,w1,w3), PEXEH (h2,h1,h0,h3) and
++            // PEXCH (h0,h2,h1,h3) per doubleword, PREVH reverses each doubleword's halfwords.
++            const std::vector<Case> cases = {
++                {"PROT3W", MMI_MMI2, MMI2_PROT3W, "_MM_SHUFFLE(3,0,2,1)"},
++                {"PEXEW", MMI_MMI2, MMI2_PEXEW, "_MM_SHUFFLE(3,0,1,2)"},
++                {"PEXCW", MMI_MMI3, MMI3_PEXCW, "_MM_SHUFFLE(3,1,2,0)"},
++                {"PEXEH", MMI_MMI2, MMI2_PEXEH, "_MM_SHUFFLE(3,0,1,2)"},
++                {"PEXCH", MMI_MMI3, MMI3_PEXCH, "_MM_SHUFFLE(3,1,2,0)"},
++                {"PREVH", MMI_MMI2, MMI2_PREVH, "6,7, 4,5, 2,3, 0,1, 14,15"},
++                {"PABSW", MMI_MMI1, MMI1_PABSW, "0x7FFFFFFF"},
++                {"PADDUH", MMI_MMI1, MMI1_PADDUH, "_mm_adds_epu16"},
++                {"PSUBUH", MMI_MMI1, MMI1_PSUBUH, "_mm_subs_epu16"},
++            };
++            for (const Case &item : cases)
++            {
++                Instruction inst{};
++                inst.isMMI = true;
++                inst.opcode = OPCODE_MMI;
++                inst.function = item.function;
++                inst.sa = item.subfunction;
++                inst.rd = 3;
++                inst.rs = 4;
++                inst.rt = 5;
++                const std::string out = gen.translateInstruction(inst);
++                t.IsTrue(out.find(item.expected) != std::string::npos, std::string(item.name) + " element order / saturation");
++            }
++        });
++
+         tc.Run("VU0 macro mappings cover all S1/S2 enums", [](TestCase &t) {
+             const std::vector<std::string> candidates = {
+                 "ps2xRecomp/include/ps2recomp/instructions.h",
 diff --git a/ps2xTest/src/main.cpp b/ps2xTest/src/main.cpp
 index 7b78891..e7b3dfc 100644
 --- a/ps2xTest/src/main.cpp

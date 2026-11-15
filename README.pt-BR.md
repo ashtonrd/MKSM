@@ -28,7 +28,7 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Resto das fases testadas do início ao fim | ❌ Falta |
 | Build para Windows | ❌ Não testado |
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
-| Liu Kang dá um mortal de 3 quadros a cada poucos segundos parado | ❌ Aberto ([`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md), N04b) |
+| Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
 | Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos (N08/N09) |
 | Tela cheia | ✅ F11 |
 | Resolução interna maior, widescreen | 🟡 Renderizador experimental `PS2X_GS_HW=1 PS2X_SCALE=2` (mais lento); widescreen planejado |
