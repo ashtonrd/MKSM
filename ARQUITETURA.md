@@ -86,7 +86,7 @@ Caminhos relativos a `PS2Recomp/ps2xRuntime/` quando não indicado.
 
 **Janela (host):** abre em 2x (1280×896) com monitor de 1080 linhas; F11 = tela cheia sem bordas; imagem em 4:3 centralizada. Em notebook com PRIME, o runtime pede a NVIDIA para o OpenGL da janela antes do `InitWindow` (`PS2X_GPU_AUTO=0` desliga). `scripts/jogar.sh` + `mksm.ini` para as opções.
 
-**Janela:** o `UploadFrame` mostra a média do campo atual com o último quadro vindo da outra página de exibição (`PS2X_DEINTERLACE=0` desliga) e amplia com filtro bilinear.
+**Janela:** o `UploadFrame` mostra a média do campo atual com o último quadro vindo da outra página de exibição (`PS2X_DEINTERLACE=0` desliga) e amplia com filtro bilinear. Custo por quadro da janela: a imagem do tamanho da textura sobe como veio (sem copiar para outro buffer nem zerar), a média sai 16 bytes por vez (`_mm_avg_epu8`, igual a `(a+b+1)>>1`) e os buffers do campo anterior trocam de dono (`swap`) em vez de copiar. Em 2x são 4,6 MB por quadro: com cópias e a média byte a byte, a thread principal gastava ~81% de um núcleo e roubava CPU das threads do GS e da VU1 (agora ~28%).
 
 **Campos:** o MKSM desenha um campo 640×224 em uma das páginas `0x00`/`0x46` e passa para a outra no campo seguinte. Bloom (`0x8C`), cópias de Z (`0x12C`/`0x14C`) e HUD acontecem antes da troca. Por isso "fim de quadro" = **troca entre `0x00` e `0x46`**, regra usada pela cópia da janela, pelo medidor e pela gravação. Na fase, o `PS2X_PERF` mostra essas trocas no mesmo ritmo do vsync (um campo por vsync). A espera em `0x274688` compara o contador de vsync com `último+2`; falta conferir como as duas coisas se encaixam.
 

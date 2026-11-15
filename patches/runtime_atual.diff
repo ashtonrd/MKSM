@@ -5920,7 +5920,7 @@ index 8590f14..3ae32a9 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..2e28070 100644
+index 45cb9d2..833d049 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,7 @@
@@ -5939,7 +5939,17 @@ index 45cb9d2..2e28070 100644
  #include "ThreadNaming.h"
  #include "Kernel/Stubs/Audio.h"
  #include "Kernel/Stubs/GS.h"
-@@ -27,6 +32,8 @@
+@@ -14,6 +19,9 @@
+ #include "ps2_iop_host.h"
+ #include "ps2x/iop/iop_subsystem.h"
+ 
++#if defined(__SSE2__)
++#include <emmintrin.h>
++#endif
+ #include <iostream>
+ #include <stdexcept>
+ #include <fstream>
+@@ -27,6 +35,8 @@
  #include <unordered_map>
  #include <sstream>
  
@@ -5948,8 +5958,24 @@ index 45cb9d2..2e28070 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -375,8 +382,6 @@ namespace
+@@ -373,10 +383,22 @@ namespace
+     }
+ }
  
++// out = (a + b + 1) >> 1 per byte (the field blend), 16 bytes at a time.
++static void averageBytes(uint8_t *out, const uint8_t *a, const uint8_t *b, size_t n)
++{
++    size_t i = 0;
++#if defined(__SSE2__)
++    for (; i + 16u <= n; i += 16u)
++        _mm_storeu_si128(reinterpret_cast<__m128i *>(out + i),
++                         _mm_avg_epu8(_mm_loadu_si128(reinterpret_cast<const __m128i *>(a + i)),
++                                      _mm_loadu_si128(reinterpret_cast<const __m128i *>(b + i))));
++#endif
++    for (; i < n; ++i)
++        out[i] = static_cast<uint8_t>((a[i] + b[i] + 1u) >> 1);
++}
++
  static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint32_t &outHeight)
  {
 -    static uint64_t s_lastPresentationTick = std::numeric_limits<uint64_t>::max();
@@ -5957,7 +5983,7 @@ index 45cb9d2..2e28070 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,19 +392,9 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +409,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -5978,12 +6004,19 @@ index 45cb9d2..2e28070 100644
 +    // so some refreshes saw no tick and the next saw two, dropping ~5 finished frames a second.
 +    rt->gs().latchHostPresentationFrame();
  
-     s_scratch.clear();
+-    s_scratch.clear();
      uint32_t width = 0u;
-@@ -450,13 +445,25 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+     uint32_t height = 0u;
+     uint32_t displayFbp = 0u;
+@@ -450,13 +461,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
+-    std::fill(s_uploadBuffer.begin(), s_uploadBuffer.end(), 0u);
+-    if (!s_scratch.empty() && width != 0u && height != 0u)
+-    {
+-        const uint32_t copyWidth = std::min<uint32_t>(width, FB_WIDTH);
+-        const uint32_t copyHeight = std::min<uint32_t>(height, FB_HEIGHT);
 +    // Frames bigger than the texture (the batching renderer at PS2X_SCALE 2-4) grow it.
 +    if (width > static_cast<uint32_t>(tex.width) || height > static_cast<uint32_t>(tex.height))
 +    {
@@ -5996,11 +6029,14 @@ index 45cb9d2..2e28070 100644
 +        s_uploadBuffer.assign(static_cast<size_t>(newWidth) * newHeight * 4u, 0u);
 +    }
 +    const uint32_t texWidth = static_cast<uint32_t>(tex.width), texHeight = static_cast<uint32_t>(tex.height);
-     std::fill(s_uploadBuffer.begin(), s_uploadBuffer.end(), 0u);
-     if (!s_scratch.empty() && width != 0u && height != 0u)
-     {
--        const uint32_t copyWidth = std::min<uint32_t>(width, FB_WIDTH);
--        const uint32_t copyHeight = std::min<uint32_t>(height, FB_HEIGHT);
++    // A frame the size of the texture is uploaded as it came (the window ran ~80% of a core at
++    // 2x with the copies and the blend below done byte by byte, 4.6 MB a frame).
++    const uint8_t *frame = s_scratch.data();
++    const bool exact = width == texWidth && height == texHeight && s_scratch.size() == s_uploadBuffer.size();
++    if (!exact)
++        frame = s_uploadBuffer.data(), std::fill(s_uploadBuffer.begin(), s_uploadBuffer.end(), 0u);
++    if (!exact && !s_scratch.empty() && width != 0u && height != 0u)
++    {
 +        const uint32_t copyWidth = std::min<uint32_t>(width, texWidth);
 +        const uint32_t copyHeight = std::min<uint32_t>(height, texHeight);
          const size_t srcRowBytes = static_cast<size_t>(width) * 4u;
@@ -6009,7 +6045,7 @@ index 45cb9d2..2e28070 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +478,28 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +499,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -6020,26 +6056,32 @@ index 45cb9d2..2e28070 100644
 +    static const bool blendFields = [] { const char *v = std::getenv("PS2X_DEINTERLACE"); return !(v && *v == '0'); }();
 +    static std::vector<uint8_t> s_previous, s_otherField, s_shown;
 +    static uint32_t s_previousFbp = std::numeric_limits<uint32_t>::max();
-+    const uint8_t *shown = s_uploadBuffer.data();
++    const size_t bytes = s_uploadBuffer.size();
++    const uint8_t *shown = frame;
 +    if (blendFields)
 +    {
-+        if (displayFbp != s_previousFbp && s_previous.size() == s_uploadBuffer.size())
-+            s_otherField = s_previous; // the last picture from the other field page
-+        if (s_otherField.size() == s_uploadBuffer.size())
++        if (displayFbp != s_previousFbp && s_previous.size() == bytes)
++            s_otherField.swap(s_previous); // the last picture from the other field page
++        if (s_otherField.size() == bytes)
 +        {
-+            s_shown.resize(s_uploadBuffer.size());
-+            for (size_t i = 0; i < s_uploadBuffer.size(); ++i)
-+                s_shown[i] = static_cast<uint8_t>((s_uploadBuffer[i] + s_otherField[i] + 1u) >> 1);
++            s_shown.resize(bytes);
++            averageBytes(s_shown.data(), frame, s_otherField.data(), bytes);
 +            shown = s_shown.data();
 +        }
-+        s_previous = s_uploadBuffer;
-+        s_previousFbp = displayFbp;
 +    }
 +    UpdateTexture(tex, shown);
++    if (blendFields)
++    {
++        if (exact)
++            s_previous.swap(s_scratch); // refilled whole by the next copyLatchedHostPresentationFrame
++        else
++            s_previous.assign(frame, frame + bytes);
++        s_previousFbp = displayFbp;
++    }
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +511,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +538,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -6048,7 +6090,7 @@ index 45cb9d2..2e28070 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +559,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +586,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -6058,7 +6100,7 @@ index 45cb9d2..2e28070 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +699,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +726,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -6154,7 +6196,7 @@ index 45cb9d2..2e28070 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -732,9 +785,47 @@ bool PS2Runtime::initialize(const char *title)
+@@ -732,9 +812,47 @@ bool PS2Runtime::initialize(const char *title)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
          SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -6202,7 +6244,7 @@ index 45cb9d2..2e28070 100644
  #endif
          SetTargetFPS(60);
          if (m_debugUiInitCallback)
-@@ -2214,6 +2305,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +2332,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -6214,7 +6256,7 @@ index 45cb9d2..2e28070 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +2456,16 @@ void PS2Runtime::run()
+@@ -2360,13 +2483,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -6231,7 +6273,7 @@ index 45cb9d2..2e28070 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +2487,63 @@ void PS2Runtime::run()
+@@ -2388,9 +2514,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -6296,7 +6338,7 @@ index 45cb9d2..2e28070 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +2554,173 @@ void PS2Runtime::run()
+@@ -2401,25 +2581,173 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -6484,7 +6526,7 @@ index 45cb9d2..2e28070 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +2731,192 @@ void PS2Runtime::run()
+@@ -2430,21 +2758,192 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());
