@@ -8,6 +8,8 @@
   - Subir de nível e distribuir pontos fica no R3, ao lado do menu Gráfico: subiu de nível, pausa, R3 e distribui. Redistribuir é livre.
   - **O modo só se escolhe ao começar um jogo do zero.** Um save normal nunca vira RPG no meio.
   - **A tela de load/save mostra quais saves são RPG** (uma tag em cima do save).
+  - **Um save RPG fica RPG para sempre:** a pessoa não muda mais.
+  - **Perto do nome do personagem, na tela de jogo:** o nível e quanto falta para o próximo, tipo "0/300" no começo, mudando com o tempo.
 
 **Como usar este plano:**
 - Faça as tarefas da seção 7 **na ordem, uma por vez**, no formato de cada uma (Faça / Verifique / Pronto quando).
@@ -42,6 +44,7 @@
 | **XP saldo** | O número que o jogo mostra no HUD ("EXP") e no mapa. Sobe ao matar inimigos, desce ao comprar golpes. |
 | **XP ganho** | Tudo o que o personagem ganhou desde o começo do jogo RPG. Só sobe. **É dele que sai o nível.** |
 | **Nível** | Começa em 1. Função do XP ganho (curva em 3.2). Nunca desce. |
+| **Progresso do nível** | XP ganho desde o último nível / custo do degrau atual. Começa em "0/300" e zera a cada nível ("0/400" ao chegar no 2). |
 | **Pontos** | 1 por nível acima do 1. Livres = (nível − 1) − gastos. |
 | **Perfil RPG** | O estado do modo num save: XP ganho (se o RPG precisar guardar; ver 3.1), pontos gastos em cada atributo e o nível (cópia, para a tag de 3.8). |
 | **Foto do save** | O perfil RPG gravado no instante em que o jogo grava o save. É o que volta quando o save é carregado (3.7). |
@@ -102,7 +105,7 @@ O menu Gráfico vira uma janela com **duas abas lado a lado**. O uso pedido: sub
   Gráfico   [ RPG ]                              L1/R1: trocar aba
   ─────────────────────────────────────────────────────────────
   Liu Kang · Nível 7 · 2 pontos livres
-  XP ganho        4.900 / 5.950   ▕██████████████░░░░░▏
+  Próximo nível     600 / 1.650   ▕██████░░░░░░░░░░░░░▏   XP ganho 4.900
   Força       3   +15% de dano causado               X: +1 ponto
   Defesa      2   −6% de dano recebido
   Vida        0   +0% de vida máxima
@@ -125,7 +128,12 @@ O menu Gráfico vira uma janela com **duas abas lado a lado**. O uso pedido: sub
 
 ### 3.5 Indicador e aviso de nível
 
-- **Indicador:** "Nv 1" no começo, e "Nv 7+2" com pontos livres, em dourado, junto ao HUD do jogador 1 (posição exata na C3, por capturas). O tamanho acompanha a altura da imagem, e a posição é relativa à imagem do jogo (certo em 4:3 e 16:9).
+- **Indicador, ao lado do nome do personagem no HUD** (pedido do usuário): nível e progresso, em dourado.
+  - No começo: **"Nv 1 · 0/300"**. Depois, por exemplo, "Nv 7 · 600/1.650"; com pontos livres, "Nv 7+2 · 600/1.650".
+  - O progresso é o do nível atual (2): o XP desde o último nível sobre o custo do degrau. Ao subir, zera ("Nv 2 · 0/400").
+  - Atualiza na hora em que o XP entra.
+  - Posição exata na C3, por capturas: na mesma linha do nome, sem cobrir o nome, a barra de vida nem o "EXP".
+  - O tamanho acompanha a altura da imagem, e a posição é relativa à imagem do jogo (certo em 4:3 e 16:9).
   - Aparece na gameplay e na pausa, só num save RPG.
   - Some em filmes, cutscenes (se a A7 achar como distingui-las) e menus.
 - **Aviso de nível:** ao subir, "NÍVEL 8! +1 ponto · Select e R3 para distribuir" no alto da imagem por 3 s, sem cobrir o HUD. Vários níveis de uma vez viram um aviso só ("NÍVEL 10! +3 pontos").
@@ -345,8 +353,11 @@ O menu Gráfico vira uma janela com **duas abas lado a lado**. O uso pedido: sub
   - **Pronto quando:** roteiro e capturas anotados.
 
 - [ ] **C3 Indicador, aviso de nível e dicas**
-  - **Faça:** "Nv 1" / "Nv 7+2" junto ao HUD, o aviso de 3.5 e as dicas de 3.4; esconder em filmes, menus e cutscenes (A7).
-  - **Verifique:** capturas em 4:3 e 16:9, gameplay e pausa, sem cobrir a barra de vida nem o "EXP"; um nível ganho no roteiro mostra o aviso uma vez; save normal sem nada do RPG na tela.
+  - **Faça:** "Nv 1 · 0/300" ao lado do nome do personagem (3.5), o aviso de 3.5 e as dicas de 3.4; esconder em filmes, menus e cutscenes (A7). Se o nome do personagem muda de lugar ou de tamanho (troca de personagem, 2 jogadores), a posição vem da A3/A7 ou de uma tabela por personagem.
+  - **Verifique:**
+    - capturas em 4:3 e 16:9, gameplay e pausa, com Liu Kang e Kung Lao: o texto na linha do nome, sem cobrir nome, barra de vida nem "EXP";
+    - no roteiro, o progresso sobe a cada inimigo, chega a 300/300, vira "Nv 2 · 0/400" e mostra o aviso uma vez;
+    - save normal sem nada do RPG na tela.
   - **Pronto quando:** capturas anotadas.
 
 - [ ] **C4 Escolha na tela de dificuldade**
@@ -408,12 +419,13 @@ O menu Gráfico vira uma janela com **duas abas lado a lado**. O uso pedido: sub
 | Escolher o modo | Só na tela de dificuldade de um jogo novo; fixo depois | Usuário, 15/11 |
 | Saves RPG visíveis | Tag "RPG · Nv N" nas telas de load e save | Usuário, 15/11 |
 | Morrer e recarregar | O perfil volta à foto do save | Igual ao que o jogo faz com o XP e os golpes |
-| Desligar num save RPG | Não dá; o save é RPG para sempre | Segue a regra "fixo depois" (pergunta em 9) |
+| Desligar num save RPG | Não dá; o save é RPG para sempre | Usuário confirmou, 15/11 |
+| Na tela de jogo | "Nv 7 · 600/1.650" ao lado do nome do personagem; progresso do nível atual, zera a cada nível | Usuário, 15/11 ("0/300 no começo e vai mudando") |
 | Inimigos mais fortes | Não | Fora do pedido; ver D3 |
 
 ## 9. Perguntas para o usuário (juntar aqui; não parar por elas)
 
-- Num save RPG, também não dá para desligar o modo (o save fica RPG para sempre). Está certo?
+- Nenhuma em aberto. (Se o usuário preferir o XP total no indicador, "4.900/5.950" em vez do progresso do nível, é só trocar o texto na C3.)
 
 ## 10. Riscos conhecidos
 
