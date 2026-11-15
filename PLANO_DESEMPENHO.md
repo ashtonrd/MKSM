@@ -244,6 +244,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [ ] N18 Outras máquinas e testes antigos com falha (antigas T28, T29)
 - [ ] N19 Widescreen, controle configurável e latência, quadro cheio (antigas T21, T23, T24) — 14/11: FXAA de verdade (busca ao longo da borda) na resolução do PS2 antes da ampliação, ligado por padrão (`PS2X_FXAA=0` desliga; o HUD não borra); zona morta do analógico configurável (`PS2X_DEADZONE`, 25%); janela com ampliação bicúbica por padrão (`PS2X_UPSCALE=0` volta ao bilinear). Widescreen: a string "WideScreen" do ELF é só um rótulo de etapa de carregamento (`GameMain.cpp`), não uma opção nativa; falta achar a projeção
 - [ ] N20 60 quadros/s fixos e ritmo regular (pedido do usuário em 15/11: "70 fps ou no mínimo 60, pra ficar fluido") — plano na seção 7
+- [ ] N21 Opção "Gráfico" para PC fraco (pedido do usuário em 15/11) — viabilidade na seção 7; esperando o usuário escolher o formato
 
 ---
 
@@ -591,6 +592,30 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - **Estimativa honesta:**
   - Os trechos de 50–57 devem chegar a 60 com os itens 2 e 5.
   - Os dois piores vales (32–42) precisam dos itens 3 e 4 (talvez do 6) e podem não chegar a 60 cravados neste processador. Medir depois de cada item e anotar aqui.
+
+### N21 Opção "Gráfico" para PC fraco
+- **Pedido (15/11):** uma opção "Gráfico" no menu de opções do jogo (no menu inicial e na pausa, pelo Select) para baixar os gráficos e rodar bem em PC fraco. "Veja se é possível primeiro."
+- **Dentro do menu do próprio jogo:** possível em tese, mas caro e arriscado.
+  - Os menus são animações Flash da Paradox (`AnimMenuGUI`/`AnimMenuMan`) carregadas do WAD, e os textos vêm por ID/CRC (MODDING.md §7).
+  - Um item novo exige editar o layout e a navegação dentro dos arquivos do WAD (ainda sem empacotador; há o `WADCRC.BIN`) e entender o código que trata cada item.
+- **Recomendado:** menu "Gráfico" do próprio runtime, em sobreposição, aberto por um botão quando o menu de opções ou a pausa do jogo está na tela. Quando o menu de opções está aberto, mostrar uma dica "R3: Gráfico".
+  - O runtime já tem ImGui (o "Runtime Debugger").
+  - A pausa pode ser detectada por `gMenuSystem` `0x5D1DE0` / `ActiveWindowId` `0x5D2728`.
+  - Enquanto o menu estiver aberto, o controle não vai para o jogo.
+  - Grava no `mksm.ini`.
+- **Opções e quando valem:**
+
+  | Opção | Valores | Quando vale |
+  |---|---|---|
+  | Resolução interna | 1x / 2x / 3x | na hora: `downloadAll` + `InvalidateAll` + nova `scale`; a confirmar |
+  | Suavização FXAA | sim / não | na hora (hoje `static const` no `ps2_runtime.cpp`, vira variável) |
+  | Filtro de ampliação | bicúbico / bilinear | na hora (idem) |
+  | Mistura de campos | sim / não | na hora (idem) |
+  | Renderizador | novo / antigo | ao reiniciar |
+  | Thread do desenho | sim / não | ao reiniciar |
+
+  - Predefinições: "Alto" (2x, FXAA, bicúbico) e "Leve" (1x, sem FXAA, bilinear).
+- **Limite honesto:** essas opções aliviam a placa de vídeo (1x desenha ~4× menos pixels que 2x). Num PC com processador fraco, o peso maior é emular o EE e a VU1 (N20), e isso não muda com gráfico mais baixo.
 
 ## 8. Onde estamos (14/11, fim do dia)
 
