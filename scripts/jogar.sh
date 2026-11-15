@@ -7,7 +7,7 @@
 #   PS2X_VOL_SFX=100      volume dos efeitos
 #   PS2X_VIF_AHEAD=0      ordem antiga VIF/VU1 (chão quadriculado; só para comparar)
 #   PS2X_DEINTERLACE=0    não mistura os campos
-#   PS2X_FXAA=1           suaviza as bordas na janela (pode amaciar o texto do HUD)
+#   PS2X_FXAA=0           sem suavização de bordas (o padrão suaviza os degraus, na resolução do PS2)
 #   PS2X_UPSCALE=0        amplia a imagem com filtro bilinear (o padrão é bicúbico, mais nítido)
 #   PS2X_GPU_AUTO=0       não força a placa NVIDIA na janela
 #   PS2X_RUMBLE=0         sem vibração no controle

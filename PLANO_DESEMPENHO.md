@@ -236,7 +236,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [x] N16 Teste de uma hora — 14/11: 3660 s de roteiro com andar, golpes e combate contra vários inimigos (morre e recomeça), sem travar; memória estável em 428–430 MB do começo ao fim. Mostrou a câmera lenta em combate (~46 vsync/s), corrigida depois na N09
 - [~] N17 Build do zero e guia do jogador — 14/11: um PS2Recomp limpo no commit fixado + `scripts/aplicar_patches.sh` compila o runtime e os testes sem rede (fontes do FetchContent reaproveitadas) e dá os mesmos resultados (`gs` 33 antigas, `vu1`/`vu`/`float` 0; hashes de `titulo`, `menu` e `fase` iguais): a lista de patches está completa. README (inglês e português) atualizado: `scripts/jogar.sh`, `mksm.ini`, F9/F10/F11, volumes, estado do chão e dos raios. Falta: compilar o código gerado do zero (horas) e testar o `instalar.sh` inteiro numa máquina limpa
 - [ ] N18 Outras máquinas e testes antigos com falha (antigas T28, T29)
-- [ ] N19 Widescreen, controle configurável e latência, quadro cheio (antigas T21, T23, T24) — 14/11: zona morta do analógico configurável (`PS2X_DEADZONE`, 25%); janela com ampliação bicúbica por padrão (`PS2X_UPSCALE=0` volta ao bilinear). Widescreen: a string "WideScreen" do ELF é só um rótulo de etapa de carregamento (`GameMain.cpp`), não uma opção nativa; falta achar a projeção
+- [ ] N19 Widescreen, controle configurável e latência, quadro cheio (antigas T21, T23, T24) — 14/11: FXAA de verdade (busca ao longo da borda) na resolução do PS2 antes da ampliação, ligado por padrão (`PS2X_FXAA=0` desliga; o HUD não borra); zona morta do analógico configurável (`PS2X_DEADZONE`, 25%); janela com ampliação bicúbica por padrão (`PS2X_UPSCALE=0` volta ao bilinear). Widescreen: a string "WideScreen" do ELF é só um rótulo de etapa de carregamento (`GameMain.cpp`), não uma opção nativa; falta achar a projeção
 
 ---
 
@@ -444,6 +444,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 
 ### N10 Renderizador novo: menos custo por troca de estado
 - **Por quê:** é o caminho para imagem nítida (escala 2x/3x); hoje faz 20–32/s em 1x.
+- **Medido (14/11, cutscene do Raiden, 56–100 s):** renderizador atual média 51 quadros/s; novo em 1x 28; novo em 2x 16. Em 2x, nem CPU (GSFrontend 34–44%, o resto < 20%) nem GPU (62–68% no `nvidia-smi`) saturam: o limite são as esperas síncronas, ~2 `texread` por quadro (cada uma espera a GPU terminar e deixa a GPU parada no trabalho da CPU). Na seleção de personagem, o 2x some com a trama de quadradinhos do 1x (cabelo e pele lisos): é a melhora de imagem que o usuário pediu.
   - Medido (T07a/b, apêndice): ~750 mil primitivos/s numa thread só.
   - O atalho de estado acerta 94%, mas cada falha (`drawState`) custa ~6 µs, e são ~50 mil/s: metade de feedback, um terço porque `generation` sobe a cada carga de CLUT ou transferência.
 - **Faça:**
@@ -511,7 +512,7 @@ Perguntas que só o usuário pode responder. **Não pare o trabalho por elas.** 
 - (N03b) Pare no lugar do print 2 (chão quadriculado perto do fogo) e aperte F9 e F10; diga os nomes dos arquivos em `gsrec/` e `capturas/`.
 - (N04b, respondido 14/11) Gira toda vez que para, em qualquer lugar.
 - (N03b, respondido 14/11) Os quadrados existem desde sempre, inclusive na cutscene do Raiden; o usuário acha que falta suavização/textura/upscale. Depois de resolver, seguir o plano inteiro.
-- (14/11) A imagem na janela agora é ampliada com filtro bicúbico (mais nítido que o bilinear). Ficou melhor? Algum halo em volta do texto do HUD? (`PS2X_UPSCALE=0` no `mksm.ini` volta ao antigo.)
+- (14/11, respondido: "tá bom, mas dá pra ver os quadradinhos em volta do personagem"; seleção de personagem com qualidade baixa) Agora há um FXAA completo antes da ampliação. Os quadradinhos no cabelo e na pele vêm da resolução do PS2 (640×224 por campo) e só somem com a resolução 2x do renderizador novo, que ainda é lento: na cutscene, 28 quadros/s em 1x e 16 em 2x, contra 51 no atual (N10–N12). Ficou melhor com o FXAA?
 - (N04b, 14/11, respondido: só parado) Corrigido depois: o Liu Kang ainda gira parado em algum lugar?
 - (N03b/N05–N07, 14/11) O chão ainda aparece quadriculado em algum lugar? O raio arco-íris e os raios com degraus sumiram? (A cutscene e a primeira sala ficaram como as referências do original nas capturas.)
 - (N09, quando pronta) Ainda sente engasgo na cutscene?

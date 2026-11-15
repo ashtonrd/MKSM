@@ -3233,7 +3233,7 @@ index 5110ee2..7026a21 100644
      }
  
 diff --git a/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp b/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp
-index f0ad507..f738070 100644
+index f0ad507..03a88be 100644
 --- a/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp
 +++ b/ps2xRuntime/src/lib/gs/gs_cpu_backend.cpp
 @@ -1,4 +1,6 @@
@@ -3418,7 +3418,7 @@ index f0ad507..f738070 100644
      m_transfer = {};
      m_transfer.direction = 3u;
      m_transferState = {};
-@@ -543,20 +648,526 @@ void GSCpuBackend::ResetUnlocked()
+@@ -543,20 +648,525 @@ void GSCpuBackend::ResetUnlocked()
      m_localToHostReadPos = 0u;
  }
  
@@ -3654,7 +3654,6 @@ index f0ad507..f738070 100644
 +                            m_presentsSinceCapture = 0u;
 +                        }
 +                        m_lastMainFbp = fbp;
-+                        ps2_perf::counters().gameFrames.fetch_add(1u, std::memory_order_relaxed);
 +                    }
 +                    m_lastDrawFbp = fbp;
 +                    NotePagePsm(fbp, ctx.frame.psm);
@@ -3949,7 +3948,7 @@ index f0ad507..f738070 100644
      switch (tex0.cld)
      {
      case 0u:
-@@ -588,8 +1199,35 @@ void GSCpuBackend::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut)
+@@ -588,8 +1198,35 @@ void GSCpuBackend::LoadClut(const GSTex0Reg &tex0, const GSTexClutReg &texclut)
      LoadClutUnlocked(tex0, texclut);
  }
  
@@ -3985,7 +3984,7 @@ index f0ad507..f738070 100644
      const bool fourBit = isFourBitIndexedPsm(tex0.psm);
      const bool sixteenBit = tex0.cpsm == GS_PSM_CT16 || tex0.cpsm == GS_PSM_CT16S;
      const bool thirtyTwoBit = tex0.cpsm == GS_PSM_CT32 || tex0.cpsm == GS_PSM_CT24;
-@@ -603,6 +1241,39 @@ void GSCpuBackend::LoadClutUnlocked(const GSTex0Reg &tex0, const GSTexClutReg &t
+@@ -603,6 +1240,39 @@ void GSCpuBackend::LoadClutUnlocked(const GSTex0Reg &tex0, const GSTexClutReg &t
      const bool loadCsm1Suffix = tex0.csm == 0u && thirtyTwoBit && !fourBit;
      const uint32_t firstEntry = loadCsm1Suffix ? destinationBase : 0u;
  
@@ -4025,7 +4024,7 @@ index f0ad507..f738070 100644
      for (uint32_t entry = firstEntry; entry < entryCount; ++entry)
      {
          uint32_t sourceX = 0u;
-@@ -622,7 +1293,7 @@ void GSCpuBackend::LoadClutUnlocked(const GSTex0Reg &tex0, const GSTexClutReg &t
+@@ -622,7 +1292,7 @@ void GSCpuBackend::LoadClutUnlocked(const GSTex0Reg &tex0, const GSTexClutReg &t
              sourceY = static_cast<uint32_t>(texclut.cov);
          }
  
@@ -4034,7 +4033,7 @@ index f0ad507..f738070 100644
          const uint32_t destination = (loadCsm1Suffix ? entry : destinationBase + entry) & (sixteenBit ? 0x1FFu : 0x0FFu);
          if (sixteenBit)
          {
-@@ -634,6 +1305,9 @@ void GSCpuBackend::LoadClutUnlocked(const GSTex0Reg &tex0, const GSTexClutReg &t
+@@ -634,6 +1304,9 @@ void GSCpuBackend::LoadClutUnlocked(const GSTex0Reg &tex0, const GSTexClutReg &t
              m_clut[destination + 256u] = static_cast<uint16_t>(raw >> 16u);
          }
      }
@@ -4044,7 +4043,7 @@ index f0ad507..f738070 100644
  }
  
  void GSCpuBackend::Flush()
-@@ -643,17 +1317,19 @@ void GSCpuBackend::Flush()
+@@ -643,17 +1316,19 @@ void GSCpuBackend::Flush()
  
  void GSCpuBackend::TextureFlush()
  {
@@ -4068,7 +4067,7 @@ index f0ad507..f738070 100644
      std::lock_guard<std::mutex> lock(m_mutex);
      return ReadVramUnlocked(psm, base, bw, x, y);
  }
-@@ -665,18 +1341,13 @@ uint32_t GSCpuBackend::ReadVramUnlocked(uint32_t psm, uint32_t base, uint32_t bw
+@@ -665,18 +1340,13 @@ uint32_t GSCpuBackend::ReadVramUnlocked(uint32_t psm, uint32_t base, uint32_t bw
      return m_readVramFuncs[psm & 0x3Fu](m_vram, base, bw, x, y);
  }
  
@@ -4090,7 +4089,7 @@ index f0ad507..f738070 100644
  }
  
  void GSCpuBackend::WriteVramUnlocked(uint32_t psm, uint32_t base, uint32_t bw, uint32_t x, uint32_t y, uint32_t value)
-@@ -686,8 +1357,54 @@ void GSCpuBackend::WriteVramUnlocked(uint32_t psm, uint32_t base, uint32_t bw, u
+@@ -686,8 +1356,54 @@ void GSCpuBackend::WriteVramUnlocked(uint32_t psm, uint32_t base, uint32_t bw, u
      m_writeVramFuncs[psm & 0x3Fu](m_vram, base, bw, x, y, value);
  }
  
@@ -4145,7 +4144,7 @@ index f0ad507..f738070 100644
      std::lock_guard<std::mutex> lock(m_mutex);
      if (!m_vram || m_vramSize == 0u)
      {
-@@ -849,7 +1566,7 @@ void GSCpuBackend::DrawPrimitive(const GSPrimitiveBatch &batch)
+@@ -849,7 +1565,7 @@ void GSCpuBackend::DrawPrimitive(const GSPrimitiveBatch &batch)
  void GSCpuBackend::WritePixel(const GSDrawState &state, int x, int y, int z, uint8_t r, uint8_t g, uint8_t b, uint8_t a, uint8_t fog)
  {
      const auto &ctx = state.context;
@@ -4154,7 +4153,7 @@ index f0ad507..f738070 100644
          return;
  
      if (state.prim.fge)
-@@ -1012,6 +1729,71 @@ void GSCpuBackend::WritePixel(const GSDrawState &state, int x, int y, int z, uin
+@@ -1012,6 +1728,71 @@ void GSCpuBackend::WritePixel(const GSDrawState &state, int x, int y, int z, uin
      }
  }
  
@@ -4226,7 +4225,7 @@ index f0ad507..f738070 100644
  uint32_t GSCpuBackend::LookupCLUT(const GSDrawState &state,
                                    uint8_t index,
                                    uint8_t cpsm,
-@@ -1088,7 +1870,7 @@ uint32_t GSCpuBackend::SampleTexture(const GSDrawState &state, float s, float t,
+@@ -1088,7 +1869,7 @@ uint32_t GSCpuBackend::SampleTexture(const GSDrawState &state, float s, float t,
          sampleU = wrapTextureCoordinate(sampleU, texW, wrapU, minU, maxU);
          sampleV = wrapTextureCoordinate(sampleV, texH, wrapV, minV, maxV);
  
@@ -4235,7 +4234,7 @@ index f0ad507..f738070 100644
  
          switch (tex.psm)
          {
-@@ -1118,45 +1900,19 @@ uint32_t GSCpuBackend::SampleTexture(const GSDrawState &state, float s, float t,
+@@ -1118,45 +1899,19 @@ uint32_t GSCpuBackend::SampleTexture(const GSDrawState &state, float s, float t,
          return samplePoint(static_cast<int>(texUf), static_cast<int>(texVf));
      }
  
@@ -4294,7 +4293,7 @@ index f0ad507..f738070 100644
  }
  
  void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
-@@ -1203,6 +1959,70 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
+@@ -1203,6 +1958,70 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
  
      uint8_t r = v1.r, g = v1.g, b = v1.b, a = v1.a;
  
@@ -4365,7 +4364,7 @@ index f0ad507..f738070 100644
      if (state.prim.tme)
      {
          const auto &tex = ctx.tex0;
-@@ -1236,6 +2056,8 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
+@@ -1236,6 +2055,8 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
  
          for (int y = drawY0; y <= drawY1; ++y)
          {
@@ -4374,7 +4373,7 @@ index f0ad507..f738070 100644
              float ty = (static_cast<float>(y - unclippedY0) + 0.5f) / spriteH;
              float texVf = v0f + (v1f - v0f) * ty;
  
-@@ -1267,14 +2089,324 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
+@@ -1267,14 +2088,324 @@ void GSCpuBackend::DrawSprite(const GSPrimitiveBatch &batch)
              }
          }
      }
@@ -4700,7 +4699,7 @@ index f0ad507..f738070 100644
  void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
  {
      const GSDrawState &state = batch.state;
-@@ -1307,33 +2439,73 @@ void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
+@@ -1307,33 +2438,73 @@ void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
      if (std::fabs(denom) < 0.001f)
          return;
  
@@ -4786,7 +4785,7 @@ index f0ad507..f738070 100644
              }
              else
              {
-@@ -1387,7 +2559,7 @@ void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
+@@ -1387,7 +2558,7 @@ void GSCpuBackend::DrawTriangle(const GSPrimitiveBatch &batch)
                  a = color.a;
              }
  
@@ -4795,7 +4794,7 @@ index f0ad507..f738070 100644
              WritePixel(state, x, y, static_cast<u32>(z + 0.5), r, g, b, a, fog);
          }
      }
-@@ -1462,7 +2634,51 @@ void GSCpuBackend::DrawLine(const GSPrimitiveBatch &batch)
+@@ -1462,7 +2633,51 @@ void GSCpuBackend::DrawLine(const GSPrimitiveBatch &batch)
  
  void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
  {
@@ -4847,7 +4846,7 @@ index f0ad507..f738070 100644
      m_transfer = command;
      m_transferState.x = command.trxpos.dsax;
      m_transferState.y = command.trxpos.dsay;
-@@ -1471,6 +2687,9 @@ void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
+@@ -1471,6 +2686,9 @@ void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
      m_transferState.direction = command.direction;
      m_transferState.localToHostPendingBytes = 0u;
  
@@ -4857,7 +4856,7 @@ index f0ad507..f738070 100644
      if (command.direction == 2u)
          PerformLocalToLocalTransfer();
      else if (command.direction == 1u)
-@@ -1479,7 +2698,16 @@ void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
+@@ -1479,7 +2697,16 @@ void GSCpuBackend::BeginTransfer(const GSTransferCommand &command)
  
  void GSCpuBackend::UploadImage(const uint8_t *data, uint32_t sizeBytes)
  {
@@ -4875,7 +4874,7 @@ index f0ad507..f738070 100644
      if (!data || sizeBytes == 0u || !m_vram || m_transferState.direction != 0u)
          return;
      if (m_transfer.trxreg.rrw == 0u || m_transfer.trxreg.rrh == 0u || m_transferState.totalPixels == 0u)
-@@ -1696,6 +2924,7 @@ void GSCpuBackend::PerformLocalToHostTransfer()
+@@ -1696,6 +2923,7 @@ void GSCpuBackend::PerformLocalToHostTransfer()
  
  uint32_t GSCpuBackend::ConsumeLocalToHostBytes(uint8_t *dst, uint32_t maxBytes)
  {
@@ -4883,7 +4882,7 @@ index f0ad507..f738070 100644
      std::lock_guard<std::mutex> lock(m_mutex);
      if (!dst || maxBytes == 0u || m_localToHostReadPos >= m_localToHostBuffer.size())
          return 0u;
-@@ -1708,6 +2937,7 @@ uint32_t GSCpuBackend::ConsumeLocalToHostBytes(uint8_t *dst, uint32_t maxBytes)
+@@ -1708,6 +2936,7 @@ uint32_t GSCpuBackend::ConsumeLocalToHostBytes(uint8_t *dst, uint32_t maxBytes)
  
  bool GSCpuBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
  {
@@ -4891,7 +4890,7 @@ index f0ad507..f738070 100644
      std::lock_guard<std::mutex> lock(m_mutex);
      if (!m_vram || context.frame.fbw == 0u)
          return false;
-@@ -1725,6 +2955,8 @@ bool GSCpuBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
+@@ -1725,6 +2954,8 @@ bool GSCpuBackend::ClearFramebuffer(const GSContext &context, uint32_t rgba)
  
      const uint32_t fbp = GSInternal::framePageBaseToBlock(context.frame.fbp);
      const uint32_t fbw = std::max<uint32_t>(context.frame.fbw, 1u);
@@ -4900,7 +4899,7 @@ index f0ad507..f738070 100644
      if (context.frame.psm == GS_PSM_CT32 || context.frame.psm == GS_PSM_CT24)
      {
          const uint32_t source = static_cast<uint32_t>(r) |
-@@ -1848,12 +3080,38 @@ PresentationFrame GSCpuBackend::Present(const GSPresentationRequest &request)
+@@ -1848,12 +3079,38 @@ PresentationFrame GSCpuBackend::Present(const GSPresentationRequest &request)
      // Snapshot local memory under the backend lock, then perform the expensive
      // display conversion without holding the producer-side raster lock.
      thread_local std::vector<uint8_t> snapshot;
@@ -4940,7 +4939,7 @@ index f0ad507..f738070 100644
      return snapshotBackend.PresentFromLocalMemory(request);
  }
  
-@@ -1871,6 +3129,16 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
+@@ -1871,6 +3128,16 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
      uint32_t width1 = 0u, height1 = 0u, width2 = 0u, height2 = 0u;
      decodeDisplaySize(request.display1, width1, height1);
      decodeDisplaySize(request.display2, width2, height2);
@@ -4957,7 +4956,7 @@ index f0ad507..f738070 100644
      const bool valid1 = pmode.enableCrt1 && hasDisplaySetup(request.display1, displayFrame1);
      const bool valid2 = pmode.enableCrt2 && hasDisplaySetup(request.display2, displayFrame2);
      if (!valid1 && !valid2)
-@@ -1889,32 +3157,50 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
+@@ -1889,32 +3156,50 @@ PresentationFrame GSCpuBackend::PresentFromLocalMemory(const GSPresentationReque
          selected = displayFrame;
          pixels.clear();
          usedPreferred = false;
@@ -5014,26 +5013,31 @@ index f0ad507..f738070 100644
      };
  
 diff --git a/ps2xRuntime/src/lib/gs/gs_frontend.cpp b/ps2xRuntime/src/lib/gs/gs_frontend.cpp
-index 9281d5f..eb07e80 100644
+index 9281d5f..0367d82 100644
 --- a/ps2xRuntime/src/lib/gs/gs_frontend.cpp
 +++ b/ps2xRuntime/src/lib/gs/gs_frontend.cpp
-@@ -1,5 +1,7 @@
+@@ -1,6 +1,9 @@
 +#include "gs_hw_backend.h"
  #include "runtime/gs/gs_frontend.h"
  #include "runtime/gs/gs_cpu_backend.h"
 +#include "runtime/gs/gs_recording_backend.h"
  #include "ps2_log.h"
++#include "runtime/ps2_perf.h"
  #include "runtime/ps2_memory.h"
  #include <atomic>
-@@ -10,6 +12,7 @@
+ #include <algorithm>
+@@ -10,6 +13,10 @@
  #include <iostream>
  #include <sstream>
  
 +
++static std::atomic<uint64_t> g_gsGameFrameSerial{0u};
++uint64_t gsGameFrameSerial() { return g_gsGameFrameSerial.load(std::memory_order_relaxed); }
++
  namespace
  {
      static constexpr uint32_t kHostFrameWidth = 640u;
-@@ -106,7 +109,7 @@ namespace
+@@ -106,7 +113,7 @@ namespace
  
  
  GS::GS()
@@ -5042,7 +5046,7 @@ index 9281d5f..eb07e80 100644
  {
      reset();
  }
-@@ -526,18 +529,34 @@ GSPresentationRequest GS::buildPresentationRequestUnlocked() const
+@@ -526,18 +533,34 @@ GSPresentationRequest GS::buildPresentationRequestUnlocked() const
  
  void GS::latchHostPresentationFrame()
  {
@@ -5080,7 +5084,7 @@ index 9281d5f..eb07e80 100644
      }
  
      PresentationFrame frame{};
-@@ -570,8 +589,10 @@ void GS::latchHostPresentationFrame()
+@@ -570,8 +593,10 @@ void GS::latchHostPresentationFrame()
  
      if (hasFrame)
      {
@@ -5093,7 +5097,7 @@ index 9281d5f..eb07e80 100644
      }
  }
  
-@@ -610,7 +631,12 @@ bool GS::copyLatchedHostPresentationFrame(std::vector<uint8_t> &outPixels,
+@@ -610,7 +635,12 @@ bool GS::copyLatchedHostPresentationFrame(std::vector<uint8_t> &outPixels,
      outPixels.resize(packedRowBytes * static_cast<size_t>(outHeight));
      if (outWidth != 0u && outHeight != 0u)
      {
@@ -5107,7 +5111,26 @@ index 9281d5f..eb07e80 100644
          for (uint32_t y = 0; y < outHeight; ++y)
          {
              const size_t srcOffset = static_cast<size_t>(y) * sourceRowBytes;
-@@ -1693,12 +1719,64 @@ GSPrimitiveBatch GS::buildDrawBatch(int vertexCount) const
+@@ -1577,6 +1607,18 @@ void GS::vertexKick(bool drawing)
+     {
+         GSPrimitiveBatch batch = buildDrawBatch(needed);
+         updatePreferredDisplaySourceForDraw(batch);
++        // A game frame ends when MKSM switches between its frame pages 0x00 and 0x46 (both
++        // renderers count frames here, for PS2X_PERF).
++        static uint32_t lastFrameFbp = ~0u; // one GS: the frontend thread's
++        if (const uint32_t fbp = batch.state.context.frame.fbp; (fbp == 0x00u || fbp == 0x46u) && fbp != lastFrameFbp)
++        {
++            if (lastFrameFbp != ~0u)
++            {
++                g_gsGameFrameSerial.fetch_add(1u, std::memory_order_relaxed);
++                ps2_perf::counters().gameFrames.fetch_add(1u, std::memory_order_relaxed);
++            }
++            lastFrameFbp = fbp;
++        }
+         m_backend->Submit(batch);
+         recordDrawDebugEventUnlocked(needed);
+     }
+@@ -1693,12 +1735,64 @@ GSPrimitiveBatch GS::buildDrawBatch(int vertexCount) const
      batch.state.fogR = m_fogR;
      batch.state.fogG = m_fogG;
      batch.state.fogB = m_fogB;
@@ -5572,7 +5595,7 @@ index 8590f14..3ae32a9 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..ed01c03 100644
+index 45cb9d2..2e28070 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,7 @@
@@ -6136,7 +6159,7 @@ index 45cb9d2..ed01c03 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +2731,143 @@ void PS2Runtime::run()
+@@ -2430,21 +2731,192 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());
@@ -6149,53 +6172,112 @@ index 45cb9d2..ed01c03 100644
 -            (screenHeight - dstHeight) * 0.5f,
 -            dstWidth,
 -            dstHeight};
+-        DrawTexturePro(frameTex, srcRect, dstRect, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
 +        // Keep the PS2's 4:3 picture, centred, whatever the window shape (fullscreen included).
 +        const float shownWidth = std::min(screenWidth, screenHeight * 4.0f / 3.0f);
 +        const float shownHeight = std::min(screenHeight, screenWidth * 3.0f / 4.0f);
 +        const Rectangle dstRect{(screenWidth - shownWidth) * 0.5f, (screenHeight - shownHeight) * 0.5f, shownWidth, shownHeight};
-+        // PS2X_FXAA=1: edge smoothing on the window (T22). Where the luma jumps against the four
-+        // neighbours, samples along the edge (across the gradient) are mixed in by the contrast.
-+        static const bool fxaaOn = [] { const char *v = std::getenv("PS2X_FXAA"); return v && v[0] == '1'; }();
++        // Edge anti-aliasing at the PS2 resolution, before the upscale (PS2X_FXAA=0 turns it off):
++        // FXAA 3.11 style, it walks along each edge to its ends and blends by the position on the
++        // step, so long stair steps on characters smooth out. Subpixel blend kept low for HUD text.
++        static const bool fxaaOn = [] { const char *v = std::getenv("PS2X_FXAA"); return !(v && v[0] == '0'); }();
 +        static Shader fxaa{};
 +        static int fxaaTexel = -1;
++        static RenderTexture2D aaTarget{};
 +        if (fxaaOn && fxaa.id == 0)
 +        {
-+            static const char *kEdgeSmoothFs = R"(#version 330
++            static const char *kFxaaFs = R"(#version 330
 +in vec2 fragTexCoord;
 +in vec4 fragColor;
 +out vec4 finalColor;
 +uniform sampler2D texture0;
 +uniform vec4 colDiffuse;
 +uniform vec2 texel;
-+float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-+vec3 at(vec2 o) { return texture(texture0, fragTexCoord + o).rgb; }
++float luma(vec2 uv) { return dot(texture(texture0, uv).rgb, vec3(0.299, 0.587, 0.114)); }
 +void main()
 +{
-+    vec3 c = at(vec2(0.0));
-+    float l = luma(c), n = luma(at(vec2(0.0, -texel.y))), s = luma(at(vec2(0.0, texel.y)));
-+    float w = luma(at(vec2(-texel.x, 0.0))), e = luma(at(vec2(texel.x, 0.0)));
-+    float lo = min(l, min(min(n, s), min(w, e))), hi = max(l, max(max(n, s), max(w, e)));
-+    float contrast = hi - lo;
-+    vec3 outColor = c;
-+    if (contrast >= max(0.05, hi * 0.15))
++    vec2 uv = fragTexCoord;
++    vec3 rgbM = texture(texture0, uv).rgb;
++    float lM = dot(rgbM, vec3(0.299, 0.587, 0.114));
++    float lN = luma(uv + vec2(0.0, -texel.y)), lS = luma(uv + vec2(0.0, texel.y));
++    float lW = luma(uv + vec2(-texel.x, 0.0)), lE = luma(uv + vec2(texel.x, 0.0));
++    float lMin = min(lM, min(min(lN, lS), min(lW, lE))), lMax = max(lM, max(max(lN, lS), max(lW, lE)));
++    float range = lMax - lMin;
++    if (range < max(0.0312, lMax * 0.125))
 +    {
-+        vec2 grad = vec2(e - w, s - n);
-+        vec2 dir = normalize(vec2(-grad.y, grad.x) + vec2(1e-6)) * texel;
-+        vec3 blur = (at(dir * 0.5) + at(-dir * 0.5) + at(dir * 1.5) + at(-dir * 1.5)) * 0.25;
-+        outColor = mix(c, blur, clamp(contrast * 2.0, 0.0, 1.0));
++        finalColor = vec4(rgbM, 1.0) * fragColor * colDiffuse;
++        return;
 +    }
-+    finalColor = vec4(outColor, 1.0) * fragColor * colDiffuse;
++    float lNW = luma(uv - texel), lSE = luma(uv + texel);
++    float lNE = luma(uv + vec2(texel.x, -texel.y)), lSW = luma(uv + vec2(-texel.x, texel.y));
++    float edgeH = abs(lNW + lNE - 2.0 * lN) + 2.0 * abs(lW + lE - 2.0 * lM) + abs(lSW + lSE - 2.0 * lS);
++    float edgeV = abs(lNW + lSW - 2.0 * lW) + 2.0 * abs(lN + lS - 2.0 * lM) + abs(lNE + lSE - 2.0 * lE);
++    bool horz = edgeH >= edgeV;
++    float l1 = horz ? lN : lW, l2 = horz ? lS : lE;
++    float g1 = l1 - lM, g2 = l2 - lM;
++    bool side1 = abs(g1) >= abs(g2);
++    float gScaled = 0.25 * max(abs(g1), abs(g2));
++    float stepLen = horz ? texel.y : texel.x;
++    float lLocal = 0.5 * ((side1 ? l1 : l2) + lM);
++    if (side1)
++        stepLen = -stepLen;
++    vec2 cur = uv + (horz ? vec2(0.0, stepLen * 0.5) : vec2(stepLen * 0.5, 0.0));
++    vec2 off = horz ? vec2(texel.x, 0.0) : vec2(0.0, texel.y);
++    vec2 uv1 = cur - off, uv2 = cur + off;
++    float e1 = luma(uv1) - lLocal, e2 = luma(uv2) - lLocal;
++    bool done1 = abs(e1) >= gScaled, done2 = abs(e2) >= gScaled;
++    const float kStep[10] = float[](1.0, 1.0, 1.0, 1.0, 1.5, 2.0, 2.0, 2.0, 4.0, 8.0);
++    for (int k = 0; k < 10 && !(done1 && done2); ++k)
++    {
++        if (!done1) { uv1 -= off * kStep[k]; e1 = luma(uv1) - lLocal; done1 = abs(e1) >= gScaled; }
++        if (!done2) { uv2 += off * kStep[k]; e2 = luma(uv2) - lLocal; done2 = abs(e2) >= gScaled; }
++    }
++    float d1 = horz ? uv.x - uv1.x : uv.y - uv1.y;
++    float d2 = horz ? uv2.x - uv.x : uv2.y - uv.y;
++    bool nearer1 = d1 < d2;
++    float edgeOffset = -min(d1, d2) / (d1 + d2) + 0.5;
++    bool fits = ((nearer1 ? e1 : e2) < 0.0) != (lM < lLocal);
++    float lAvg = (2.0 * (lN + lS + lW + lE) + lNW + lNE + lSW + lSE) / 12.0;
++    float sub = clamp(abs(lAvg - lM) / range, 0.0, 1.0);
++    sub = (-2.0 * sub + 3.0) * sub * sub;
++    float offset = max(fits ? edgeOffset : 0.0, sub * sub * 0.5);
++    vec2 fuv = uv + (horz ? vec2(0.0, offset * stepLen) : vec2(offset * stepLen, 0.0));
++    finalColor = vec4(texture(texture0, fuv).rgb, 1.0) * fragColor * colDiffuse;
 +}
 +)";
-+            fxaa = LoadShaderFromMemory(nullptr, kEdgeSmoothFs);
++            fxaa = LoadShaderFromMemory(nullptr, kFxaaFs);
 +            fxaaTexel = GetShaderLocation(fxaa, "texel");
 +        }
++        // The upscale reads either the frame or its anti-aliased copy (a render texture is upside down).
++        Texture2D upscaleSource = frameTex;
++        Rectangle upscaleRect = srcRect;
++        if (fxaaOn && fxaa.id != 0)
++        {
++            const int w = static_cast<int>(srcWidth), h = static_cast<int>(srcHeight);
++            if (aaTarget.id == 0 || aaTarget.texture.width != w || aaTarget.texture.height != h)
++            {
++                if (aaTarget.id != 0)
++                    UnloadRenderTexture(aaTarget);
++                aaTarget = LoadRenderTexture(w, h);
++                SetTextureFilter(aaTarget.texture, TEXTURE_FILTER_BILINEAR);
++            }
++            const float texel[2] = {1.0f / static_cast<float>(std::max(frameTex.width, 1)), 1.0f / static_cast<float>(std::max(frameTex.height, 1))};
++            SetShaderValue(fxaa, fxaaTexel, texel, SHADER_UNIFORM_VEC2);
++            BeginTextureMode(aaTarget);
++            ClearBackground(BLACK);
++            BeginShaderMode(fxaa);
++            DrawTexturePro(frameTex, srcRect, Rectangle{0.0f, 0.0f, srcWidth, srcHeight}, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
++            EndShaderMode();
++            EndTextureMode();
++            upscaleSource = aaTarget.texture;
++            upscaleRect = Rectangle{0.0f, 0.0f, srcWidth, -srcHeight};
++        }
 +        // The window is ~2x the 640x448 picture: Catmull-Rom (bicubic, 9 bilinear taps) keeps it
-+        // sharper than plain bilinear. PS2X_UPSCALE=0 goes back to bilinear; FXAA, when on, wins.
++        // sharper than plain bilinear. PS2X_UPSCALE=0 goes back to bilinear.
 +        static const bool bicubicOn = [] { const char *v = std::getenv("PS2X_UPSCALE"); return !(v && v[0] == '0'); }();
 +        static Shader bicubic{};
 +        static int bicubicSize = -1;
-+        if (bicubicOn && !fxaaOn && bicubic.id == 0)
++        if (bicubicOn && bicubic.id == 0)
 +        {
 +            static const char *kBicubicFs = R"(#version 330
 +in vec2 fragTexCoord;
@@ -6230,23 +6312,14 @@ index 45cb9d2..ed01c03 100644
 +            bicubic = LoadShaderFromMemory(nullptr, kBicubicFs);
 +            bicubicSize = GetShaderLocation(bicubic, "texSize");
 +        }
-+        Shader *windowShader = nullptr;
-+        if (fxaaOn && fxaa.id != 0)
++        if (bicubicOn && bicubic.id != 0)
 +        {
-+            const float texel[2] = {1.0f / static_cast<float>(std::max(frameTex.width, 1)), 1.0f / static_cast<float>(std::max(frameTex.height, 1))};
-+            SetShaderValue(fxaa, fxaaTexel, texel, SHADER_UNIFORM_VEC2);
-+            windowShader = &fxaa;
-+        }
-+        else if (bicubicOn && bicubic.id != 0)
-+        {
-+            const float size[2] = {static_cast<float>(std::max(frameTex.width, 1)), static_cast<float>(std::max(frameTex.height, 1))};
++            const float size[2] = {static_cast<float>(std::max(upscaleSource.width, 1)), static_cast<float>(std::max(upscaleSource.height, 1))};
 +            SetShaderValue(bicubic, bicubicSize, size, SHADER_UNIFORM_VEC2);
-+            windowShader = &bicubic;
++            BeginShaderMode(bicubic);
 +        }
-+        if (windowShader)
-+            BeginShaderMode(*windowShader);
-         DrawTexturePro(frameTex, srcRect, dstRect, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
-+        if (windowShader)
++        DrawTexturePro(upscaleSource, upscaleRect, dstRect, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
++        if (bicubicOn && bicubic.id != 0)
 +            EndShaderMode();
          if (m_debugUiInitialized && m_debugUiDrawCallback)
          {

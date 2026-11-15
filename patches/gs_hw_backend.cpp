@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <thread>
 #include "gs_hw_backend.h"
+#include "runtime/ps2_perf.h"
 
 #include "runtime/gs/gs_cpu_backend.h"
 #include "runtime/gs/ps2_gs_common.h"
@@ -3109,8 +3110,15 @@ void GSHwBackend::syncNow(GSSyncReason reason)
     m_inner.Sync(reason);
 }
 
+uint64_t gsGameFrameSerial(); // gs_frontend.cpp
+
 PresentationFrame GSHwBackend::Present(const GSPresentationRequest &request)
 {
+    { // PS2X_PERF "new images": the window shows a game frame it had not shown yet
+        thread_local uint64_t shown = 0u;
+        if (const uint64_t serial = gsGameFrameSerial(); serial != shown)
+            shown = serial, ps2_perf::counters().newImages.fetch_add(1u, std::memory_order_relaxed);
+    }
 #if defined(PS2X_HAVE_VULKAN)
     if (m_async)
     {
