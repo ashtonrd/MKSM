@@ -243,6 +243,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 - [~] N17 Build do zero e guia do jogador — 14/11: um PS2Recomp limpo no commit fixado + `scripts/aplicar_patches.sh` compila o runtime e os testes sem rede (fontes do FetchContent reaproveitadas) e dá os mesmos resultados (`gs` 33 antigas, `vu1`/`vu`/`float` 0; hashes de `titulo`, `menu` e `fase` iguais): a lista de patches está completa. README (inglês e português) atualizado: `scripts/jogar.sh`, `mksm.ini`, F9/F10/F11, volumes, estado do chão e dos raios. Falta: compilar o código gerado do zero (horas) e testar o `instalar.sh` inteiro numa máquina limpa
 - [ ] N18 Outras máquinas e testes antigos com falha (antigas T28, T29)
 - [ ] N19 Widescreen, controle configurável e latência, quadro cheio (antigas T21, T23, T24) — 14/11: FXAA de verdade (busca ao longo da borda) na resolução do PS2 antes da ampliação, ligado por padrão (`PS2X_FXAA=0` desliga; o HUD não borra); zona morta do analógico configurável (`PS2X_DEADZONE`, 25%); janela com ampliação bicúbica por padrão (`PS2X_UPSCALE=0` volta ao bilinear). Widescreen: a string "WideScreen" do ELF é só um rótulo de etapa de carregamento (`GameMain.cpp`), não uma opção nativa; falta achar a projeção
+- [ ] N20 60 quadros/s fixos e ritmo regular (pedido do usuário em 15/11: "70 fps ou no mínimo 60, pra ficar fluido") — plano na seção 7
 
 ---
 
@@ -531,6 +532,46 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
 
 ---
 
+### N20 60 quadros/s fixos e ritmo regular
+- **Pedido (15/11):** "70 fps ou no mínimo 60, pra ficar fluido".
+- **70 fps não é o alvo, por três motivos:**
+  1. A tela do notebook é de 60 Hz (`kscreen-doctor`: 1920×1080 a 60,01 Hz); acima de 60 a janela descartaria quadros.
+  2. O MKSM anda um passo de lógica por vsync de 60 Hz. Mais de 60 quadros diferentes por segundo só existem inventando quadros (interpolação: borra o movimento rápido e o HUD e atrasa o controle) ou mudando o relógio da lógica do jogo (arriscado, sem garantia; com `PS2X_UNCAPPED=1` ele simplesmente corre acelerado).
+  3. O que dá a sensação de fluido é cada um dos 60 quadros aparecer uma vez, no tempo certo: sem vales e sem quadros repetidos.
+  - **Alvo:** 60 fixos com ritmo regular.
+- **Onde estamos (15/11, padrão novo, sem variáveis):**
+  - **Cutscene** (média 49,6): vales em 64–70 s (35–42), 78–82 s (32–40) e trechos de 53–57 entre 86 e 104 s.
+  - **Gameplay** (média 57,7, mín 50): vale em 210–222 s (42–50).
+  - Os mesmos vales aparecem no renderizador antigo.
+  - **CPU nos vales:** GSFrontend 84–88%, VU1Thread 83–87%, GSHwWorker 81–84%, GameThread 66–71%, janela ~27%. São ~4 núcleos de trabalho num i7-7700HQ de 4 núcleos (8 threads de hardware): as threads irmãs de hyperthreading disputam o mesmo núcleo.
+  - Além disso, o quadro é em série: o EE espera a VU1 duas vezes por quadro na função `0x24E680` (N08).
+  - **O que falta:** para ir de 32 a 60 no pior trecho, o caminho crítico do quadro precisa ficar ~45% mais curto; os trechos de 50–57, ~10–15%.
+- **Faça, nesta ordem (medir antes e depois, três rodadas, `medequeda.sh`/`gprss.sh` da pasta de rascunho ou R5):**
+  1. **Medir o caminho crítico de cada quadro nos vales:** por quadro do jogo, tempo do EE rodando, do EE esperando a VU1 (`ps2_vu1_thread::sync`), do EE esperando o GS (`gsAsyncWaitLastVblank`/CSR), da VU1 ocupada e da `GSHwWorker` ocupada. Uma linha `[perf] quadro` a cada 2 s atrás de `PS2X_PERF`. **Pronto quando:** cada vale tem anotado quem está no caminho crítico.
+  2. **Devolver CPU desperdiçada:**
+     - O GSFrontend gira até 100 µs a cada pacote antes de dormir; na gameplay, 54% do tempo dele era esse giro, que ocupa a thread irmã do mesmo núcleo. Fazer o giro só quando o produtor está ativo, ou com `sched_yield`/`pause` mais espaçado.
+     - O produtor pega uma trava da fila da `GSHwWorker` por comando (~5% de cada lado); juntar os comandos num bloco local e entregar o bloco.
+     - Procurar giros parecidos na VU1Thread e na GameThread.
+     - **Pronto quando:** as threads do GS somadas caem ≥ 0,5 núcleo nos vales.
+  3. **VU1 mais rápida (N09, item 2):**
+     - Interpretador ~13% da VU1Thread nos vales (`run`/`execLower`): cobrir os blocos que caem nele no JIT.
+     - Despacho do `runJitBlock` (~9%): laços de leituras com atraso e de escritas.
+     - `processVIF1Data` (~10%): caminho rápido para UNPACK V4-32/V4-16/V4-8 sem máscara e com CL=WL.
+     - **Pronto quando:** VU1Thread ≥ 25% mais leve nos vales; testes `vu1`/`vu` iguais; R4 igual.
+  4. **EE e VU1 em paralelo:** refazer, atrás de variável, `VIF1_STAT` sem espera + PATH3 na fila da VU1. Em 14/11 deu +3–4 quadros/s antes de a apresentação ser corrigida e +1% depois; com o renderizador novo, a apresentação já não depende do GS em dia. Ver também o que o EE faz depois da espera da `0x24E680`: se for a sincronização de quadro do próprio jogo, o paralelismo para aí.
+  5. **`GSHwWorker` mais leve:**
+     - Driver ~25% da thread: ~180 cópias de feedback por quadro fecham o passo de render com barreira completa. Reaproveitar cópias, usar barreiras estreitas, juntar passos.
+     - `appendVertices` ~10%.
+     - Decodificar texturas ~13% (`resolveTextureSlow`, `mappedRead` por texel).
+     - `refreshPending` ~6%.
+     - **Pronto quando:** replay de referência com thread ≤ 1,5 s (hoje 1,92).
+  6. **GameThread (código do jogo recompilado):** perfil nos vales e corte das funções quentes do jogo (animação/esqueleto, física, partículas). Pode precisar de melhorias no recompilador (ponto flutuante, acesso à memória).
+  7. **Ritmo dos quadros:** com o jogo a 60, cada imagem nova vai à tela uma vez, no vsync da janela. Medir o histograma dos intervalos entre imagens novas (contador temporário). **Pronto quando:** < 1% fora de 16,7 ± 2 ms nos trechos a 60.
+- **Pronto quando:** R5 sem variáveis, três rodadas: cutscene e gameplay sem intervalo de 2 s abaixo de 58 quadros/s, e "imagens novas" igual a "jogo".
+- **Estimativa honesta:**
+  - Os trechos de 50–57 devem chegar a 60 com os itens 2 e 5.
+  - Os dois piores vales (32–42) precisam dos itens 3 e 4 (talvez do 6) e podem não chegar a 60 cravados neste processador. Medir depois de cada item e anotar aqui.
+
 ## 8. Onde estamos (14/11, fim do dia)
 
 | Área | Estado | Tarefas |
@@ -561,6 +602,7 @@ O usuário decidiu (12/11): não precisa ser 100% fiel ao PS2; se ficar melhor, 
 
 Perguntas que só o usuário pode responder. **Não pare o trabalho por elas.** Mande a lista inteira no resumo final. Quando ele responder, anote a resposta e apague a pergunta.
 
+- (N20, 15/11) Resposta ao pedido de 70 fps: a tela é de 60 Hz e o jogo anda um passo por vsync de 60 Hz; o alvo é 60 fixos com ritmo regular (plano na N20).
 - Respostas de 14/11 (2ª rodada): engasgo principalmente quando o Raiden chega e quando ele para de falar (sem fala); luzes estranhas sempre nos mesmos lugares.
 - **Teste com `PS2X_RAYS=0` (14/11, 3ª rodada):** o raio arco-íris e os degraus **continuam todos**, nos mesmos lugares; as luzes ficam "quadradas e sólidas, muito feio", como antes; o chão continua quadriculado. **Conclusão: não é a troca de blend do `softenLightRay`**, é a forma como os raios são desenhados (textura/mipmap/filtro). Medido na mesma sessão: duas quedas de ~6 s a 31–36/s na cutscene (chegada do Raiden e fim da fala), gameplay 52–60/s.
 - Respostas de 14/11: filmes sem chiado; cutscene do Raiden sem chiado ("suave"); som e eco bons; tremida do menu resolvida; FXAA não resolve a qualidade baixa; dois controles ainda não testados; não jogou além da primeira sala; ainda sente engasgo na cutscene; chão quadriculado e luzes estranhas "faz tempo".
