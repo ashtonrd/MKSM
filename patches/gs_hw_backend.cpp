@@ -539,6 +539,17 @@ struct GSHwBackend::Renderer
     Surface *passColorSurface = nullptr, *passDepthSurface = nullptr;
     bool inPass = false;
     BatchState batch{};
+    struct BoundState // what flushBatch last set in the open command buffer
+    {
+        bool valid = false;
+        uint32_t viewportW = 0, viewportH = 0;
+        VkRect2D scissor{};
+        float blendConstant = 0.0f;
+        VkDescriptorSet sets[2]{};
+        uint64_t pipeline = 0;
+        HwPush push{};
+    };
+    BoundState bound{};
     VkDeviceSize batchFirst = 0;
     uint32_t batchCount = 0;
 
@@ -782,6 +793,7 @@ struct GSHwBackend::Renderer
             begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
             vkBeginCommandBuffer(s.cmd, &begin);
             s.recording = true;
+            bound = BoundState{};
             if (stampPool)
             {
                 vkCmdResetQueryPool(s.cmd, stampPool, slot * kStampsPerSlot, kStampsPerSlot);
@@ -1293,6 +1305,8 @@ void GSHwBackend::Renderer::beginPass(Surface *color, Surface *depth)
     passDepthSurface = depth;
 }
 
+// What flushBatch last set in the open command buffer: ~2300 batches a frame re-set the same
+// viewport, scissor, sets, pipeline and push constants, each a driver call.
 void GSHwBackend::Renderer::flushBatch()
 {
     if (batchCount == 0u || !batch.color)
@@ -1304,29 +1318,55 @@ void GSHwBackend::Renderer::flushBatch()
     beginPass(batch.color, batch.depth);
     const uint32_t fbw = batch.depth ? std::min(batch.color->image.w, batch.depth->image.w) : batch.color->image.w;
     const uint32_t fbh = batch.depth ? std::min(batch.color->image.h, batch.depth->image.h) : batch.color->image.h;
-    VkViewport viewport{0.0f, 0.0f, static_cast<float>(batch.color->image.w), static_cast<float>(batch.color->image.h), 0.0f, 1.0f};
-    vkCmdSetViewport(c, 0, 1, &viewport);
+    const uint32_t vw = batch.color->image.w, vh = batch.color->image.h;
+    if (!bound.valid || bound.viewportW != vw || bound.viewportH != vh)
+    {
+        VkViewport viewport{0.0f, 0.0f, static_cast<float>(vw), static_cast<float>(vh), 0.0f, 1.0f};
+        vkCmdSetViewport(c, 0, 1, &viewport);
+        bound.viewportW = vw, bound.viewportH = vh;
+    }
     VkRect2D sc = batch.scissor;
     sc.offset.x = std::min<int32_t>(sc.offset.x, static_cast<int32_t>(fbw));
     sc.offset.y = std::min<int32_t>(sc.offset.y, static_cast<int32_t>(fbh));
     sc.extent.width = std::min<uint32_t>(sc.extent.width, fbw - static_cast<uint32_t>(sc.offset.x));
     sc.extent.height = std::min<uint32_t>(sc.extent.height, fbh - static_cast<uint32_t>(sc.offset.y));
-    vkCmdSetScissor(c, 0, 1, &sc);
-    const float constants[4] = {batch.blendConstant, batch.blendConstant, batch.blendConstant, batch.blendConstant};
-    vkCmdSetBlendConstants(c, constants);
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(c, 0, 1, &slots[slot].vertices.buffer, &offset);
+    if (!bound.valid || std::memcmp(&bound.scissor, &sc, sizeof(sc)) != 0)
+        vkCmdSetScissor(c, 0, 1, &sc), bound.scissor = sc;
+    if (!bound.valid || bound.blendConstant != batch.blendConstant)
+    {
+        const float constants[4] = {batch.blendConstant, batch.blendConstant, batch.blendConstant, batch.blendConstant};
+        vkCmdSetBlendConstants(c, constants);
+        bound.blendConstant = batch.blendConstant;
+    }
+    if (!bound.valid)
+    {
+        VkDeviceSize offset = 0;
+        vkCmdBindVertexBuffers(c, 0, 1, &slots[slot].vertices.buffer, &offset);
+    }
     const VkDescriptorSet sets[2] = {batch.set, batch.set1 ? batch.set1 : defaultMapSet};
-    vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 2, sets, 0, nullptr);
-    vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline(batch.pipeline));
-    vkCmdPushConstants(c, layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(HwPush), &batch.push);
+    if (!bound.valid || bound.sets[0] != sets[0] || bound.sets[1] != sets[1])
+    {
+        vkCmdBindDescriptorSets(c, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 2, sets, 0, nullptr);
+        bound.sets[0] = sets[0], bound.sets[1] = sets[1];
+    }
+    const auto use = [&](uint64_t key, const HwPush &push)
+    {
+        if (!bound.valid || bound.pipeline != key)
+            vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline(key)), bound.pipeline = key;
+        if (!bound.valid || std::memcmp(&bound.push, &push, sizeof(HwPush)) != 0)
+        {
+            vkCmdPushConstants(c, layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(HwPush), &push);
+            std::memcpy(&bound.push, &push, sizeof(HwPush));
+        }
+    };
+    use(batch.pipeline, batch.push);
+    bound.valid = true;
     vkCmdDraw(c, batchCount, 1, static_cast<uint32_t>(batchFirst), 0);
     if (batch.pipeline2)
     {
         HwPush second = batch.push;
         second.flags |= 64u;
-        vkCmdBindPipeline(c, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline(batch.pipeline2));
-        vkCmdPushConstants(c, layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(HwPush), &second);
+        use(batch.pipeline2, second);
         vkCmdDraw(c, batchCount, 1, static_cast<uint32_t>(batchFirst), 0);
     }
     ++owner.m_stats.batches;
