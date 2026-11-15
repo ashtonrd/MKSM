@@ -41,6 +41,6 @@ PS2Recomp/out/build/ps2xTest/ps2x_gs_replay gsrec/menu.gsr --repeat 2
 cd PS2Recomp && MKSM_SKIP_INTRO=1 MKSM_AUTO_PAD=xs ./out/build/ps2xRuntime/ps2EntryRunner ../extraido_full/SLUS_210.87
 ```
 
-- `ps2x_tests` sem argumentos roda todas as suítes. A suíte `memory` aborta num assert antigo do `EeScheduler`; rode as suítes por nome.
+- `ps2x_tests` sem argumentos roda todas as suítes (460 passam, 3 falhas conhecidas: ver R3 no `PLANO_DESEMPENHO.md`); com nomes, só essas suítes.
 - `ps2x_gs_replay` reproduz quadros gravados sem o jogo; ver `ARQUITETURA.md` §6.
 - Para rodar o jogo, a sessão gráfica precisa estar desbloqueada: com a tela travada, a janela não abre.
