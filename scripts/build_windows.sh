@@ -95,14 +95,14 @@ MODO RPG (opcional, só em jogo novo)
   Single Player ou Ko-op -> personagem -> na escolha de dificuldade, cursor no HARD e aperte L3
   (F2 no teclado): aparece "RPG" ao lado do Hard. O jogo fica sempre no Hard, com inimigos mais fortes.
   Matar inimigos dá XP: o nível aparece acima do "EXP" (no Ko-op, um para cada jogador).
-  Subiu de nível: pausa (Select) e R3 (ou F1), aba RPG, X gasta o ponto. Esquerda/Direita troca o
-  jogador no Ko-op. "Redistribuir pontos" (X duas vezes) devolve todos.
+  Subiu de nível: pausa (Select) e R3 (ou F1), aba RPG, X gasta o ponto. No Ko-op, cada jogador
+  abre a janela com o R3 do próprio controle e vê só o próprio RPG. "Redistribuir pontos" (X duas vezes) devolve todos.
   Na tela Load Game, os saves RPG mostram "RPG · Nv N". Um save RPG continua RPG; gravar um jogo normal
   por cima tira o RPG daquele slot. Os números (XP por nível, força dos atributos) estão no mksm.ini.
 
   Lutadores: no Versus todos vêm liberados, e Sub-Zero e Scorpion na seleção da história. Para jogar a história ou o Ko-op com outro lutador
   (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): num jogo novo, na escolha de dificuldade,
-  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Kintaro, Shadow Priest e o demônio de lava são experimentais
+  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Kintaro, Shadow Priest e Orochi são experimentais
   (sem defesa de verdade: com L2 levam 20% do dano, mas trechos que pedem defender não avançam);
   Ermac e os personagens cortados (Armor Lion, homem de terno, Shiva) andam, mas não têm golpes.
 
@@ -121,7 +121,7 @@ Roteiro de teste no Windows (marque o que funcionou e conte o que não funcionou
    qualquer outro (Johnny Cage, Kitana, Baraka...).
    Na fase: golpes (quadrado, triângulo, bola), especiais (R1 + botão), lista em Start > Moves.
    Tente uma fatality quando a barra azul encher (veja os comandos em Start > Moves > Fatalities).
-   Experimentais: Kintaro, Shadow Priest, demônio de lava. Sem golpes: Ermac, Armor Lion, homem de terno, Shiva
+   Experimentais: Kintaro, Shadow Priest, Orochi. Sem golpes: Ermac, Armor Lion, homem de terno, Shiva
    (só para ver; andam mas não atacam).
 6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L2/R2 no próprio controle.
    Controle 2 com botões trocados: R3 nele abre a aba Controles dele. Cima no controle 2: defesa contínua.
