@@ -99,7 +99,8 @@ MODO RPG (opcional, só em jogo novo)
 
   Lutadores: no Versus todos vêm liberados. Para jogar a história ou o Ko-op com outro lutador
   (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): num jogo novo, na escolha de dificuldade,
-  L1/R1 no controle de cada jogador (Q/E no teclado). Fica no save. Goro, Shang Tsung e o demônio de lava são experimentais.
+  L1/R1 no controle de cada jogador (Q/E no teclado). Fica no save. Goro, Shang Tsung e o demônio de lava são experimentais;
+  Ermac e os personagens cortados (Armor Lion, Ninja, Shiva) andam, mas não têm golpes.
 
 SAVES
   Ficam em jogo\mc0 (memory card 1) e jogo\mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.
@@ -115,6 +116,8 @@ Roteiro de teste no Windows (marque o que funcionou e conte o que não funcionou
 5. Lutador novo: na mesma tela de dificuldade, L1/R1 escolhe (Sub-Zero, Scorpion, Johnny Cage...).
    Na fase: golpes (quadrado, triângulo, bola), especiais (R1 + botão), lista em Start > Moves.
    Tente uma fatality quando a barra azul encher (veja os comandos em Start > Moves > Fatalities).
+   Experimentais: Goro, Shang Tsung, demônio de lava. Sem golpes: Ermac, Armor Lion, Ninja, Shiva
+   (só para ver; andam mas não atacam).
 6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L1/R1 no próprio controle.
 7. Versus: todos os 8 lutadores liberados.
 8. Save: salvar num slot, fechar, abrir, Load Game. O slot RPG mostra "RPG · Nv N".

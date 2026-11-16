@@ -31,7 +31,7 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |
 | RPG mode (levels and attribute points) | 🟡 Implemented, Single Player and Ko-op (see [RPG mode](#rpg-mode-optional)); balance still being tested |
-| Versus mode fighters | ✅ All 8 unlocked by default (`MKSM_VERSUS_TODOS=0` restores the original unlocks); and any of them (plus Goro, Shang Tsung and a lava demon, experimental) can be picked for a new story or Ko-op game with **L1/R1** on the difficulty screen; story compatibility still being tested ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
+| Versus mode fighters | ✅ All 8 unlocked by default (`MKSM_VERSUS_TODOS=0` restores the original unlocks); and any of them (plus Goro, Shang Tsung and a lava demon, experimental, and Ermac and three cut characters that walk but have no attacks) can be picked for a new story or Ko-op game with **L1/R1** on the difficulty screen; story compatibility still being tested ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
 | Fullscreen | ✅ F11 |
 | Higher internal resolution | ✅ New batching renderer at 2x by default, as fast as the old one; `PS2X_GS_HW=0` goes back to the old one, `PS2X_SCALE=1..4` picks the scale |
 | Graphics menu for weaker PCs | ✅ R3 in menus/pause (or F1): internal resolution, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini` |

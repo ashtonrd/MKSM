@@ -30,7 +30,7 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
 | Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
 | Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos, nos dois renderizadores (limite do EE/VU1, N20) |
-| Lutadores do modo Versus | ✅ Os 8 liberados por padrão (`MKSM_VERSUS_TODOS=0` volta às liberações originais); e qualquer um deles (mais Goro, Shang Tsung e um demônio de lava, experimentais) pode ser escolhido para um jogo novo de história ou Ko-op com **L1/R1** na tela de dificuldade; a compatibilidade na história ainda está em teste ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
+| Lutadores do modo Versus | ✅ Os 8 liberados por padrão (`MKSM_VERSUS_TODOS=0` volta às liberações originais); e qualquer um deles (mais Goro, Shang Tsung e um demônio de lava, experimentais, e Ermac e três personagens cortados, que andam mas não têm golpes) pode ser escolhido para um jogo novo de história ou Ko-op com **L1/R1** na tela de dificuldade; a compatibilidade na história ainda está em teste ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
 | Tela cheia | ✅ F11 |
 | Resolução interna maior | ✅ Renderizador novo em 2x por padrão, tão rápido quanto o antigo; `PS2X_GS_HW=0` volta ao antigo, `PS2X_SCALE=1..4` escolhe a escala |
 | Menu de gráfico para PC fraco | ✅ R3 nos menus/pausa (ou F1): resolução interna, 16:9, FXAA, filtro, mistura de campos, renderizador; grava no `mksm.ini` |
