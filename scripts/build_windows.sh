@@ -104,4 +104,21 @@ MODO RPG (opcional, só em jogo novo)
 SAVES
   Ficam em jogo\mc0 (memory card 1) e jogo\mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.
 EOF
+crlf > "$OUT/TESTAR.txt" <<'EOF'
+Roteiro de teste no Windows (marque o que funcionou e conte o que não funcionou)
+
+1. Abrir: dois cliques em Jogar.bat. Abre a janela, toca a abertura, chega ao menu.
+2. Controle: o gamepad mexe no menu. F11 tela cheia. F1 abre o menu Gráfico.
+3. Desempenho: menu Gráfico > Predefinição. "Alto" num PC bom, "Leve" ou "Mínimo" num fraco.
+4. Modo RPG: Single Player > personagem > dificuldade: cursor no Hard, L3 (F2) mostra "RPG".
+   Matar inimigos sobe o "Nv" acima do EXP. Subiu: Select, R3, aba RPG, gastar ponto.
+5. Lutador novo: na mesma tela de dificuldade, L1/R1 escolhe (Sub-Zero, Scorpion, Johnny Cage...).
+   Na fase: golpes (quadrado, triângulo, bola), especiais (R1 + botão), lista em Start > Moves.
+   Tente uma fatality quando a barra azul encher (veja os comandos em Start > Moves > Fatalities).
+6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L1/R1 no próprio controle.
+7. Versus: todos os 8 lutadores liberados.
+8. Save: salvar num slot, fechar, abrir, Load Game. O slot RPG mostra "RPG · Nv N".
+
+Se der erro ou fechar sozinho: mande print e diga em que passo foi.
+EOF
 echo "Pronto: $OUT ($(du -sh "$OUT" | cut -f1))"

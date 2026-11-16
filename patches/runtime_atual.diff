@@ -6041,7 +6041,7 @@ index 37b6a4d..45b2161 100644
  
      return 0;
 diff --git a/ps2xRuntime/src/lib/ps2_pad.cpp b/ps2xRuntime/src/lib/ps2_pad.cpp
-index 8590f14..a30efdd 100644
+index 8590f14..470f61e 100644
 --- a/ps2xRuntime/src/lib/ps2_pad.cpp
 +++ b/ps2xRuntime/src/lib/ps2_pad.cpp
 @@ -1,6 +1,19 @@
@@ -6120,7 +6120,7 @@ index 8590f14..a30efdd 100644
  {
      if (!data || size < 32)
          return false;
-@@ -37,86 +97,139 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+@@ -37,86 +97,141 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
      data[3] = 0xFF;
      data[4] = data[5] = data[6] = data[7] = kPadStickCenter;
  
@@ -6246,7 +6246,7 @@ index 8590f14..a30efdd 100644
 +            while (*c && *c != ',') ++c;
 +            if (*c) ++c;
 +        }
-+    if (const char *holds = std::getenv(port == 0 ? "MKSM_AUTO_HOLD" : "MKSM_AUTO_HOLD_P2"); holds != nullptr && port <= 1) // _P2: o controle 2 // "r@70-74,l@74-78,x@62-62.3"; r l u d x(cross) s(start) q(square) t(triangle) o(circle); R L U D stick only; g records the GS scene
++    if (const char *holds = std::getenv(port == 0 ? "MKSM_AUTO_HOLD" : "MKSM_AUTO_HOLD_P2"); holds != nullptr && port <= 1) // _P2: o controle 2 // "r@70-74,l@74-78,x@62-62.3"; r l u d x(cross) s(start) q(square) t(triangle) o(circle) 1 L1 2 R1 3 L2 4 R2; R L U D stick only; g records the GS scene
 +        for (const char *c = holds; *c; )
 +        {
 +            const char button = *c;
@@ -6263,6 +6263,8 @@ index 8590f14..a30efdd 100644
 +                else if (button == 'x') clearBit(PAD_CROSS); else if (button == 's') clearBit(PAD_START);
 +                else if (button == 'q') clearBit(PAD_SQUARE); else if (button == 't') clearBit(PAD_TRIANGLE);
 +                else if (button == 'o') clearBit(PAD_CIRCLE);
++                else if (button == '1') clearBit(PAD_L1); else if (button == '2') clearBit(PAD_R1); // ombros: especiais
++                else if (button == '3') clearBit(PAD_L2); else if (button == '4') clearBit(PAD_R2);
 +                // R L U D: the stick alone (the D-pad opens the map)
 +                // g: record the GS scene once per hold (PS2X_GS_RECORD_DIR, PS2X_GS_RECORD_FRAMES)
 +                else if (button == 'g') { static double armedAt = -1.0; if (armedAt != from) { armedAt = from; gsRecordScene(); } }
