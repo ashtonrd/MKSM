@@ -29,6 +29,25 @@
 | **Teste-chave:** Johnny Cage forçado na história | Escrevendo 90 em `0x5E6B40+0x1E0E` antes do Goro's Lair carregar, o HUD mostra "JOHNNY CAGE", mas o corpo é o do Liu Kang, que faz poses estranhas. Conclusão: o nome e parte do comportamento seguem o número, mas o **modelo e os dados do personagem são escolhidos antes e em outro lugar**. Captura em `capturas/personagem_jc_na_historia.png` |
 | Outros fios | `unlockendofgame` (`func_1C21B8`) lê o personagem do jogador e liga o bit 82 (Liu) ou 88 (Kung Lao): o fim de jogo de cada monge libera um lutador. `unlockmk2` grava `[0x5D82B0] = 1`. Strings: `CHARACTER_MEMORY`, `CUSTOM_CHARACTER_MEMORY`, `Setup_MainCharacter`, `Process_Character_Data`, `New_Process_Character` |
 
+## 2b. Avanço de 16/11, à noite (prova feita)
+
+- **O personagem da fase vem do save:** `save+0xCC` (jogador 1) e `save+0xD0` (jogador 2), lidos por `func_1CEE00` ao montar a sala, que chama `func_2F6BA0(número, jogador)`. Esta grava `+0x1E0E` e `+0x2AAC` da estrutura do jogador e as listas `0x6F5D98`/`0x6F5DD0`. Trocar só o `+0x1E0E` muda o nome no HUD, mas não o corpo.
+- **Prova:** com `save+0xCC = 90`, o Johnny Cage entra no Goro's Lair com o próprio modelo, anda e tem o nome no HUD.
+- **Números (cada um carregado no Goro's Lair):**
+
+| Número | Personagem | Número | Personagem |
+|---|---|---|---|
+| 0 | Liu Kang | 85 | Ermac (não está no Versus) |
+| 1 | Kung Lao | 88 | Sub-Zero |
+| 82 | Scorpion | 89 | Kitana |
+| 83 | Baraka | 90 | Johnny Cage |
+| 84 | Reptile | 81 | gigante de quatro braços (Goro/Kintaro) |
+| 2, 3, 80, 86, 87 | inimigos genéricos ou sem nome claro | 91 | trava no carregamento |
+
+- **Feito: aba "Personagens"** na janela de opções (R3/F1). Jogador 1 e, no Ko-op, jogador 2 trocam entre Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage, Ermac e Goro (os dois últimos experimentais). A escolha grava `save+0xCC`/`0xD0`, vale na próxima sala ou ao carregar e vai junto no save do jogo. Testado no Ko-op: Sub-Zero e Baraka gravados.
+- **A seleção da história continua com 4 lugares**, e Sub-Zero e Scorpion seguem bloqueados nela: não abrem com nenhum bit do Konten (bits 0–511 testados). A aba Personagens resolve sem isso.
+- **Falta (Fase C):** jogar cada lutador numa fase inteira (golpes, armas, loja de golpes, chefe, cutscenes). Só o andar e o modelo foram vistos.
+
 ## 3. Como seria (o desenho)
 
 O usuário escolhe, para a história (Single Player ou Ko-op), um dos lutadores do Versus. O jogo carrega o modelo, os golpes e os sons dele, e ele joga o Goro's Lair e o resto como se fosse um dos monges.
@@ -56,16 +75,16 @@ O usuário escolhe, para a história (Single Player ou Ko-op), um dos lutadores 
 ### Fase A: investigação
 
 - [x] **A0 Versus com todos liberados** (feito 16/11; ver a seção 2).
-- [ ] **A1 Número de cada lutador**
+- [x] **A1 Número de cada lutador** (16/11: tabela na seção 2b)
   - **Faça:** no Versus, escolha cada lutador e leia `0x5E6B40+0x1E0E` (cópia da RAM na luta). Confira o nono lugar.
   - **Pronto quando:** tabela nome → número → bit anotada aqui e no `MODDING.md`.
-- [ ] **A2 O que a seleção grava**
+- [x] **A2 O que a seleção grava** (16/11: `save+0xCC`/`0xD0`, `func_1CEE00` → `func_2F6BA0`)
   - **Faça:**
     - Compare a RAM logo depois de aceitar Liu Kang e logo depois de aceitar Kung Lao na história, e o mesmo no Versus com um lutador. Procure, além de `+0x1E0E`, o valor que o carregamento lê (global, save ou outra estrutura).
     - Ache quem chama `Setup_MainCharacter`/`New_Process_Character` e com que argumento.
   - **Verifique:** trocar esse valor antes do Goro's Lair carregar faz o modelo do Kung Lao aparecer numa história iniciada com o Liu Kang.
   - **Pronto quando:** endereço e função anotados.
-- [ ] **A3 Lutador do Versus na história (prova)**
+- [x] **A3 Lutador do Versus na história (prova)** (16/11: Johnny Cage no Goro's Lair; golpes e luta ainda sem teste)
   - **Faça:** com o caminho da A2, carregue o Johnny Cage no Goro's Lair.
   - **Verifique:** modelo, golpes básicos (soco, chute, pulo, agarrão), dano nos inimigos, morte e volta.
   - **Pronto quando:** capturas e a lista do que funciona e do que não funciona anotadas.
@@ -74,9 +93,9 @@ O usuário escolhe, para a história (Single Player ou Ko-op), um dos lutadores 
 
 ### Fase B: escolha e carga
 
-- [ ] **B1 Escolher o lutador:** na seleção da história (A5) ou na janela de opções, com o número salvo por slot (`personagem_mc0_slot<n>.ini` ou dentro do perfil do RPG).
-- [ ] **B2 Carregar o lutador:** troca de função no caminho da A2, só quando a opção está ligada. Sem ela, o jogo é o original (regra 2).
-- [ ] **B3 Ko-op:** o jogador 2 também escolhe.
+- [x] **B1 Escolher o lutador** (16/11: aba Personagens, gravando no save do jogo): na seleção da história (A5) ou na janela de opções, com o número salvo por slot (`personagem_mc0_slot<n>.ini` ou dentro do perfil do RPG).
+- [x] **B2 Carregar o lutador** (o próprio jogo carrega pelo save): troca de função no caminho da A2, só quando a opção está ligada. Sem ela, o jogo é o original (regra 2).
+- [x] **B3 Ko-op** (jogador 2 na mesma aba): o jogador 2 também escolhe.
 
 ### Fase C: compatibilidade, fase por fase
 

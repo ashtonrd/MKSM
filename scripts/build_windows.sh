@@ -97,6 +97,10 @@ MODO RPG (opcional, só em jogo novo)
   Na tela Load Game, os saves RPG mostram "RPG · Nv N". Um save RPG continua RPG; gravar um jogo normal
   por cima tira o RPG daquele slot. Os números (XP por nível, força dos atributos) estão no mksm.ini.
 
+  Lutadores: no Versus todos vêm liberados. Para jogar a história ou o Ko-op com outro lutador
+  (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): pausa, R3 (ou F1), aba Personagens,
+  Esquerda/Direita. Vale ao entrar na próxima sala e fica no save. Ermac e Goro são experimentais.
+
 SAVES
   Ficam em jogo\mc0 (memory card 1) e jogo\mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.
 EOF
