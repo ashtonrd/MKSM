@@ -23,6 +23,8 @@
 #include <mutex>
 #include <vector>
 
+extern std::atomic<uint16_t> g_padButtons[2]; // ps2_pad.cpp: botões de cada controle no último quadro (ativo em 0)
+
 namespace mksm_rpg
 {
     namespace
@@ -273,11 +275,12 @@ namespace mksm_rpg
                 // Cura (dano <= 0) e morte instantânea (abismo, fatality: o dano é a vida inteira) passam iguais.
                 const uint32_t save = saveBlock(rdram);
                 const bool story = save && rd32(rdram, save + 0x88u) <= 1u; // 0 sozinho, 1 co-op; o Versus fica de fora
-                if (g_state.active && story && damage > 0 && (targetMax <= 0 || damage < targetMax))
+                const bool normalHit = story && damage > 0 && (targetMax <= 0 || damage < targetMax);
+                const uint32_t objs[2] = {rd32(rdram, 0x6826A8u), rd32(rdram, 0x6826ACu)};
+                int32_t scaled = damage;
+                if (g_state.active && normalHit)
                 {
                     const Config &c = cfg();
-                    const uint32_t objs[2] = {rd32(rdram, 0x6826A8u), rd32(rdram, 0x6826ACu)};
-                    int32_t scaled = damage;
                     if (target == objs[0] || (target == objs[1] && objs[1]))
                     {
                         const Player &p = g_state.players[target == objs[0] ? 0 : 1];
@@ -301,8 +304,21 @@ namespace mksm_rpg
                         const int level = two ? (levelLocked(p1) + levelLocked(p2) + 1) / 2 : levelLocked(p1);
                         scaled = dealtDamage(c, damage, forca, level);
                     }
-                    SET_GPR_S32(ctx, 5, scaled);
                 }
+                // Defesa para os experimentais (chefes e cortados, sem a defesa de jogador nos dados de golpes): com L2
+                // segurado, 20% do dano, sem animação. shortcut: não olha a direção do golpe e o jogo não conta como
+                // defesa (trechos que pedem defender não avançam); a defesa de verdade exige o pacote de golpes deles.
+                for (int j = 0; normalHit && j < 2; ++j)
+                    if (objs[j] && target == objs[j])
+                    {
+                        const int32_t fighter = static_cast<int32_t>(rd32(rdram, save + (j ? 0xD0u : 0xCCu)));
+                        const bool noBlock = fighter == 81 || fighter == 27 || fighter == 30 || fighter == 85 || fighter == 5 ||
+                                             fighter == 6 || fighter == 23; // Kintaro, Shadow Priest, demônio, Ermac, cortados
+                        if (noBlock && (g_padButtons[j].load(std::memory_order_relaxed) & 0x0100u) == 0) // L2, ativo em 0
+                            scaled = std::max<int32_t>(1, static_cast<int32_t>(std::lround(scaled * 0.2)));
+                    }
+                if (scaled != damage)
+                    SET_GPR_S32(ctx, 5, scaled);
             }
             g_origDamage(rdram, ctx, runtime);
             if (heal > 0 && healed)
@@ -507,8 +523,10 @@ namespace mksm_rpg
     // Diálogo "Select Difficulty" aberto (RAM do menu, A7) e o cursor: 0x6FA678 é 0 no Hard, 1 no Normal.
     bool difficultyScreen(const uint8_t *rdram, bool &cursorHard)
     {
-        const bool open = rd32(rdram, 0x5CC634u) == 1u && rd32(rdram, 0x5CC608u) == 2u && rd32(rdram, 0x5BE708u) == 1u &&
-                          rd32(rdram, 0x4F4B68u) == 0u;
+        // Diálogo "Sim/Não" do menu (0x5CC634 = 1, 0x5CC608 = 2) fora de uma partida (0x50BC14 = 0) e fora do Load Game
+        // (0x4AFC1C = 0). 0x5BE708, usado antes, pisca e fazia o L3 falhar.
+        const bool open = rd32(rdram, 0x5CC634u) == 1u && rd32(rdram, 0x5CC608u) == 2u && rd32(rdram, 0x4F4B68u) == 0u &&
+                          rd32(rdram, 0x50BC14u) == 0u && rd32(rdram, 0x4AFC1Cu) == 0u;
         cursorHard = open && rd32(rdram, 0x6FA678u) == 0u;
         return open;
     }

@@ -6041,10 +6041,10 @@ index 37b6a4d..45b2161 100644
  
      return 0;
 diff --git a/ps2xRuntime/src/lib/ps2_pad.cpp b/ps2xRuntime/src/lib/ps2_pad.cpp
-index 8590f14..470f61e 100644
+index 8590f14..d3bb80f 100644
 --- a/ps2xRuntime/src/lib/ps2_pad.cpp
 +++ b/ps2xRuntime/src/lib/ps2_pad.cpp
-@@ -1,6 +1,19 @@
+@@ -1,6 +1,20 @@
 +#include <algorithm>
 +#include <cassert>
 +#include <chrono>
@@ -6061,10 +6061,11 @@ index 8590f14..470f61e 100644
 +
 +void gsRecordScene(); // gs/gs_recording_backend.cpp
 +extern std::atomic<bool> g_gfxBlockInput; // ps2_runtime.cpp: the Graphics menu is open
++std::atomic<uint16_t> g_padButtons[2] = {0xFFFFu, 0xFFFFu}; // mksm_rpg.cpp: L2 segurado = defesa dos lutadores extras
  
  namespace
  {
-@@ -25,7 +38,54 @@ namespace
+@@ -25,7 +39,54 @@ namespace
      constexpr uint16_t PAD_L2 = 0x0100u;
  }
  
@@ -6120,12 +6121,16 @@ index 8590f14..470f61e 100644
  {
      if (!data || size < 32)
          return false;
-@@ -37,86 +97,141 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+@@ -37,88 +98,149 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
      data[3] = 0xFF;
      data[4] = data[5] = data[6] = data[7] = kPadStickCenter;
  
 +    if (g_gfxBlockInput.load(std::memory_order_relaxed))
++    {
++        if (port <= 1)
++            g_padButtons[port].store(0xFFFFu, std::memory_order_relaxed);
 +        return true; // nothing pressed, sticks centred
++    }
      uint16_t btns = 0xFFFFu;
 -    constexpr int kGamepad = 0;
 +    // Port 1 is the second gamepad (2 players); the keyboard plays on port 0 only.
@@ -6323,9 +6328,13 @@ index 8590f14..470f61e 100644
 +        }
      }
  
++    if (port <= 1)
++        g_padButtons[port].store(btns, std::memory_order_relaxed);
      data[2] = static_cast<uint8_t>(btns & 0xFF);
+     data[3] = static_cast<uint8_t>(btns >> 8);
+     return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..36d7125 100644
+index 45cb9d2..8f6ab91 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -6369,7 +6378,7 @@ index 45cb9d2..36d7125 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -373,10 +387,671 @@ namespace
+@@ -373,10 +387,676 @@ namespace
      }
  }
  
@@ -6472,10 +6481,10 @@ index 45cb9d2..36d7125 100644
 +    // save+0xD0) e o carrega ao montar a sala (func_1CEE00). Números achados carregando cada um no Goro's Lair.
 +    struct Fighter { int id; const char *name; };
 +    constexpr Fighter kFighters[] = {{0, "Liu Kang"}, {1, "Kung Lao"}, {88, "Sub-Zero"}, {82, "Scorpion"}, {83, "Baraka"},
-+                                     {84, "Reptile"}, {89, "Kitana"}, {90, "Johnny Cage"}, {81, "Goro (experimental)"},
-+                                     {27, "Shang Tsung (experimental)"}, {30, "Demônio de lava (experimental)"},
++                                     {84, "Reptile"}, {89, "Kitana"}, {90, "Johnny Cage"}, {81, "Kintaro (experimental)"},
++                                     {27, "Shadow Priest (experimental)"}, {30, "Demônio de lava (experimental)"},
 +                                     {85, "Ermac (sem golpes)"}, {5, "Armor Lion, cortado (sem golpes)"},
-+                                     {6, "Ninja, cortado (sem golpes)"}, {23, "Shiva, cortada (sem golpes)"}};
++                                     {6, "Homem de terno, cortado (sem golpes)"}, {23, "Shiva, cortada (sem golpes)"}};
 +    // Ermac e os cortados (nomes "NULL (...)" no HUD) carregam e andam, mas não têm golpes de jogador; 92+ trava.
 +    const char *fighterName(int id)
 +    {
@@ -6898,12 +6907,18 @@ index 45cb9d2..36d7125 100644
 +
 +namespace
 +{
-+    // Modo RPG na tela de dificuldade de um jogo novo: com o cursor no Hard, L3 (F2 no teclado) arma o modo.
++    // A tela de dificuldade, estável: some por um quadro ou outro na RAM, então só conta como fechada depois de meio
++    // segundo sem ser vista (o cursor fica no último valor lido). Antes, um L3 nesse quadro se perdia.
++    struct { bool open = false, hard = false; double seen = -10.0; } g_diff;
++
++    // Modo RPG na tela de dificuldade de um jogo novo: com o cursor no Hard, L3 (F2 no teclado) liga e desliga.
 +    void updateRpgDifficulty(const uint8_t *rdram)
 +    {
-+        bool hard = false;
++        if (bool hard = false; mksm_rpg::difficultyScreen(rdram, hard))
++            g_diff.seen = GetTime(), g_diff.hard = hard;
++        g_diff.open = GetTime() - g_diff.seen < 0.5;
++        const bool open = g_diff.open, hard = g_diff.hard;
 +        static bool wasOpen = false;
-+        const bool open = mksm_rpg::difficultyScreen(rdram, hard);
 +        if (open && !wasOpen) // cada jogo novo começa sem RPG e com os lutadores da seleção
 +            mksm_rpg::setArmed(false), mksm_rpg::setFighterPick(0, -1), mksm_rpg::setFighterPick(1, -1);
 +        wasOpen = open;
@@ -6971,10 +6986,9 @@ index 45cb9d2..36d7125 100644
 +                }
 +            return;
 +        }
-+        bool hard = false;
-+        if (mksm_rpg::difficultyScreen(rdram, hard))
++        if (g_diff.open)
 +        {
-+            if (hard) // à direita da palavra HARD
++            if (g_diff.hard) // à direita da palavra HARD
 +            {
 +                const Vector2 p = at(0.565f, 0.488f);
 +                if (mksm_rpg::armed())
@@ -7043,7 +7057,7 @@ index 45cb9d2..36d7125 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,21 +1062,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +1067,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -7068,7 +7082,7 @@ index 45cb9d2..36d7125 100644
      uint32_t width = 0u;
      uint32_t height = 0u;
      uint32_t displayFbp = 0u;
-@@ -414,14 +1078,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -414,14 +1083,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
                                                     &sourceFbp,
                                                     &usedPreferredDisplaySource))
      {
@@ -7096,7 +7110,7 @@ index 45cb9d2..36d7125 100644
          return;
      }
  
-@@ -450,13 +1119,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -450,13 +1124,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
@@ -7133,7 +7147,7 @@ index 45cb9d2..36d7125 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +1157,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +1162,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -7169,7 +7183,7 @@ index 45cb9d2..36d7125 100644
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +1196,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +1201,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -7178,7 +7192,7 @@ index 45cb9d2..36d7125 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +1244,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +1249,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -7188,7 +7202,7 @@ index 45cb9d2..36d7125 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +1384,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +1389,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -7284,7 +7298,7 @@ index 45cb9d2..36d7125 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -732,9 +1470,49 @@ bool PS2Runtime::initialize(const char *title)
+@@ -732,9 +1475,49 @@ bool PS2Runtime::initialize(const char *title)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
          SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -7334,7 +7348,7 @@ index 45cb9d2..36d7125 100644
  #endif
          SetTargetFPS(60);
          if (m_debugUiInitCallback)
-@@ -2214,6 +2992,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +2997,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -7346,7 +7360,7 @@ index 45cb9d2..36d7125 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +3143,16 @@ void PS2Runtime::run()
+@@ -2360,13 +3148,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -7363,7 +7377,7 @@ index 45cb9d2..36d7125 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +3174,63 @@ void PS2Runtime::run()
+@@ -2388,9 +3179,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -7428,7 +7442,7 @@ index 45cb9d2..36d7125 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +3241,239 @@ void PS2Runtime::run()
+@@ -2401,25 +3246,239 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -7682,7 +7696,7 @@ index 45cb9d2..36d7125 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3484,197 @@ void PS2Runtime::run()
+@@ -2430,21 +3489,197 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());

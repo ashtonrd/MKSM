@@ -84,8 +84,9 @@ MODO RPG (opcional, só em jogo novo)
 
   Lutadores: no Versus todos vêm liberados, e Sub-Zero e Scorpion na seleção da história. Para jogar a história ou o Ko-op com outro lutador
   (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): num jogo novo, na escolha de dificuldade,
-  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Goro, Shang Tsung e o demônio de lava são experimentais;
-  Ermac e os personagens cortados (Armor Lion, Ninja, Shiva) andam, mas não têm golpes.
+  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Kintaro, Shadow Priest e o demônio de lava são experimentais
+  (sem defesa de verdade: com L2 levam 20% do dano, mas trechos que pedem defender não avançam);
+  Ermac e os personagens cortados (Armor Lion, homem de terno, Shiva) andam, mas não têm golpes.
 
 SAVES
   Ficam em jogo/mc0 (memory card 1) e jogo/mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.

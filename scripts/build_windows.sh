@@ -99,8 +99,9 @@ MODO RPG (opcional, só em jogo novo)
 
   Lutadores: no Versus todos vêm liberados, e Sub-Zero e Scorpion na seleção da história. Para jogar a história ou o Ko-op com outro lutador
   (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): num jogo novo, na escolha de dificuldade,
-  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Goro, Shang Tsung e o demônio de lava são experimentais;
-  Ermac e os personagens cortados (Armor Lion, Ninja, Shiva) andam, mas não têm golpes.
+  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Kintaro, Shadow Priest e o demônio de lava são experimentais
+  (sem defesa de verdade: com L2 levam 20% do dano, mas trechos que pedem defender não avançam);
+  Ermac e os personagens cortados (Armor Lion, homem de terno, Shiva) andam, mas não têm golpes.
 
 SAVES
   Ficam em jogo\mc0 (memory card 1) e jogo\mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.
@@ -117,7 +118,7 @@ Roteiro de teste no Windows (marque o que funcionou e conte o que não funcionou
    qualquer outro (Johnny Cage, Kitana, Baraka...).
    Na fase: golpes (quadrado, triângulo, bola), especiais (R1 + botão), lista em Start > Moves.
    Tente uma fatality quando a barra azul encher (veja os comandos em Start > Moves > Fatalities).
-   Experimentais: Goro, Shang Tsung, demônio de lava. Sem golpes: Ermac, Armor Lion, Ninja, Shiva
+   Experimentais: Kintaro, Shadow Priest, demônio de lava. Sem golpes: Ermac, Armor Lion, homem de terno, Shiva
    (só para ver; andam mas não atacam).
 6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L2/R2 no próprio controle.
 7. Versus: todos os 8 lutadores liberados.

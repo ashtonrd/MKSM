@@ -31,7 +31,7 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |
 | RPG mode (levels and attribute points) | 🟡 Implemented, Single Player and Ko-op (see [RPG mode](#rpg-mode-optional)); balance still being tested |
-| Fighters | ✅ All 8 unlocked in Versus, and Sub-Zero and Scorpion in the story character select (`MKSM_VERSUS_TODOS=0` restores the original unlocks); any of them (plus Goro, Shang Tsung and a lava demon, experimental, and Ermac and three cut characters that walk but have no attacks) can be picked for a new story or Ko-op game with **L2/R2** on the difficulty screen; story compatibility still being tested ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
+| Fighters | ✅ All 8 unlocked in Versus, and Sub-Zero and Scorpion in the story character select (`MKSM_VERSUS_TODOS=0` restores the original unlocks); any of them (plus Kintaro, the Shadow Priest and a lava demon, experimental, and Ermac and three cut characters that walk but have no attacks) can be picked for a new story or Ko-op game with **L2/R2** on the difficulty screen; story compatibility still being tested ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
 | Fullscreen | ✅ F11 |
 | Higher internal resolution | ✅ New batching renderer at 2x by default, as fast as the old one; `PS2X_GS_HW=0` goes back to the old one, `PS2X_SCALE=1..4` picks the scale |
 | Graphics menu for weaker PCs | ✅ R3 in menus/pause (or F1): internal resolution, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini` |
@@ -103,8 +103,8 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) �
 | Liu Kang, Kung Lao, Sub-Zero, Scorpion | yes | yes | Confirmed by playing |
 | Johnny Cage | yes | yes (green fireball, shadow kick) | The in-game move list shows generic names |
 | Reptile, Baraka, Kitana | yes | not tested one by one | Expected to behave like Johnny Cage |
-| Goro, Shang Tsung, lava demon | yes (their own) | — | Experimental: big, odd camera and collision |
-| Ermac, and the cut characters Armor Lion, Ninja and Shiva | **no** | — | Just to look at: they load and walk, but have no player moves (Ninja and Shiva have no animation) |
+| Kintaro, Shadow Priest, lava demon | yes (their own) | — | Experimental: big, odd camera and collision; no real block (holding L2 cuts damage to 20%, but the game does not count it as a block, so parts that require blocking do not advance) |
+| Ermac, and the cut characters Armor Lion, the man in a suit and Shiva | **no** | — | Just to look at: they load and walk, but have no player moves (the man in a suit and Shiva have no animation) |
 
 - **Not perfect yet:** Versus fighters were made for 1-on-1 fights. The move shop, story fatalities and cutscenes (which still show the monks) may not fit. Giving Ermac and the cut characters another fighter's moves would mean mixing two characters' data packs, which hasn't been figured out yet. Status, character IDs and the game's damage formula: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
 - **Testing:** the Windows portable folder includes `TESTAR.txt`, a step-by-step checklist (RPG, fighters, Ko-op, Versus, saves).

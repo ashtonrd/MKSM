@@ -30,7 +30,7 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
 | Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
 | Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos, nos dois renderizadores (limite do EE/VU1, N20) |
-| Lutadores | ✅ Os 8 liberados no Versus, e Sub-Zero e Scorpion na seleção da história (`MKSM_VERSUS_TODOS=0` volta às liberações originais); qualquer um deles (mais Goro, Shang Tsung e um demônio de lava, experimentais, e Ermac e três personagens cortados, que andam mas não têm golpes) pode ser escolhido para um jogo novo de história ou Ko-op com **L2/R2** na tela de dificuldade; a compatibilidade na história ainda está em teste ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
+| Lutadores | ✅ Os 8 liberados no Versus, e Sub-Zero e Scorpion na seleção da história (`MKSM_VERSUS_TODOS=0` volta às liberações originais); qualquer um deles (mais Kintaro, Shadow Priest e um demônio de lava, experimentais, e Ermac e três personagens cortados, que andam mas não têm golpes) pode ser escolhido para um jogo novo de história ou Ko-op com **L2/R2** na tela de dificuldade; a compatibilidade na história ainda está em teste ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
 | Tela cheia | ✅ F11 |
 | Resolução interna maior | ✅ Renderizador novo em 2x por padrão, tão rápido quanto o antigo; `PS2X_GS_HW=0` volta ao antigo, `PS2X_SCALE=1..4` escolhe a escala |
 | Menu de gráfico para PC fraco | ✅ R3 nos menus/pausa (ou F1): resolução interna, 16:9, FXAA, filtro, mistura de campos, renderizador; grava no `mksm.ini` |
@@ -103,8 +103,8 @@ Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 | Liu Kang, Kung Lao, Sub-Zero, Scorpion | sim | sim | Confirmados jogando |
 | Johnny Cage | sim | sim (bola verde, chute de sombra) | A lista de golpes do jogo mostra nomes genéricos |
 | Reptile, Baraka, Kitana | sim | não testados um a um | Devem se comportar como o Johnny Cage |
-| Goro, Shang Tsung, demônio de lava | sim (próprios) | — | Experimentais: grandes, câmera e colisão estranhas |
-| Ermac e os personagens cortados Armor Lion, Ninja e Shiva | **não** | — | Só para ver: carregam e andam, mas não têm golpes de jogador (Ninja e Shiva sem animação) |
+| Kintaro, Shadow Priest, demônio de lava | sim (próprios) | — | Experimentais: grandes, câmera e colisão estranhas; sem defesa de verdade (com L2 levam 20% do dano, mas o jogo não conta como defesa: trechos que pedem defender não avançam) |
+| Ermac e os personagens cortados Armor Lion, homem de terno e Shiva | **não** | — | Só para ver: carregam e andam, mas não têm golpes de jogador (homem de terno e Shiva sem animação) |
 
 - **Ainda não é perfeito:** os lutadores do Versus foram feitos para luta 1 contra 1. A loja de golpes, as fatalities da história e as cutscenes (que continuam mostrando os monges) podem não casar. Dar ao Ermac e aos cortados os golpes de outro lutador exige misturar os pacotes de dados de dois personagens, o que ainda não foi descoberto. Situação, números dos personagens e a fórmula de dano do jogo: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
 - **Teste:** a pasta portátil do Windows traz o `TESTAR.txt`, um roteiro passo a passo (RPG, lutadores, Ko-op, Versus, saves).
