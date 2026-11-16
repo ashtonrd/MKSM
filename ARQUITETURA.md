@@ -210,6 +210,7 @@ Caminhos relativos a `PS2Recomp/ps2xRuntime/` quando não indicado.
   - `scripts/kl_corpo.py <pastas de captura>`: diz se o corpo do Kung Lao parceiro aparece nos planos abertos da cena de entrada (capturas a cada 60 quadros).
   - **Goro's Lair começa com uma cutscene longa** (faixas pretas e o ícone ▶ no canto), de ~58 s a ~155 s. A gameplay (Liu Kang com HUD) começa por volta de 156 s. Medidas "da fase" antes de 155 s são da cutscene. Um toque de X ou Start durante ela não pulou.
   - `MKSM_AUTO_SELECT_AT="72,76"` dá toques em Select (no Goro's Lair, Select abre o menu de pausa).
+- **Registradores de I/O:** `PS2Memory::m_ioRegisters` é uma `IoRegisterFile`: tabela simples para a página de I/O do EE (0x10000000–0x1000FFFF, palavras alinhadas, com marca de "já escrito" para o `count`) e mapa para o resto, no heap (o `PS2Runtime` fica na pilha da `main`). Mudar `ps2_memory.h` recompila os 13 mil arquivos gerados.
 - **RAM em disco:** `PS2X_DUMP_RAM_AT="70,74,78"` grava `ram_<s>.bin` (32 MB, a RAM do EE) no diretório atual nesses segundos, para comparar estados (por exemplo, achar posições que mudam com a entrada).
   - **Estado inicial:** no primeiro fim de quadro (troca `0x00`↔`0x46`) depois de `AT` segundos, grava o estado do backend (VRAM + CLUT + transferência).
   - **Comandos:** depois disso, grava todos os comandos do backend, em ordem, por `n` quadros.
