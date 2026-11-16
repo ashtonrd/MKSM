@@ -115,6 +115,8 @@ namespace mksm_rpg
         };
         std::mutex g_mutex;
         State g_state;
+        int g_fighter[2] = {-1, -1}; // escolhido na tela de dificuldade (fica para o próximo jogo novo)
+        bool g_fighterPending = false; // jogo novo começou: gravar na primeira sala montada
 
         int spentLocked(const Player &p) { int n = 0; for (int v : p.points) n += v; return n; }
         int levelLocked(const Player &p) { return levelFor(cfg(), p.xpGained); }
@@ -210,7 +212,24 @@ namespace mksm_rpg
             return rd32(rdram, 0x4F4B68u) == 1u && rd32(rdram, 0x6BEE2Cu) == 0u && rd32(rdram, 0x4C49E8u) == 0u;
         }
 
-        PS2Runtime::RecompiledFunction g_origSetXp, g_origDamage, g_origFrame, g_origDifficulty;
+        PS2Runtime::RecompiledFunction g_origSetXp, g_origDamage, g_origFrame, g_origDifficulty, g_origRoom;
+
+        // func_1CEE00 monta a sala e lê o lutador de cada jogador em save+0xCC/0xD0 (PLANO_PERSONAGENS.md).
+        void hookRoom(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
+        {
+            {
+                std::lock_guard<std::mutex> lock(g_mutex);
+                if (g_fighterPending)
+                    if (const uint32_t save = saveBlock(rdram))
+                    {
+                        for (int j = 0; j < 2; ++j)
+                            if (g_fighter[j] >= 0)
+                                wr32(rdram, save + (j ? 0xD0u : 0xCCu), static_cast<uint32_t>(g_fighter[j]));
+                        g_fighterPending = false;
+                    }
+            }
+            g_origRoom(rdram, ctx, runtime);
+        }
 
         // Crédito de XP: o saldo do jogo não muda (regra 6); o XP ganho de cada jogador soma a subida, com a Sabedoria.
         void hookSetXp(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
@@ -343,6 +362,9 @@ namespace mksm_rpg
                 std::lock_guard<std::mutex> lock(g_mutex);
                 if (ra == 0x130910u) // jogo novo (Single Player ou Ko-op -> personagem -> dificuldade)
                 {
+                    // Lutador escolhido com L1/R1 na tela de dificuldade: gravado no save quando a primeira sala é
+                    // montada (antes disso o jogo ainda reescreve save+0xCC/0xD0 com a seleção).
+                    g_fighterPending = g_fighter[0] >= 0 || g_fighter[1] >= 0;
                     const bool rpg = g_state.armed && difficulty == 2u;
                     g_state = State{};
                     g_state.active = rpg;
@@ -397,6 +419,7 @@ namespace mksm_rpg
         replace(runtime, 0x284FE0u, hookDamage, g_origDamage);
         replace(runtime, 0x183978u, hookFrame, g_origFrame);
         replace(runtime, 0x1DAF90u, hookDifficulty, g_origDifficulty);
+        replace(runtime, 0x1CEE00u, hookRoom, g_origRoom);
     }
 
     Snapshot snapshot(int player)
@@ -475,6 +498,19 @@ namespace mksm_rpg
                           rd32(rdram, 0x4F4B68u) == 0u;
         cursorHard = open && rd32(rdram, 0x6FA678u) == 0u;
         return open;
+    }
+
+    int fighterPick(int player)
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        return player >= 0 && player < 2 ? g_fighter[player] : -1;
+    }
+
+    void setFighterPick(int player, int id)
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (player >= 0 && player < 2)
+            g_fighter[player] = id;
     }
 
     bool armed()

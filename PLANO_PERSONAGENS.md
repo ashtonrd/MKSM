@@ -44,7 +44,7 @@
 | 84 | Reptile | 81 | gigante de quatro braços (Goro/Kintaro) |
 | 2, 3, 80, 86, 87 | inimigos genéricos ou sem nome claro | 91 | trava no carregamento |
 
-- **Feito: aba "Personagens"** na janela de opções (R3/F1). Jogador 1 e, no Ko-op, jogador 2 trocam entre Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage, Ermac e Goro (os dois últimos experimentais). A escolha grava `save+0xCC`/`0xD0`, vale na próxima sala ou ao carregar e vai junto no save do jogo. Testado no Ko-op: Sub-Zero e Baraka gravados.
+- **Feito: escolha só no jogo novo** (o usuário pediu, para não bagunçar golpes comprados e fatalities; a aba do meio do jogo saiu). Na tela de dificuldade de um jogo novo, L1/R1 no controle de cada jogador (Q/E no teclado) trocam o lutador: Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage, Ermac e Goro (os dois últimos experimentais). "O da seleção" é o original. A troca de `func_1CEE00` grava `save+0xCC`/`0xD0` quando a primeira sala é montada (antes disso o jogo ainda reescreve). Depois, o lutador fica no save do jogo. Testado: Ko-op novo com Sub-Zero e Baraka no Goro's Lair. Roteiro de teste: `MKSM_TEST_LUTADOR=88,83`.
 - **A seleção da história continua com 4 lugares**, e Sub-Zero e Scorpion seguem bloqueados nela: não abrem com nenhum bit do Konten (bits 0–511 testados). A aba Personagens resolve sem isso.
 - **Falta (Fase C):** jogar cada lutador numa fase inteira (golpes, armas, loja de golpes, chefe, cutscenes). Só o andar e o modelo foram vistos.
 
@@ -93,7 +93,7 @@ O usuário escolhe, para a história (Single Player ou Ko-op), um dos lutadores 
 
 ### Fase B: escolha e carga
 
-- [x] **B1 Escolher o lutador** (16/11: aba Personagens, gravando no save do jogo): na seleção da história (A5) ou na janela de opções, com o número salvo por slot (`personagem_mc0_slot<n>.ini` ou dentro do perfil do RPG).
+- [x] **B1 Escolher o lutador** (16/11: L1/R1 na tela de dificuldade do jogo novo, gravando no save do jogo): na seleção da história (A5) ou na janela de opções, com o número salvo por slot (`personagem_mc0_slot<n>.ini` ou dentro do perfil do RPG).
 - [x] **B2 Carregar o lutador** (o próprio jogo carrega pelo save): troca de função no caminho da A2, só quando a opção está ligada. Sem ela, o jogo é o original (regra 2).
 - [x] **B3 Ko-op** (jogador 2 na mesma aba): o jogador 2 também escolhe.
 

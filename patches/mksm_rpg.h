@@ -30,6 +30,9 @@ namespace mksm_rpg
     bool difficultyScreen(const uint8_t *rdram, bool &cursorHard);
     bool armed();
     void setArmed(bool on);
+    // Lutador do jogo novo (-1 = o da seleção do jogo): vale só ao começar um jogo novo (save+0xCC / save+0xD0).
+    int fighterPick(int player);
+    void setFighterPick(int player, int id);
 
     // O save do MKSM é um arquivo por cartão com 9 slots; o perfil RPG fica em rpg_mc<cartão>_slot<n>.ini.
     constexpr int kSlots = 9;
