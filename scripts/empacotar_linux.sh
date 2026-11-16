@@ -44,6 +44,8 @@ if [[ ! -f "$OUT/mksm.ini" ]]; then  # o jogo regrava as chaves gráficas e mant
   { echo "# Configuração do jogo: tire o # da frente de uma linha VAR=valor para usar."
     sed -n '3,/^set -euo/{/^#/p}' "$AQUI/scripts/jogar.sh"; } > "$OUT/mksm.ini"
 fi
+grep -q 'RPG_' "$OUT/mksm.ini" || # pasta de antes do modo RPG: só acrescenta as chaves dele
+  sed -n '/^# Modo RPG/,/^# Cada slot RPG/p' "$AQUI/scripts/jogar.sh" >> "$OUT/mksm.ini"
 
 cat > "$OUT/LEIA-ME.txt" <<'EOF'
 Mortal Kombat: Shaolin Monks (recompilado para PC), versão Linux portátil
@@ -71,7 +73,16 @@ CONFIGURAÇÃO
   O menu Gráfico (F1, ou R3 nos menus) grava as escolhas ali.
   PC com placa de vídeo fraca: no menu Gráfico, ponha a Predefinição em "Mínimo".
 
+MODO RPG (opcional, só em jogo novo)
+  Single Player ou Ko-op -> personagem -> na escolha de dificuldade, cursor no HARD e aperte L3
+  (F2 no teclado): aparece "RPG" ao lado do Hard. O jogo fica sempre no Hard, com inimigos mais fortes.
+  Matar inimigos dá XP: o nível aparece acima do "EXP" (no Ko-op, um para cada jogador).
+  Subiu de nível: pausa (Select) e R3 (ou F1), aba RPG, X gasta o ponto. Esquerda/Direita troca o
+  jogador no Ko-op. "Redistribuir pontos" (X duas vezes) devolve todos.
+  Na tela Load Game, os saves RPG mostram "RPG · Nv N". Um save RPG continua RPG; gravar um jogo normal
+  por cima tira o RPG daquele slot. Os números (XP por nível, força dos atributos) estão no mksm.ini.
+
 SAVES
-  Ficam em jogo/mc0 (memory card 1) e jogo/mc1 (memory card 2). Copie essas pastas para fazer backup.
+  Ficam em jogo/mc0 (memory card 1) e jogo/mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.
 EOF
 echo "Pronto: $OUT ($(du -sh "$OUT" | cut -f1))"

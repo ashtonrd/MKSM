@@ -32,3 +32,5 @@ gs_hw_backend.cpp            ps2xRuntime/src/lib/gs
 gs_hw_backend.h              ps2xRuntime/src/lib/gs
 gs_hw.vert                   ps2xRuntime/src/lib/gs/shaders
 gs_hw.frag                   ps2xRuntime/src/lib/gs/shaders
+mksm_rpg.h                   ps2xRuntime/src/lib
+mksm_rpg.cpp                 ps2xRuntime/src/lib

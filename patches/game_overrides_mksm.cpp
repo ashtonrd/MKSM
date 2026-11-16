@@ -65,6 +65,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "game_overrides.h"
+#include "mksm_rpg.h"
 #include "ps2_log.h"
 #include "ps2_runtime.h"
 #include "ps2_stubs.h"
@@ -155,9 +156,11 @@ namespace
         ps2_stubs::sceMpegDelete(rdram, ctx, runtime);
     }
 
+
     void applyMksmOverrides(PS2Runtime &runtime)
     {
         runtime.replaceFunction(0x4688A0u, mpegDelete);
+        mksm_rpg::install(runtime); // PLANO_RPG.md: com o modo desligado, as trocas só chamam a original
         if (const char *movie = std::getenv("MKSM_MOVIE"); movie != nullptr && std::atoi(movie) > 0 && std::atoi(movie) < 8)
         {
             g_movieIndex = static_cast<uint32_t>(std::atoi(movie));

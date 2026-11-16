@@ -162,7 +162,15 @@ Mod fácil: **intensidade do bloom**. Gravar outro valor em `0x4F6E70+0x28` depo
 
 - **Strings:** `scorpion`, `liu_drgn`, `liu1_fat`/`liu2_fat` (fatalities), `fnd1_jax`, `kitanaDone`/`kitanafree`, `DoBarakaMonkStr`, `Baraka Battle`, `Goro Battle`, `Reptile Battle`, `Scorpion Battle` [lido].
 - **Som por personagem:** `SOUND_BANK_PLAYER_1/2`, `SOUND_BANK_ENEMY_1..4`, `SOUND_BANK_SCORPION`, `SOUND_BANK_CHAR`.
-- **Estrutura do jogador:** `0x33C0` bytes por jogador. Os campos ainda não foram mapeados. Primeiro passo: achar o ponteiro do jogador 1 e diferenciar a estrutura ao perder vida, pular e trocar de golpe.
+- **Estrutura do jogador:** `0x33C0` bytes por jogador (`0x5E3780 + 0x33C0 × n`, `+0x68` = número do jogador). Campos ainda pouco mapeados.
+- **Endereços do modo RPG (16/11, `PLANO_RPG.md`):**
+  - Bloco do save na RAM: ponteiro em `0x4D8B80` (`func_1DA4B8`). `+0x4BA4 + (j−1)×0x60` saldo de XP do jogador j; `+0x88` modo (0 sozinho, 1 co-op); `+0x8C` vida atual (float); `+0x90` blocos de vida × `+0x94` vida por bloco = vida máxima; `+0xD4` dificuldade (1 Normal, 2 Hard); `+0xE0` upgrades de vida (0–4); `+0xC8` sala.
+  - XP: `func_174C30(j, saldo)` grava e `func_174BF0(j)` lê; o comando de script `addexperience` (`func_167630`) soma por elas.
+  - Objetos dos jogadores: `[0x6826A8]` (1) e `[0x6826AC]` (2). Vida `obj+0x398`, máxima `obj+0x3A0` (inteiros). `func_284FE0(obj, dano)` desconta (dano ≤ 0 cura; 10000 mata); `func_286DB8(obj, vida)` grava limitando à máxima. `func_183978` copia a vida dos objetos para o save a cada quadro.
+  - Tabela de vida por bloco: `0x4EBC58 + 0x14 × upgrade + 4 × (modo + 1)` (200/300/... sozinho, 400/... co-op).
+  - Dificuldade: `func_1DAF90(d)`; jogo novo chama de `0x130908`, carregar de `0x1304E8`/`0x141A00`. Diálogo "Select Difficulty" aberto: `0x5CC634 = 1`, `0x5CC608 = 2`, `0x5BE708 = 1`; cursor `0x6FA678` (0 Hard, 1 Normal).
+  - Tela Load Game: `0x5B9990 = 0x5D5448 = 9` (itens da lista). Linhas a 33% + 5,8% por slot da altura da imagem.
+  - Arquivo do save `mc0/BASLUS-21087/BASLUS-21087` (198.876 bytes): cabeçalho `0x1328` e 9 slots de `0x5400`, cada um igual ao bloco do save da RAM.
 - **Personagem jogável novo:** o caminho realista é **substituir** um existente (modelo, texturas, som e golpes), não adicionar um slot. Adicionar slot exige mexer na seleção (`Character Select`), nos bancos de som e nas tabelas de golpes. Fazer isso por código C++ (seção 2) é mais fácil que editar o ELF.
 - A seleção de personagens já funciona no runtime (Liu Kang / Kung Lao) [medido].
 

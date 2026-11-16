@@ -1171,7 +1171,7 @@ index d0fc95d..d180aa9 100644
                      return fmt::format("// NOP operation, no action needed for VU0");
                  case VU0_S2_VRNEXT:
 diff --git a/ps2xRuntime/CMakeLists.txt b/ps2xRuntime/CMakeLists.txt
-index 589d768..c3fb023 100644
+index 589d768..68ec60c 100644
 --- a/ps2xRuntime/CMakeLists.txt
 +++ b/ps2xRuntime/CMakeLists.txt
 @@ -11,7 +11,7 @@ option(PS2X_ENABLE_RUNNER_PCH "Precompile the heavy runtime headers for ps2Entry
@@ -1197,7 +1197,7 @@ index 589d768..c3fb023 100644
      src/lib/ps2_iop_host.cpp
      src/lib/ps2_memory.cpp
      src/lib/ps2_pad.cpp
-@@ -390,12 +396,24 @@ add_library(ps2_runtime STATIC
+@@ -390,12 +396,25 @@ add_library(ps2_runtime STATIC
      src/lib/ps2_vfs.cpp
      src/lib/ps2_runtime.cpp
      src/lib/ps2_vif1_interpreter.cpp
@@ -1207,6 +1207,7 @@ index 589d768..c3fb023 100644
      src/lib/vu/ps2_vu1_lower.cpp
 +    src/lib/vu/ps2_vu1_jit.cpp
      src/lib/games_database.cpp
++    src/lib/mksm_rpg.cpp
  )
  
 +# GCC build without LTO keeps -O1 for the generated code to bound build time;
@@ -1222,7 +1223,7 @@ index 589d768..c3fb023 100644
  if(PS2X_ENABLE_RUNTIME_LOGS)
      target_compile_definitions(ps2_runtime PUBLIC
          PS2_RUNTIME_LOGS=1
-@@ -462,6 +480,20 @@ else()
+@@ -462,6 +481,20 @@ else()
      )
  endif()
  
@@ -1243,7 +1244,7 @@ index 589d768..c3fb023 100644
  if(PS2X_ENABLE_RUNNER_UNITY_BUILD)
      set_target_properties(ps2EntryRunner PROPERTIES
          UNITY_BUILD ON
-@@ -507,6 +539,70 @@ target_include_directories(ps2_runtime PUBLIC
+@@ -507,6 +540,70 @@ target_include_directories(ps2_runtime PUBLIC
  )
  
  target_link_libraries(ps2_runtime PUBLIC ps2_host_backend ffmpeg ps2_iop)
@@ -3082,6 +3083,53 @@ index bbf7edf..0c3e8fb 100644
      void notifyMpegCdStreamDataProduced(uint32_t byteCount, bool endOfStream);
      void notifyMpegCdStreamEof(PS2Runtime *runtime = nullptr);
      void sceMpegFlush(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime);
+diff --git a/ps2xRuntime/src/lib/Kernel/Stubs/MemoryCard.cpp b/ps2xRuntime/src/lib/Kernel/Stubs/MemoryCard.cpp
+index 564d873..df7d23f 100644
+--- a/ps2xRuntime/src/lib/Kernel/Stubs/MemoryCard.cpp
++++ b/ps2xRuntime/src/lib/Kernel/Stubs/MemoryCard.cpp
+@@ -1,5 +1,6 @@
+ #include "Common.h"
+ #include "MemoryCard.h"
++#include "../../mksm_rpg.h"
+ 
+ namespace ps2_stubs
+ {
+@@ -1068,6 +1069,8 @@ namespace ps2_stubs
+             }
+             else
+             {
++                if (it->second.hostPath.filename() == "BASLUS-21087") // o save do MKSM: o modo RPG guarda uma cópia
++                    mksm_rpg::noteCardFile(it->second.port, it->second.hostPath.string());
+                 const size_t bytesRead = std::fread(dst, 1u, static_cast<size_t>(size), it->second.file);
+                 result = std::ferror(it->second.file) ? kMcResultDeniedPermit : static_cast<int32_t>(bytesRead);
+                 if (std::ferror(it->second.file))
+@@ -1272,6 +1275,8 @@ namespace ps2_stubs
+         const uint8_t *src = (size > 0) ? getConstMemPtr(rdram, srcAddr) : nullptr;
+ 
+         int32_t result = kMcResultNoEntry;
++        int32_t savedPort = -1;
++        std::string savedPath;
+         {
+             std::lock_guard<std::mutex> lock(g_mcStateMutex);
+             auto it = g_mcFiles.find(fd);
+@@ -1294,6 +1299,8 @@ namespace ps2_stubs
+                 if (!std::ferror(it->second.file))
+                 {
+                     std::fflush(it->second.file);
++                    if (it->second.hostPath.filename() == "BASLUS-21087") // o save do MKSM (não o ícone)
++                        savedPort = it->second.port, savedPath = it->second.hostPath.string();
+                 }
+                 else
+                 {
+@@ -1303,6 +1310,8 @@ namespace ps2_stubs
+ 
+             setMcCommandResultLocked(kMcCmdWrite, result);
+         }
++        if (savedPort >= 0)
++            mksm_rpg::onCardWrite(savedPort, savedPath); // o perfil do modo RPG acompanha o save (PLANO_RPG.md 3.7)
+         setReturnS32(ctx, 0);
+     }
+ 
 diff --git a/ps2xRuntime/src/lib/Kernel/Stubs/Pad.cpp b/ps2xRuntime/src/lib/Kernel/Stubs/Pad.cpp
 index b50a4cf..30e6cc1 100644
 --- a/ps2xRuntime/src/lib/Kernel/Stubs/Pad.cpp
@@ -5983,7 +6031,7 @@ index 37b6a4d..45b2161 100644
  
      return 0;
 diff --git a/ps2xRuntime/src/lib/ps2_pad.cpp b/ps2xRuntime/src/lib/ps2_pad.cpp
-index 8590f14..5f9cb7e 100644
+index 8590f14..a30efdd 100644
 --- a/ps2xRuntime/src/lib/ps2_pad.cpp
 +++ b/ps2xRuntime/src/lib/ps2_pad.cpp
 @@ -1,6 +1,19 @@
@@ -6188,7 +6236,7 @@ index 8590f14..5f9cb7e 100644
 +            while (*c && *c != ',') ++c;
 +            if (*c) ++c;
 +        }
-+    if (const char *holds = std::getenv("MKSM_AUTO_HOLD"); holds != nullptr && port == 0) // "r@70-74,l@74-78,x@62-62.3"; r l u d x(cross) s(start) q(square) t(triangle) o(circle); R L U D stick only; g records the GS scene
++    if (const char *holds = std::getenv(port == 0 ? "MKSM_AUTO_HOLD" : "MKSM_AUTO_HOLD_P2"); holds != nullptr && port <= 1) // _P2: o controle 2 // "r@70-74,l@74-78,x@62-62.3"; r l u d x(cross) s(start) q(square) t(triangle) o(circle); R L U D stick only; g records the GS scene
 +        for (const char *c = holds; *c; )
 +        {
 +            const char button = *c;
@@ -6265,7 +6313,7 @@ index 8590f14..5f9cb7e 100644
  
      data[2] = static_cast<uint8_t>(btns & 0xFF);
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..e1910ab 100644
+index 45cb9d2..2f92976 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -6277,16 +6325,17 @@ index 45cb9d2..e1910ab 100644
  #include "ps2_runtime.h"
  #include "ps2_log.h"
  #include "ps2_stubs.h"
-@@ -6,6 +11,8 @@
+@@ -6,6 +11,9 @@
  #include "ps2_runtime_macros.h"
  #include "runtime/gs/gs_frontend.h"
  #include "runtime/ee_scheduler.h"
 +#include "runtime/ps2_perf.h"
 +#include "ps2_pad_bindings.h"
++#include "mksm_rpg.h"
  #include "ThreadNaming.h"
  #include "Kernel/Stubs/Audio.h"
  #include "Kernel/Stubs/GS.h"
-@@ -14,8 +21,12 @@
+@@ -14,8 +22,12 @@
  #include "ps2_iop_host.h"
  #include "ps2x/iop/iop_subsystem.h"
  
@@ -6299,7 +6348,7 @@ index 45cb9d2..e1910ab 100644
  #include <fstream>
  #include <algorithm>
  #include <array>
-@@ -27,6 +38,8 @@
+@@ -27,6 +39,8 @@
  #include <unordered_map>
  #include <sstream>
  
@@ -6308,7 +6357,7 @@ index 45cb9d2..e1910ab 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -373,10 +386,422 @@ namespace
+@@ -373,10 +387,609 @@ namespace
      }
  }
  
@@ -6405,10 +6454,13 @@ index 45cb9d2..e1910ab 100644
 +
 +    enum GfxRow { RowPreset, RowScale, RowWide, RowFxaa, RowFilter, RowBlend, RowEffects, RowRenderer, RowThread, RowReset, RowClose, RowCount };
 +    enum CtlRow { CtlReset = kPadBindingCount, CtlClose, CtlRowCount }; // "Controles" tab: one row per PS2 button, then these
++    enum RpgRow { RpgReset = mksm_rpg::AttrCount, RpgClose, RpgRowCount }; // "RPG" tab: one row per attribute, then these
++    enum { TabGfx, TabCtl, TabRpg, TabCount };
 +    struct GfxMenu
 +    {
-+        bool open = false, waitRelease = false, saveTried = false, saved = false, captureArmed = false;
-+        int row = 0, tab = 0; // tab 0 Gráfico, 1 Controles
++        bool open = false, waitRelease = false, saveTried = false, saved = false, captureArmed = false, confirmReset = false;
++        int row = 0, tab = 0; // TabGfx, TabCtl, TabRpg
++        int rpgPlayer = 0;    // aba RPG no co-op: de qual jogador (esquerda/direita troca)
 +        int capture = -1;     // Controles row waiting for a button or key
 +    } g_gfxMenu;
 +
@@ -6584,35 +6636,64 @@ index 45cb9d2..e1910ab 100644
 +        if (!m.open)
 +        {
 +            if (IsKeyPressed(KEY_F1) || (allowR3 && pressed(GAMEPAD_BUTTON_RIGHT_THUMB)))
-+                m.open = true, m.row = 0;
++            {
++                m.open = true, m.row = 0, m.confirmReset = false;
++                const mksm_rpg::Snapshot p1 = mksm_rpg::snapshot(0), p2 = mksm_rpg::snapshot(1);
++                if (p1.active && (p1.freePoints > 0 || (p1.coop && p2.freePoints > 0))) // subiu de nível: pausa, R3, distribui
++                    m.tab = TabRpg, m.rpgPlayer = p1.freePoints > 0 ? 0 : 1;
++                if (!p1.coop)
++                    m.rpgPlayer = 0;
++            }
 +        }
 +        else if (m.capture >= 0)
 +            updateCapture();
 +        else
 +        {
-+            if (pressed(GAMEPAD_BUTTON_LEFT_TRIGGER_1) || pressed(GAMEPAD_BUTTON_RIGHT_TRIGGER_1) || IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_E))
-+                m.tab = 1 - m.tab, m.row = 0;
-+            const int rows = m.tab == 0 ? static_cast<int>(RowCount) : static_cast<int>(CtlRowCount);
++            const mksm_rpg::Snapshot rpg = mksm_rpg::snapshot(m.rpgPlayer);
++            if (pressed(GAMEPAD_BUTTON_LEFT_TRIGGER_1) || IsKeyPressed(KEY_Q))
++                m.tab = (m.tab + TabCount - 1) % TabCount, m.row = 0, m.confirmReset = false;
++            if (pressed(GAMEPAD_BUTTON_RIGHT_TRIGGER_1) || IsKeyPressed(KEY_E))
++                m.tab = (m.tab + 1) % TabCount, m.row = 0, m.confirmReset = false;
++            const int rows = m.tab == TabGfx ? static_cast<int>(RowCount) : m.tab == TabCtl ? static_cast<int>(CtlRowCount) : static_cast<int>(RpgRowCount);
++            const int oldRow = m.row;
 +            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_UP) || IsKeyPressed(KEY_UP))
 +                m.row = (m.row + rows - 1) % rows;
 +            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN) || IsKeyPressed(KEY_DOWN))
 +                m.row = (m.row + 1) % rows;
++            if (m.tab == TabRpg && !rpg.active) // save normal: só a mensagem e "Fechar"
++                m.row = RpgClose;
++            if (m.row != oldRow)
++                m.confirmReset = false;
 +            const bool left = pressed(GAMEPAD_BUTTON_LEFT_FACE_LEFT) || IsKeyPressed(KEY_LEFT);
 +            const bool right = pressed(GAMEPAD_BUTTON_LEFT_FACE_RIGHT) || IsKeyPressed(KEY_RIGHT);
 +            const bool accept = pressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || IsKeyPressed(KEY_ENTER);
 +            const bool back = pressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) || pressed(GAMEPAD_BUTTON_RIGHT_THUMB) ||
 +                              IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_F1);
-+            if (back || (accept && m.row == (m.tab == 0 ? static_cast<int>(RowClose) : static_cast<int>(CtlClose))))
++            const int closeRow = m.tab == TabGfx ? static_cast<int>(RowClose) : m.tab == TabCtl ? static_cast<int>(CtlClose) : static_cast<int>(RpgClose);
++            if (back || (accept && m.row == closeRow))
 +                m.open = false;
++            else if (m.tab == TabRpg)
++            {
++                if ((left || right) && rpg.coop)
++                    m.rpgPlayer = 1 - m.rpgPlayer, m.confirmReset = false;
++                if (accept && m.row < mksm_rpg::AttrCount)
++                    mksm_rpg::addPoint(m.rpgPlayer, m.row);
++                else if (accept && m.row == RpgReset) // X duas vezes: devolve todos os pontos
++                {
++                    if (m.confirmReset)
++                        mksm_rpg::resetPoints(m.rpgPlayer);
++                    m.confirmReset = !m.confirmReset;
++                }
++            }
 +            else if (m.tab == 0 && (left || right || accept) && (m.row != RowReset || accept))
 +                changeGfxRow(m.row, left ? -1 : 1);
-+            else if (m.tab == 1 && accept && m.row == CtlReset)
++            else if (m.tab == TabCtl && accept && m.row == CtlReset)
 +            {
 +                std::copy(padBindingDefaults(), padBindingDefaults() + kPadBindingCount, padBindings());
 +                m.saveTried = true;
 +                m.saved = saveGfx();
 +            }
-+            else if (m.tab == 1 && accept && m.row < kPadBindingCount)
++            else if (m.tab == TabCtl && accept && m.row < kPadBindingCount)
 +                m.capture = m.row, m.captureArmed = false;
 +        }
 +        // The buttons that closed the menu must not reach the game either: wait until they are let go.
@@ -6631,11 +6712,15 @@ index 45cb9d2..e1910ab 100644
 +        const GfxMenu &m = g_gfxMenu;
 +        const int font = static_cast<int>(std::max(12.0f, area.height / 30.0f));
 +        const Color gold{214, 170, 84, 255}, text{230, 225, 210, 255}, dim{150, 145, 135, 255};
++        const mksm_rpg::Snapshot rpg = mksm_rpg::snapshot(m.rpgPlayer);
 +        if (!m.open)
 +        {
 +            if (hint)
 +            {
-+                const char *label = "R3: Gráfico";
++                const int freeAll = rpg.active ? mksm_rpg::snapshot(0).freePoints + (rpg.coop ? mksm_rpg::snapshot(1).freePoints : 0) : 0;
++                char rpgLabel[32];
++                std::snprintf(rpgLabel, sizeof(rpgLabel), "R3: RPG +%d", freeAll);
++                const char *label = !rpg.active ? "R3: Gráfico" : freeAll > 0 ? rpgLabel : "R3: Gráfico · RPG";
 +                const int x = static_cast<int>(area.x + area.width) - MeasureText(label, font) - font,
 +                          y = static_cast<int>(area.y + area.height) - font * 2;
 +                DrawText(label, x + 2, y + 2, font, Color{0, 0, 0, 200});
@@ -6644,10 +6729,10 @@ index 45cb9d2..e1910ab 100644
 +            return;
 +        }
 +        // The Controles tab has more rows: a smaller font keeps the panel inside the picture.
-+        const int rowCount = m.tab == 0 ? static_cast<int>(RowCount) : static_cast<int>(CtlRowCount);
-+        const int rowFont = m.tab == 0 ? font : static_cast<int>(std::max(11.0f, area.height / 42.0f));
++        const int rowCount = m.tab == TabGfx ? static_cast<int>(RowCount) : m.tab == TabCtl ? static_cast<int>(CtlRowCount) : static_cast<int>(RpgRowCount);
++        const int rowFont = m.tab != TabCtl ? font : static_cast<int>(std::max(11.0f, area.height / 42.0f));
 +        const float line = rowFont * 1.55f;
-+        const float width = std::min(area.width * 0.92f, font * 32.0f), height = line * rowCount + font * 6.5f;
++        const float width = std::min(area.width * 0.92f, font * 32.0f), height = line * (rowCount + (m.tab == TabRpg ? 2.5f : 0.0f)) + font * 6.5f;
 +        const Rectangle panel{area.x + (area.width - width) * 0.5f, area.y + (area.height - height) * 0.5f, width, height};
 +        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{0, 0, 0, 120});
 +        DrawRectangleRec(panel, Color{10, 12, 16, 235});
@@ -6655,25 +6740,70 @@ index 45cb9d2..e1910ab 100644
 +        const int left = static_cast<int>(panel.x + font), right = static_cast<int>(panel.x + panel.width - font);
 +        const int small = std::max(10, font * 3 / 4);
 +        int y = static_cast<int>(panel.y + font * 0.8f);
-+        const char *tabs[] = {"Gráfico", "Controles"};
-+        for (int t = 0, x = left; t < 2; ++t)
++        const char *tabs[TabCount] = {"Gráfico", "Controles", "RPG"};
++        for (int t = 0, x = left; t < TabCount; ++t)
 +        {
 +            DrawText(tabs[t], x, y, font + font / 2, t == m.tab ? gold : dim);
 +            x += MeasureText(tabs[t], font + font / 2) + font * 2;
 +        }
 +        DrawText("L1/R1: aba", right - MeasureText("L1/R1: aba", small), y + font / 2, small, dim);
 +        y += static_cast<int>(font * 2.1f);
-+        const auto drawRow = [&](int row, const char *label, const std::string &value)
++        const auto drawRow = [&](int row, const char *label, const std::string &value, bool enabled = true)
 +        {
 +            const bool selected = row == m.row;
 +            if (selected)
 +                DrawRectangle(left - font / 2, y - rowFont / 4, right - left + font, static_cast<int>(line) - rowFont / 4, Color{70, 52, 22, 230});
-+            DrawText(label, left, y, rowFont, selected ? gold : text);
++            const Color color = !enabled ? dim : selected ? gold : text;
++            DrawText(label, left, y, rowFont, color);
 +            if (!value.empty())
-+                DrawText(value.c_str(), right - MeasureText(value.c_str(), rowFont), y, rowFont, selected ? gold : text);
++                DrawText(value.c_str(), right - MeasureText(value.c_str(), rowFont), y, rowFont, color);
 +            y += static_cast<int>(line);
 +        };
-+        if (m.tab == 0)
++        if (m.tab == TabRpg)
++        {
++            char header[96], progress[96];
++            if (!rpg.active)
++            {
++                DrawText("Este save não é do modo RPG.", left, y, rowFont, text);
++                y += static_cast<int>(line);
++                DrawText("Para jogar nele, comece um jogo novo e aperte L3 (F2) no Hard.", left, y, small, dim);
++                y += static_cast<int>(line * 1.5f);
++                y += static_cast<int>(line * mksm_rpg::AttrCount + line);
++                drawRow(RpgClose, "Fechar", "");
++            }
++            else
++            {
++                std::snprintf(header, sizeof(header), "%sNível %d   ·   %d ponto%s livre%s", rpg.coop ? (m.rpgPlayer == 0 ? "< Jogador 1 >   " : "< Jogador 2 >   ") : "",
++                              rpg.level, rpg.freePoints, rpg.freePoints == 1 ? "" : "s", rpg.freePoints == 1 ? "" : "s");
++                DrawText(header, left, y, rowFont, gold);
++                y += static_cast<int>(line);
++                if (rpg.xpStep > 0)
++                    std::snprintf(progress, sizeof(progress), "Próximo nível  %lld / %lld", static_cast<long long>(rpg.xpInLevel), static_cast<long long>(rpg.xpStep));
++                else
++                    std::snprintf(progress, sizeof(progress), "Nível máximo");
++                DrawText(progress, left, y, small, text);
++                const int barX = left + MeasureText("Próximo nível  0000000 / 0000000", small) + font / 2, barW = right - barX;
++                if (barW > font * 3)
++                {
++                    const float fill = rpg.xpStep > 0 ? static_cast<float>(rpg.xpInLevel) / static_cast<float>(rpg.xpStep) : 1.0f;
++                    DrawRectangle(barX, y + small / 6, barW, small * 2 / 3, Color{40, 36, 30, 255});
++                    DrawRectangle(barX, y + small / 6, static_cast<int>(barW * std::clamp(fill, 0.0f, 1.0f)), small * 2 / 3, gold);
++                }
++                y += static_cast<int>(line * 1.5f);
++                for (int a = 0; a < mksm_rpg::AttrCount; ++a)
++                {
++                    const bool canSpend = rpg.freePoints > 0 && (rpg.cap == 0 || rpg.points[a] < rpg.cap);
++                    const int rowY = y;
++                    drawRow(a, mksm_rpg::attrName(a), mksm_rpg::attrEffect(a, rpg.points[a]), canSpend || rpg.points[a] > 0);
++                    const std::string count = std::to_string(rpg.points[a]); // coluna fixa: a fonte é proporcional
++                    DrawText(count.c_str(), left + rowFont * 9 - MeasureText(count.c_str(), rowFont), rowY, rowFont,
++                             a == m.row ? gold : (canSpend || rpg.points[a] > 0) ? text : dim);
++                }
++                drawRow(RpgReset, m.confirmReset ? "Redistribuir pontos: X de novo para confirmar" : "Redistribuir pontos", "");
++                drawRow(RpgClose, "Fechar", "");
++            }
++        }
++        else if (m.tab == TabGfx)
 +        {
 +            const auto onOff = [](bool on) { return on ? "Ligada" : "Desligada"; };
 +            char scaleText[48];
@@ -6708,7 +6838,15 @@ index 45cb9d2..e1910ab 100644
 +            drawRow(CtlClose, "Fechar", "");
 +        }
 +        y += static_cast<int>(line * 0.3f);
-+        if (m.tab == 0)
++        if (m.tab == TabRpg)
++        {
++            DrawText(rpg.cap ? "Cada nível dá pontos. Teto por atributo: ver RPG_TETO_ATRIBUTO no mksm.ini" : "Cada nível dá pontos.", left, y, small, dim);
++            y += static_cast<int>(small * 1.5f);
++            DrawText(rpg.coop ? "Cima/Baixo: escolher   Esq./Dir.: jogador   X: gastar ponto   O ou R3: fechar"
++                              : "Cima/Baixo: escolher   X: gastar ponto   O ou R3: fechar", left, y, small, dim);
++            return;
++        }
++        if (m.tab == TabGfx)
 +        {
 +            DrawText("* vale ao reiniciar o jogo", left, y, small, dim);
 +            y += static_cast<int>(small * 1.5f);
@@ -6726,6 +6864,104 @@ index 45cb9d2..e1910ab 100644
 +    }
 +}
 +
++namespace
++{
++    // Modo RPG na tela de dificuldade de um jogo novo: com o cursor no Hard, L3 (F2 no teclado) arma o modo.
++    void updateRpgDifficulty(const uint8_t *rdram)
++    {
++        bool hard = false;
++        if (!mksm_rpg::difficultyScreen(rdram, hard) || g_gfxMenu.open)
++            return;
++        static const bool autoArm = std::getenv("MKSM_RPG_AUTO_ARM") != nullptr; // roteiro de teste: arma no Hard
++        if (!hard)
++            mksm_rpg::setArmed(false); // o RPG é uma variante do Hard
++        else if (autoArm)
++            mksm_rpg::setArmed(true);
++        else if (IsKeyPressed(KEY_F2) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_THUMB)))
++            mksm_rpg::setArmed(!mksm_rpg::armed());
++    }
++
++    void drawShadowText(const char *text, int x, int y, int size, Color color)
++    {
++        DrawText(text, x + 2, y + 2, size, Color{0, 0, 0, 200});
++        DrawText(text, x, y, size, color);
++    }
++
++    // Por cima da imagem do jogo (posições em fração dela, certas em 4:3 e 16:9): marca na tela de
++    // dificuldade, nível ao lado do nome do personagem e o aviso de nível novo.
++    void drawRpgOverlay(const Rectangle &area, const uint8_t *rdram, bool inPlay, bool inGameMenu, bool gameDrawing)
++    {
++        const Color gold{214, 170, 84, 255}, dim{190, 160, 110, 255};
++        const int font = static_cast<int>(std::max(12.0f, area.height / 30.0f));
++        const auto at = [&area](float fx, float fy) { return Vector2{area.x + area.width * fx, area.y + area.height * fy}; };
++        if (mksm_rpg::loadScreen(rdram) && gameDrawing && !g_gfxMenu.open) // tag em cima de cada slot RPG
++        {
++            for (int k = 0; k < mksm_rpg::kSlots; ++k)
++                if (int level = 0; mksm_rpg::slotIsRpg(0, k, level))
++                {
++                    char tag[32];
++                    std::snprintf(tag, sizeof(tag), "RPG · Nv %d", level);
++                    const int size = std::max(10, font * 3 / 5);
++                    const Vector2 p = at(0.168f, 0.330f + 0.058f * k - 0.031f); // logo acima do nome do slot
++                    drawShadowText(tag, static_cast<int>(p.x), static_cast<int>(p.y) - size / 2, size, gold);
++                }
++            return;
++        }
++        bool hard = false;
++        if (mksm_rpg::difficultyScreen(rdram, hard))
++        {
++            if (hard) // à direita da palavra HARD
++            {
++                const Vector2 p = at(0.565f, 0.488f);
++                if (mksm_rpg::armed())
++                    drawShadowText("RPG", static_cast<int>(p.x), static_cast<int>(p.y - font * 0.2f), font + font / 2, gold);
++                else
++                    drawShadowText("L3 (F2): Modo RPG", static_cast<int>(p.x), static_cast<int>(p.y), font * 3 / 4, dim);
++            }
++            return;
++        }
++        static double bannerUntil = 0.0;
++        static char banner[96] = "";
++        const mksm_rpg::Snapshot p1 = mksm_rpg::snapshot(0);
++        for (int j = 0; j < 2; ++j)
++        {
++            int newLevel = 0;
++            if (const int ups = mksm_rpg::takeLevelUps(j, newLevel); ups > 0 && (j == 0 || p1.coop))
++            {
++                const int pts = ups * p1.pointsPerLevel;
++                std::snprintf(banner, sizeof(banner), "%sNÍVEL %d!  +%d ponto%s  ·  Select e R3 para distribuir",
++                              p1.coop ? (j == 0 ? "J1  " : "J2  ") : "", newLevel, pts, pts == 1 ? "" : "s");
++                bannerUntil = GetTime() + 3.0;
++            }
++        }
++        if (!p1.active || !inPlay || inGameMenu || !gameDrawing || g_gfxMenu.open || g_moviePlaying.load(std::memory_order_relaxed))
++            return;
++        // Acima do "EXP" de cada jogador (o do jogador 2, no co-op, fica do lado direito da tela).
++        for (int j = 0; j < (p1.coop ? 2 : 1); ++j)
++        {
++            const mksm_rpg::Snapshot rpg = j == 0 ? p1 : mksm_rpg::snapshot(1);
++            char text[64];
++            const long long in = rpg.xpInLevel, step = rpg.xpStep;
++            if (step > 0 && rpg.freePoints > 0)
++                std::snprintf(text, sizeof(text), "Nv %d+%d · %lld/%lld", rpg.level, rpg.freePoints, in, step);
++            else if (step > 0)
++                std::snprintf(text, sizeof(text), "Nv %d · %lld/%lld", rpg.level, in, step);
++            else
++                std::snprintf(text, sizeof(text), "Nv %d · MÁX", rpg.level);
++            const int size = font * 4 / 5;
++            const Vector2 pos = j == 0 ? at(0.147f, 0.022f) : at(0.85f, 0.022f);
++            const int x = j == 0 ? static_cast<int>(pos.x) : static_cast<int>(pos.x) - MeasureText(text, size);
++            drawShadowText(text, x, static_cast<int>(pos.y), size, gold);
++        }
++        if (GetTime() < bannerUntil)
++        {
++            const int size = font + font / 3;
++            const Vector2 p = at(0.5f, 0.17f);
++            drawShadowText(banner, static_cast<int>(p.x) - MeasureText(banner, size) / 2, static_cast<int>(p.y), size, gold);
++        }
++    }
++}
++
  static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint32_t &outHeight)
  {
 -    static uint64_t s_lastPresentationTick = std::numeric_limits<uint64_t>::max();
@@ -6733,7 +6969,7 @@ index 45cb9d2..e1910ab 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,21 +812,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +1000,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -6758,7 +6994,7 @@ index 45cb9d2..e1910ab 100644
      uint32_t width = 0u;
      uint32_t height = 0u;
      uint32_t displayFbp = 0u;
-@@ -414,14 +828,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -414,14 +1016,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
                                                     &sourceFbp,
                                                     &usedPreferredDisplaySource))
      {
@@ -6786,7 +7022,7 @@ index 45cb9d2..e1910ab 100644
          return;
      }
  
-@@ -450,13 +869,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -450,13 +1057,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
@@ -6823,7 +7059,7 @@ index 45cb9d2..e1910ab 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +907,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +1095,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -6859,7 +7095,7 @@ index 45cb9d2..e1910ab 100644
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +946,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +1134,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -6868,7 +7104,7 @@ index 45cb9d2..e1910ab 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +994,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +1182,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -6878,7 +7114,7 @@ index 45cb9d2..e1910ab 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +1134,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +1322,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -6974,7 +7210,7 @@ index 45cb9d2..e1910ab 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -732,9 +1220,49 @@ bool PS2Runtime::initialize(const char *title)
+@@ -732,9 +1408,49 @@ bool PS2Runtime::initialize(const char *title)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
          SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -7024,7 +7260,7 @@ index 45cb9d2..e1910ab 100644
  #endif
          SetTargetFPS(60);
          if (m_debugUiInitCallback)
-@@ -2214,6 +2742,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +2930,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -7036,7 +7272,7 @@ index 45cb9d2..e1910ab 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +2893,16 @@ void PS2Runtime::run()
+@@ -2360,13 +3081,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -7053,7 +7289,7 @@ index 45cb9d2..e1910ab 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +2924,63 @@ void PS2Runtime::run()
+@@ -2388,9 +3112,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -7118,7 +7354,7 @@ index 45cb9d2..e1910ab 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +2991,209 @@ void PS2Runtime::run()
+@@ -2401,25 +3179,210 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -7316,7 +7552,8 @@ index 45cb9d2..e1910ab 100644
 +        std::memcpy(&inPlay, m_memory.getRDRAM() + 0x4F4B68u, 4u);
 +        std::memcpy(&selectPause, m_memory.getRDRAM() + 0x6BEE2Cu, 4u);
 +        std::memcpy(&inGameMenu, m_memory.getRDRAM() + 0x4C49E8u, 4u);
-+        updateGfxMenu(inPlay == 0u);
++        updateGfxMenu(inPlay == 0u || selectPause == 1u); // a pausa do Select também conta 0x4F4B68 = 1
++        updateRpgDifficulty(m_memory.getRDRAM());
 +        // Widescreen (PCSX2's 16:9 patch, data half): MKSM's horizontal aspect factor at 0x4F4B38
 +        // (1.0 in the ELF) set to 0.75; the window then shows the picture at 16:9.
 +        {
@@ -7342,7 +7579,7 @@ index 45cb9d2..e1910ab 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3204,196 @@ void PS2Runtime::run()
+@@ -2430,21 +3393,197 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());
@@ -7508,6 +7745,7 @@ index 45cb9d2..e1910ab 100644
 +        if (bicubicOn && bicubic.id != 0)
 +            EndShaderMode();
 +        drawGfxMenu(dstRect, gfxHint);
++        drawRpgOverlay(dstRect, m_memory.getRDRAM(), inPlay == 1u, inGameMenu == 1u, gameDrawing);
          if (m_debugUiInitialized && m_debugUiDrawCallback)
          {
              m_debugUiDrawCallback(*this, m_debugUiUserData);

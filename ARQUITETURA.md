@@ -17,6 +17,7 @@ Caminhos relativos a `PS2Recomp/ps2xRuntime/` quando não indicado.
 | Runtime | `src/lib`, `include` | Memória do PS2, DMA, VIF, VU0/VU1, GIF, GS, kernel (threads, semáforos, IRQs), stubs da SDK e janela (raylib); `-O3` e `-march=native` |
 | IOP | `PS2Recomp/ps2xIOP` | Interpretador MIPS do IOP que roda os IRX reais (CRI ADXI, SNDF etc.) mais HLE de módulos |
 | Overrides do jogo | `src/lib/game_overrides_mksm.cpp` | Ligações específicas do MKSM (libcdvd → HLE, pulo da intro) |
+| Modo RPG | `src/lib/mksm_rpg.cpp` (+ `.h`, fora do `ps2_runtime.h`) | Troca 4 funções do jogo por `lookupFunction`+`replaceFunction` (XP, dano, quadro, dificuldade); perfil por jogador; `rpg_mc<c>_slot<n>.ini`; `PLANO_RPG.md` |
 | Testes | `PS2Recomp/ps2xTest` (`ps2x_tests`) | Suítes por subsistema (GS, VU1, memória, kernel...), sem o jogo |
 
 **Regra de rebuild:** headers incluídos por `include/ps2_runtime.h` (`ps2_memory.h`, `gs_frontend.h`, `gs_backend.h`, `ps2_vu1.h`...) entram no código gerado, e mexer neles recompila os 13 mil arquivos. Prefira mudar `.cpp` ou headers que só o runtime inclui (`gs_cpu_backend.h`, `ee_scheduler.h`).
@@ -224,6 +225,8 @@ Caminhos relativos a `PS2Recomp/ps2xRuntime/` quando não indicado.
 - **Uso:** gravar uma vez cada caso (menu, seleção, fase, bloom). Toda mudança no GS (e o futuro backend de GPU) é medida e comparada em segundos contra o backend CPU.
 
 ---
+
+**Modo RPG (`mksm_rpg.cpp`, `PLANO_RPG.md`):** as trocas rodam na GameThread e chamam a original pelo ponteiro guardado antes da troca; com o modo desligado só repassam. A janela (aba RPG, indicador acima do EXP, tag no Load Game, marca na dificuldade) lê o estado por `mksm_rpg::snapshot()` sob um mutex. O save é um arquivo por cartão com 9 slots: `MemoryCard.cpp` avisa o RPG ao ler (`noteCardFile`, guarda uma cópia) e ao gravar (`onCardWrite`, o slot que mudou recebe o perfil ou perde o RPG); ao carregar, o slot é o que mais se parece com o bloco do save na RAM. **Armadilhas:** a pausa do Select tem `0x4F4B68 = 1` (o R3 testa também `0x6BEE2C`); o cartão é lido da pasta do ELF, não da atual (teste numa pasta com links e `mc0` copiado); a vida do co-op é um total dividido entre os dois objetos (cada um com metade da máxima).
 
 ## 7. Ferramentas de investigação que já funcionaram
 

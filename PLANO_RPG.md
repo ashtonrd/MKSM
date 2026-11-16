@@ -287,6 +287,17 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
 
 ## 7. Tarefas (faça na ordem)
 
+### Situação em 16/11 (implementado; endereços no `MODDING.md` §5)
+
+- **A1/A2 feitas:** o saldo é por jogador (não por personagem) e não existe acumulado no jogo; caminho 2 de 3.1: a troca de `func_174C30` soma a subida do saldo. XP do jogo inteiro ainda não medido.
+- **A3/A4 feitas:** vida em `obj+0x398`/`0x3A0`, dano por `func_284FE0`. No co-op a vida é um total dividido (cada objeto tem metade). O atacante não aparece nos argumentos: no co-op, Força e Roubo usam a média dos dois.
+- **A5/A6 feitas:** 9 slots num arquivo por cartão; o perfil fica em `rpg_mc<c>_slot<n>.ini`. O slot gravado sai da diferença do arquivo; o carregado, da comparação com o bloco do save na RAM (testado com o save do usuário: slot 1).
+- **A7 feita**, menos a cutscene (não há valor que a separe; o indicador fica também nela). **A8 não feita:** sem Fúria.
+- **B1–B6 feitas no código:** `mksm_rpg.cpp` com autoteste da curva. Visto no jogo: Desafio RPG no dano recebido (10 → 13). **Falta medir em luta:** XP de inimigos, Força/Roubo, Vida, Regeneração, gravar e carregar um save RPG.
+- **C1–C5 feitas** (capturas em `capturas/rpg_*.png`, fora do git): aba RPG com escolha de jogador no co-op, indicador acima do EXP (um por jogador), aviso de nível, marca "RPG" no Hard (L3/F2), tag nos slots do Load Game. O R3 na pausa do Select passou a abrir a janela (antes a dica aparecia e o R3 não fazia nada).
+- **D4 feita:** perfil por jogador no co-op. **D2:** chaves no `jogar.sh`/`mksm.ini` e LEIA-ME. **Faltam D1** (prova bit a bit com o modo desligado) **e D3** (o usuário jogar).
+- Roteiro de teste: `MKSM_RPG_AUTO_ARM=1` arma no Hard, `MKSM_RPG_TEST_XP=<n>` começa com XP, `MKSM_AUTO_HOLD_P2` aperta o controle 2. Co-op até a fase: `MKSM_AUTO_PAD=xs MKSM_AUTO_PAD_UNTIL=14 MKSM_PAD_CLOCK=reads MKSM_AUTO_HOLD="d@15-15.2,x@17-17.2,x@21-21.2,d@28-28.2,x@32-32.2,s@50-50.2" MKSM_AUTO_HOLD_P2="x@23-23.2"` (o `s` pula a cutscene; mais um Start abre o mapa).
+
 ### Fase A: investigação (só leitura; nada muda no jogo)
 
 - [ ] **A1 XP: saldo, acumulado e por personagem**
