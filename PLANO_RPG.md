@@ -296,6 +296,9 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
 - **B1–B6 feitas no código:** `mksm_rpg.cpp` com autoteste da curva. Visto no jogo: Desafio RPG no dano recebido (10 → 13). **Falta medir em luta:** XP de inimigos, Força/Roubo, Vida, Regeneração, gravar e carregar um save RPG.
 - **C1–C5 feitas** (capturas em `capturas/rpg_*.png`, fora do git): aba RPG com escolha de jogador no co-op, indicador acima do EXP (um por jogador), aviso de nível, marca "RPG" no Hard (L3/F2), tag nos slots do Load Game. O R3 na pausa do Select passou a abrir a janela (antes a dica aparecia e o R3 não fazia nada).
 - **D4 feita:** perfil por jogador no co-op. **D2:** chaves no `jogar.sh`/`mksm.ini` e LEIA-ME. **Faltam D1** (prova bit a bit com o modo desligado) **e D3** (o usuário jogar).
+- **17/11, correções depois do primeiro teste do usuário:**
+  - **XP não entrava:** o crédito do combate (`func_1744A0`, XP de combo e de morte) grava o saldo direto, sem `func_174C30`. Agora o XP ganho é a subida do saldo de cada jogador medida a cada quadro (`creditXpLocked` no `hookFrame`). Testado somando 350/100 direto no saldo no Ko-op: "Nv 2+1 · 50/400" e "Nv 1 · 100/300", com o aviso de nível.
+  - **O RPG ficava ligado depois de voltar ao menu:** a janela só mostra o RPG com `0x50BC14 != 0` (há partida carregada; 0 em todos os menus) e `save+0x88 <= 1` (história ou co-op). Fora disso, a aba RPG some. A marca e os lutadores escolhidos zeram toda vez que a tela de dificuldade abre. O dano do RPG não vale no Versus.
 - Roteiro de teste: `MKSM_RPG_AUTO_ARM=1` arma no Hard, `MKSM_RPG_TEST_XP=<n>` começa com XP, `MKSM_AUTO_HOLD_P2` aperta o controle 2. Co-op até a fase: `MKSM_AUTO_PAD=xs MKSM_AUTO_PAD_UNTIL=14 MKSM_PAD_CLOCK=reads MKSM_AUTO_HOLD="d@15-15.2,x@17-17.2,x@21-21.2,d@28-28.2,x@32-32.2,s@50-50.2" MKSM_AUTO_HOLD_P2="x@23-23.2"` (o `s` pula a cutscene; mais um Start abre o mapa).
 
 ### Fase A: investigação (só leitura; nada muda no jogo)

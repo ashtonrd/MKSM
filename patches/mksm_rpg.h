@@ -30,6 +30,7 @@ namespace mksm_rpg
     bool difficultyScreen(const uint8_t *rdram, bool &cursorHard);
     bool armed();
     void setArmed(bool on);
+    void setInStory(bool on); // janela: há uma partida de história/co-op carregada (fora dela, o RPG não aparece)
     // Lutador do jogo novo (-1 = o da seleção do jogo): vale só ao começar um jogo novo (save+0xCC / save+0xD0).
     int fighterPick(int player);
     void setFighterPick(int player, int id);

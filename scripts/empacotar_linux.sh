@@ -82,9 +82,9 @@ MODO RPG (opcional, só em jogo novo)
   Na tela Load Game, os saves RPG mostram "RPG · Nv N". Um save RPG continua RPG; gravar um jogo normal
   por cima tira o RPG daquele slot. Os números (XP por nível, força dos atributos) estão no mksm.ini.
 
-  Lutadores: no Versus todos vêm liberados. Para jogar a história ou o Ko-op com outro lutador
+  Lutadores: no Versus todos vêm liberados, e Sub-Zero e Scorpion na seleção da história. Para jogar a história ou o Ko-op com outro lutador
   (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): num jogo novo, na escolha de dificuldade,
-  L1/R1 no controle de cada jogador (Q/E no teclado). Fica no save. Goro, Shang Tsung e o demônio de lava são experimentais;
+  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Goro, Shang Tsung e o demônio de lava são experimentais;
   Ermac e os personagens cortados (Armor Lion, Ninja, Shiva) andam, mas não têm golpes.
 
 SAVES

@@ -1,5 +1,5 @@
 // Modo RPG do Shaolin Monks (PLANO_RPG.md). Endereços achados nas tarefas A1-A7 (anotados no plano):
-//   XP:          func_174C30(jogador 1/2, saldo) grava o saldo em [0x4D8B80]+0x4BA4+(j-1)*0x60; todo crédito passa por ela.
+//   XP:          saldo de cada jogador em [0x4D8B80]+0x4BA4+(j-1)*0x60; func_174C30 e o combate (func_1744A0) gravam nele.
 //   Dano:        func_284FE0(objeto, dano) desconta a vida em obj+0x398 (máxima em obj+0x3A0); dano <= 0 cura.
 //   Jogadores:   objeto do jogador 1 em [0x6826A8], do 2 em [0x6826AC].
 //   Vida máxima: save+0x90 (blocos) × save+0x94 (vida por bloco, da tabela 0x4EBC58 por upgrade e modo).
@@ -11,6 +11,7 @@
 #include "ps2_runtime_macros.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -106,6 +107,7 @@ namespace mksm_rpg
             int points[AttrCount] = {};
             double xpCarry = 0.0, regenCarry = 0.0;
             int shownLevel = 1, levelUps = 0;
+            int64_t lastXp = -1; // saldo de XP do jogo visto no último quadro (-1: ainda não visto)
         };
         struct State
         {
@@ -115,6 +117,7 @@ namespace mksm_rpg
         };
         std::mutex g_mutex;
         State g_state;
+        std::atomic<bool> g_inStory{false}; // a janela mostra o RPG só numa partida de história ou co-op
         int g_fighter[2] = {-1, -1}; // escolhido na tela de dificuldade (fica para o próximo jogo novo)
         bool g_fighterPending = false; // jogo novo começou: gravar na primeira sala montada
 
@@ -212,7 +215,7 @@ namespace mksm_rpg
             return rd32(rdram, 0x4F4B68u) == 1u && rd32(rdram, 0x6BEE2Cu) == 0u && rd32(rdram, 0x4C49E8u) == 0u;
         }
 
-        PS2Runtime::RecompiledFunction g_origSetXp, g_origDamage, g_origFrame, g_origDifficulty, g_origRoom;
+        PS2Runtime::RecompiledFunction g_origDamage, g_origFrame, g_origDifficulty, g_origRoom;
 
         // func_1CEE00 monta a sala e lê o lutador de cada jogador em save+0xCC/0xD0 (PLANO_PERSONAGENS.md).
         void hookRoom(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
@@ -232,27 +235,27 @@ namespace mksm_rpg
             g_origRoom(rdram, ctx, runtime);
         }
 
-        // Crédito de XP: o saldo do jogo não muda (regra 6); o XP ganho de cada jogador soma a subida, com a Sabedoria.
-        void hookSetXp(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
+        // XP ganho: a subida do saldo de cada jogador desde o último quadro, com a Sabedoria. O saldo do jogo não muda
+        // (regra 6). Medido no quadro porque o crédito do combate (func_1744A0) grava o saldo direto, sem func_174C30.
+        // shortcut: XP perdido ao morrer e ganho de novo conta duas vezes; corrigir se o usuário reclamar.
+        void creditXpLocked(const uint8_t *rdram, uint32_t save, int players)
         {
-            const uint32_t player = getRegU32(ctx, 4);
-            const int32_t value = static_cast<int32_t>(getRegU32(ctx, 5));
-            const uint32_t save = saveBlock(rdram);
-            const int32_t before = save && (player == 1u || player == 2u) ? static_cast<int32_t>(rd32(rdram, save + 0x4BA4u + (player - 1u) * 0x60u)) : value;
-            g_origSetXp(rdram, ctx, runtime);
-            if ((player != 1u && player != 2u) || value <= before)
-                return;
-            std::lock_guard<std::mutex> lock(g_mutex);
-            if (!g_state.active)
-                return;
-            Player &p = g_state.players[player - 1u];
-            const double gain = (value - before) * (1.0 + effect(cfg(), Sabedoria, p.points[Sabedoria])) + p.xpCarry;
-            const int64_t whole = static_cast<int64_t>(gain);
-            p.xpCarry = gain - whole;
-            p.xpGained += whole;
-            const int level = levelLocked(p);
-            if (level > p.shownLevel)
-                p.levelUps += level - p.shownLevel, p.shownLevel = level;
+            for (int j = 0; j < players; ++j)
+            {
+                Player &p = g_state.players[j];
+                const int64_t now = static_cast<int32_t>(rd32(rdram, save + 0x4BA4u + j * 0x60u));
+                const int64_t before = p.lastXp;
+                p.lastXp = now;
+                if (before < 0 || now <= before) // primeiro quadro, compra de golpe ou save recarregado
+                    continue;
+                const double gain = (now - before) * (1.0 + effect(cfg(), Sabedoria, p.points[Sabedoria])) + p.xpCarry;
+                const int64_t whole = static_cast<int64_t>(gain);
+                p.xpCarry = gain - whole;
+                p.xpGained += whole;
+                const int level = levelLocked(p);
+                if (level > p.shownLevel)
+                    p.levelUps += level - p.shownLevel, p.shownLevel = level;
+            }
         }
 
         // Dano: Defesa e Desafio no que cada jogador recebe; Força, Desafio e Roubo de vida no que causam.
@@ -268,7 +271,9 @@ namespace mksm_rpg
                 std::lock_guard<std::mutex> lock(g_mutex);
                 const int32_t targetMax = static_cast<int32_t>(rd32(rdram, target + 0x3A0u));
                 // Cura (dano <= 0) e morte instantânea (abismo, fatality: o dano é a vida inteira) passam iguais.
-                if (g_state.active && damage > 0 && (targetMax <= 0 || damage < targetMax))
+                const uint32_t save = saveBlock(rdram);
+                const bool story = save && rd32(rdram, save + 0x88u) <= 1u; // 0 sozinho, 1 co-op; o Versus fica de fora
+                if (g_state.active && story && damage > 0 && (targetMax <= 0 || damage < targetMax))
                 {
                     const Config &c = cfg();
                     const uint32_t objs[2] = {rd32(rdram, 0x6826A8u), rd32(rdram, 0x6826ACu)};
@@ -319,6 +324,8 @@ namespace mksm_rpg
                 const uint32_t objs[2] = {rd32(rdram, 0x6826A8u), mode == 1u ? rd32(rdram, 0x6826ACu) : 0u};
                 g_state.coop = mode == 1u;
                 const int32_t share = mode == 1u ? 2 : 1;
+                if (g_state.active && save && mode <= 1u)
+                    creditXpLocked(rdram, save, mode == 1u ? 2 : 1);
                 if (g_state.active && save && objs[0] && mode <= 1u)
                 {
                     const Config &c = cfg();
@@ -422,7 +429,6 @@ namespace mksm_rpg
     {
         if (!selfTest())
             std::fprintf(stderr, "[rpg] autoteste da curva falhou (chaves RPG_* no mksm.ini?)\n");
-        replace(runtime, 0x174C30u, hookSetXp, g_origSetXp);
         replace(runtime, 0x284FE0u, hookDamage, g_origDamage);
         replace(runtime, 0x183978u, hookFrame, g_origFrame);
         replace(runtime, 0x1DAF90u, hookDifficulty, g_origDifficulty);
@@ -434,7 +440,7 @@ namespace mksm_rpg
         std::lock_guard<std::mutex> lock(g_mutex);
         Snapshot s;
         const Player &p = g_state.players[std::clamp(player, 0, 1)];
-        s.active = g_state.active;
+        s.active = g_state.active && g_inStory.load(std::memory_order_relaxed);
         s.coop = g_state.coop;
         s.maxLevel = cfg().maxLevel;
         s.cap = cfg().cap;
@@ -506,6 +512,8 @@ namespace mksm_rpg
         cursorHard = open && rd32(rdram, 0x6FA678u) == 0u;
         return open;
     }
+
+    void setInStory(bool on) { g_inStory.store(on, std::memory_order_relaxed); }
 
     int fighterPick(int player)
     {

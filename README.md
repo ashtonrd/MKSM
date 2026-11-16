@@ -31,7 +31,7 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |
 | RPG mode (levels and attribute points) | 🟡 Implemented, Single Player and Ko-op (see [RPG mode](#rpg-mode-optional)); balance still being tested |
-| Versus mode fighters | ✅ All 8 unlocked by default (`MKSM_VERSUS_TODOS=0` restores the original unlocks); and any of them (plus Goro, Shang Tsung and a lava demon, experimental, and Ermac and three cut characters that walk but have no attacks) can be picked for a new story or Ko-op game with **L1/R1** on the difficulty screen; story compatibility still being tested ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
+| Fighters | ✅ All 8 unlocked in Versus, and Sub-Zero and Scorpion in the story character select (`MKSM_VERSUS_TODOS=0` restores the original unlocks); any of them (plus Goro, Shang Tsung and a lava demon, experimental, and Ermac and three cut characters that walk but have no attacks) can be picked for a new story or Ko-op game with **L2/R2** on the difficulty screen; story compatibility still being tested ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
 | Fullscreen | ✅ F11 |
 | Higher internal resolution | ✅ New batching renderer at 2x by default, as fast as the old one; `PS2X_GS_HW=0` goes back to the old one, `PS2X_SCALE=1..4` picks the scale |
 | Graphics menu for weaker PCs | ✅ R3 in menus/pause (or F1): internal resolution, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini` |
@@ -95,8 +95,8 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) �
 
 ## Other fighters
 
-- **Versus mode:** all 8 fighters (Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage) come unlocked. `MKSM_VERSUS_TODOS=0` in `mksm.ini` restores the original unlocks.
-- **Story and Ko-op with another fighter:** on a **new game**, on the *Select Difficulty* screen, each player presses **L1/R1** on their own controller (**Q/E** on the keyboard for player 1) to pick a fighter. The choice is saved with the game and can't be changed afterwards, so bought moves never mix between characters. In the story, specials are **R1 + a button**.
+- **Unlocked:** all 8 Versus fighters (Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage), and Sub-Zero and Scorpion in the story character select (the game normally unlocks them after finishing the story with each monk). `MKSM_VERSUS_TODOS=0` in `mksm.ini` restores the original unlocks.
+- **Story and Ko-op with another fighter:** on a **new game**, on the *Select Difficulty* screen, each player presses **L2/R2** on their own controller (**left/right Shift** on the keyboard for player 1) to pick any fighter from the list below. The choice is saved with the game and can't be changed afterwards, so bought moves never mix between characters. In the story, specials are **R1 + a button**.
 
 | Fighter | Attacks | Specials | Status |
 |---|---|---|---|

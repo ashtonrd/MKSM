@@ -97,9 +97,9 @@ MODO RPG (opcional, só em jogo novo)
   Na tela Load Game, os saves RPG mostram "RPG · Nv N". Um save RPG continua RPG; gravar um jogo normal
   por cima tira o RPG daquele slot. Os números (XP por nível, força dos atributos) estão no mksm.ini.
 
-  Lutadores: no Versus todos vêm liberados. Para jogar a história ou o Ko-op com outro lutador
+  Lutadores: no Versus todos vêm liberados, e Sub-Zero e Scorpion na seleção da história. Para jogar a história ou o Ko-op com outro lutador
   (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): num jogo novo, na escolha de dificuldade,
-  L1/R1 no controle de cada jogador (Q/E no teclado). Fica no save. Goro, Shang Tsung e o demônio de lava são experimentais;
+  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Goro, Shang Tsung e o demônio de lava são experimentais;
   Ermac e os personagens cortados (Armor Lion, Ninja, Shiva) andam, mas não têm golpes.
 
 SAVES
@@ -113,12 +113,13 @@ Roteiro de teste no Windows (marque o que funcionou e conte o que não funcionou
 3. Desempenho: menu Gráfico > Predefinição. "Alto" num PC bom, "Leve" ou "Mínimo" num fraco.
 4. Modo RPG: Single Player > personagem > dificuldade: cursor no Hard, L3 (F2) mostra "RPG".
    Matar inimigos sobe o "Nv" acima do EXP. Subiu: Select, R3, aba RPG, gastar ponto.
-5. Lutador novo: na mesma tela de dificuldade, L1/R1 escolhe (Sub-Zero, Scorpion, Johnny Cage...).
+5. Lutador novo: Sub-Zero e Scorpion já aparecem na seleção. Na tela de dificuldade, L2/R2 escolhe
+   qualquer outro (Johnny Cage, Kitana, Baraka...).
    Na fase: golpes (quadrado, triângulo, bola), especiais (R1 + botão), lista em Start > Moves.
    Tente uma fatality quando a barra azul encher (veja os comandos em Start > Moves > Fatalities).
    Experimentais: Goro, Shang Tsung, demônio de lava. Sem golpes: Ermac, Armor Lion, Ninja, Shiva
    (só para ver; andam mas não atacam).
-6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L1/R1 no próprio controle.
+6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L2/R2 no próprio controle.
 7. Versus: todos os 8 lutadores liberados.
 8. Save: salvar num slot, fechar, abrir, Load Game. O slot RPG mostra "RPG · Nv N".
 
