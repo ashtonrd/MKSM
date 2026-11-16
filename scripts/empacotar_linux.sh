@@ -84,7 +84,7 @@ MODO RPG (opcional, só em jogo novo)
 
   Lutadores: no Versus todos vêm liberados. Para jogar a história ou o Ko-op com outro lutador
   (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): num jogo novo, na escolha de dificuldade,
-  L1/R1 no controle de cada jogador (Q/E no teclado). Fica no save. Ermac e Goro são experimentais.
+  L1/R1 no controle de cada jogador (Q/E no teclado). Fica no save. Goro, Shang Tsung e o demônio de lava são experimentais.
 
 SAVES
   Ficam em jogo/mc0 (memory card 1) e jogo/mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.
