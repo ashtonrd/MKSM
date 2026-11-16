@@ -26,7 +26,7 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Movie sound | ✅ Played straight from the `.SFD` files (no hiss) |
 | Kung Lao as partner | ✅ Visible (used to be invisible) |
 | Every other stage tested start to finish | ❌ To do |
-| Windows build | 🟡 Cross-built with MinGW-w64 from Linux (`scripts/build_windows.sh`); runs in Wine, not yet tried on real Windows |
+| Windows build | 🟡 Cross-built with MinGW-w64 from Linux (`scripts/build_windows.sh`); runs in Wine (menus, Versus, RPG), not yet tried on real Windows |
 | Floors, walls and light rays in Goro's Lair | ✅ As in the original (the VIF now runs ahead of VU1: the game sends each batch's colors right after starting it) |
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |
@@ -92,6 +92,13 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) �
 | `PS2X_GS_GPU=0` | With `PS2X_GS_HW=0`: the old renderer on the CPU only |
 | `PS2X_GS_RASTER=0` | GPU compute tiles instead of the rasterizer |
 | `PS2X_VU1_THREAD=0` | VU1 on the game thread |
+
+## Other fighters
+
+- **Versus mode:** all 8 fighters (Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage) come unlocked. `MKSM_VERSUS_TODOS=0` in `mksm.ini` restores the original unlocks.
+- **Story and Ko-op with another fighter:** on a **new game**, on the *Select Difficulty* screen, each player presses **L1/R1** on their own controller (**Q/E** on the keyboard for player 1) to pick a fighter. The choice is saved with the game and can't be changed afterwards, so bought moves never mix between characters.
+- **List:** the 8 Versus fighters. Goro, Shang Tsung and a lava demon are marked experimental: they load and attack, but they are big or odd.
+- **Not perfect yet:** Versus fighters were made for 1-on-1 fights. Their basic attacks work in the story, but the move shop, story fatalities and cutscenes (which still show the monks) may not fit. Status and character IDs: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
 
 ## RPG mode (optional)
 

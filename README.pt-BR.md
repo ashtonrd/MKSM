@@ -26,7 +26,7 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Som dos filmes | ✅ Tocado direto dos arquivos `.SFD` (sem chiado) |
 | Kung Lao como parceiro | ✅ Aparece (era invisível) |
 | Resto das fases testadas do início ao fim | ❌ Falta |
-| Build para Windows | 🟡 Compilado com MinGW-w64 a partir do Linux (`scripts/build_windows.sh`); roda no Wine, ainda não testado num Windows de verdade |
+| Build para Windows | 🟡 Compilado com MinGW-w64 a partir do Linux (`scripts/build_windows.sh`); roda no Wine (menus, Versus, RPG), ainda não testado num Windows de verdade |
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
 | Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
 | Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos, nos dois renderizadores (limite do EE/VU1, N20) |
@@ -92,6 +92,13 @@ Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 | `PS2X_GS_GPU=0` | Com `PS2X_GS_HW=0`: o renderizador antigo só na CPU |
 | `PS2X_GS_RASTER=0` | Tiles em compute na GPU em vez do rasterizador |
 | `PS2X_VU1_THREAD=0` | VU1 na thread do jogo |
+
+## Outros lutadores
+
+- **Modo Versus:** os 8 lutadores (Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage) vêm liberados. `MKSM_VERSUS_TODOS=0` no `mksm.ini` volta às liberações originais.
+- **História e Ko-op com outro lutador:** num **jogo novo**, na tela *Select Difficulty*, cada jogador aperta **L1/R1** no próprio controle (**Q/E** no teclado, jogador 1) para escolher o lutador. A escolha fica no save e não muda depois, para os golpes comprados nunca se misturarem entre personagens.
+- **Lista:** os 8 do Versus. Goro, Shang Tsung e um demônio de lava estão marcados como experimentais: carregam e atacam, mas são grandes ou estranhos.
+- **Ainda não é perfeito:** os lutadores do Versus foram feitos para luta 1 contra 1. Os golpes básicos funcionam na história, mas a loja de golpes, as fatalities da história e as cutscenes (que continuam mostrando os monges) podem não casar. Situação e números de cada personagem: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
 
 ## Modo RPG (opcional)
 
