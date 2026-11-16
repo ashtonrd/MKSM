@@ -6323,7 +6323,7 @@ index 8590f14..a30efdd 100644
  
      data[2] = static_cast<uint8_t>(btns & 0xFF);
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..2f92976 100644
+index 45cb9d2..317e01c 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -7364,7 +7364,7 @@ index 45cb9d2..2f92976 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +3179,210 @@ void PS2Runtime::run()
+@@ -2401,25 +3179,222 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -7564,6 +7564,18 @@ index 45cb9d2..2f92976 100644
 +        std::memcpy(&inGameMenu, m_memory.getRDRAM() + 0x4C49E8u, 4u);
 +        updateGfxMenu(inPlay == 0u || selectPause == 1u); // a pausa do Select também conta 0x4F4B68 = 1
 +        updateRpgDifficulty(m_memory.getRDRAM());
++        // Versus com todos os lutadores (pedido do usuário, 16/11): o jogo libera cada um num bit da lista do
++        // Konten em 0x5D8280 (CharLocked(n) testa o bit n); Baraka, Scorpion e Reptile ficam nos bits 80-87,
++        // Kitana, Sub-Zero e Johnny Cage nos 88-91. Só escreve se faltar bit: o jogo raramente grava essa
++        // palavra (ao liberar algo), e assim a janela quase nunca escreve junto. MKSM_VERSUS_TODOS=0 desliga.
++        {
++            static const bool unlockAll = [] { const char *v = std::getenv("MKSM_VERSUS_TODOS"); return !v || v[0] != '0'; }();
++            constexpr uint32_t kFighters = 0x0FFF0000u;
++            uint32_t word = 0;
++            std::memcpy(&word, m_memory.getRDRAM() + 0x5D8288u, 4u);
++            if (unlockAll && (word & kFighters) != kFighters)
++                word |= kFighters, std::memcpy(m_memory.getRDRAM() + 0x5D8288u, &word, 4u);
++        }
 +        // Widescreen (PCSX2's 16:9 patch, data half): MKSM's horizontal aspect factor at 0x4F4B38
 +        // (1.0 in the ELF) set to 0.75; the window then shows the picture at 16:9.
 +        {
@@ -7589,7 +7601,7 @@ index 45cb9d2..2f92976 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3393,197 @@ void PS2Runtime::run()
+@@ -2430,21 +3405,197 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());

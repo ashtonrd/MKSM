@@ -7,8 +7,9 @@ Recompilação estática do Mortal Kombat: Shaolin Monks (PS2, SLUS_210.87) com 
 1. **[`ARQUITETURA.md`](ARQUITETURA.md):** threads, locks, fluxo de um quadro, tempo/vsync, armadilhas do jogo, como testar sem bootar o jogo. Comece por aqui; não redescubra o que já está escrito.
 2. **[`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md):** o plano de execução. Leia as seções 1 a 4 (regras, mapa, rotinas com comandos prontos, armadilhas) e faça as tarefas da seção 6 **na ordem, uma por vez**, seguindo o formato de cada uma (o que fazer, como verificar, quando está pronta). Marque `[x]` e anote os números medidos na tarefa ao terminar.
 3. **[`PLANO_RPG.md`](PLANO_RPG.md):** o plano do modo RPG opcional (mesmo formato: tarefas na ordem; com o modo desligado, o jogo não pode mudar).
-4. **[`PLANO.md`](PLANO.md):** histórico encerrado em 13/11, com a evidência de cada correção (seção 5A = fase 3D, GS, bloom). Consulte; não é mais o plano.
-5. **[`MODDING.md`](MODDING.md):** endereços e formatos do jogo.
+4. **[`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md):** lutadores do Versus (todos liberados) e o plano para jogá-los na história.
+5. **[`PLANO.md`](PLANO.md):** histórico encerrado em 13/11, com a evidência de cada correção (seção 5A = fase 3D, GS, bloom). Consulte; não é mais o plano.
+6. **[`MODDING.md`](MODDING.md):** endereços e formatos do jogo.
 
 **Mantenha o `ARQUITETURA.md` atualizado:** se você mudar threads, locks, o caminho de um quadro, interfaces ou descobrir uma armadilha nova, atualize a seção certa no mesmo commit.
 

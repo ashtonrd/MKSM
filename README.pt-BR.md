@@ -30,6 +30,7 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
 | Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
 | Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos, nos dois renderizadores (limite do EE/VU1, N20) |
+| Lutadores do modo Versus | ✅ Os 8 liberados por padrão (`MKSM_VERSUS_TODOS=0` volta às liberações originais); jogar com eles na história: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md) |
 | Tela cheia | ✅ F11 |
 | Resolução interna maior | ✅ Renderizador novo em 2x por padrão, tão rápido quanto o antigo; `PS2X_GS_HW=0` volta ao antigo, `PS2X_SCALE=1..4` escolhe a escala |
 | Menu de gráfico para PC fraco | ✅ R3 nos menus/pausa (ou F1): resolução interna, 16:9, FXAA, filtro, mistura de campos, renderizador; grava no `mksm.ini` |
@@ -116,6 +117,7 @@ O PS2Recomp **não é copiado para cá**. O `scripts/aplicar_patches.sh` clona-o
 | [`ARQUITETURA.md`](ARQUITETURA.md) | Arquitetura: threads, locks, o caminho de um quadro, tempo, armadilhas do jogo, testes sem bootar o jogo. **Comece por aqui.** |
 | [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) | O plano ativo: desempenho, imagem, tarefas em aberto, medições |
 | [`PLANO_RPG.md`](PLANO_RPG.md) | O modo RPG opcional: desenho, endereços do jogo, o que foi testado |
+| [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md) | Lutadores do Versus: liberação, números, plano para jogar com eles na história |
 | [`PLANO.md`](PLANO.md) | Histórico: o diário de investigação até 13/11, com a evidência de cada correção |
 | [`MODDING.md`](MODDING.md) | Endereços e formatos do jogo (level select, dados das fases, bloom...) |
 | [`ESTADO.md`](ESTADO.md) | Estado técnico e passo a passo manual |

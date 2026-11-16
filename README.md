@@ -31,6 +31,7 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |
 | RPG mode (levels and attribute points) | 🟡 Implemented, Single Player and Ko-op (see [RPG mode](#rpg-mode-optional)); balance still being tested |
+| Versus mode fighters | ✅ All 8 unlocked by default (`MKSM_VERSUS_TODOS=0` restores the original unlocks); playing them in the story: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md) |
 | Fullscreen | ✅ F11 |
 | Higher internal resolution | ✅ New batching renderer at 2x by default, as fast as the old one; `PS2X_GS_HW=0` goes back to the old one, `PS2X_SCALE=1..4` picks the scale |
 | Graphics menu for weaker PCs | ✅ R3 in menus/pause (or F1): internal resolution, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini` |
@@ -116,6 +117,7 @@ PS2Recomp is **not vendored**. `scripts/aplicar_patches.sh` clones it at the com
 | [`ARQUITETURA.md`](ARQUITETURA.md) | Architecture: threads, locks, the path of a frame, timing, game traps, testing without booting the game. **Start here.** |
 | [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) | The active plan: performance, image, open tasks, measurements |
 | [`PLANO_RPG.md`](PLANO_RPG.md) | The optional RPG mode: design, game addresses, test status |
+| [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md) | Versus fighters: unlocks, IDs, plan to play them in the story |
 | [`PLANO.md`](PLANO.md) | History: the investigation log up to 13/11, with the evidence for each fix |
 | [`MODDING.md`](MODDING.md) | Game addresses and formats (level select, stage data, bloom...) |
 | [`ESTADO.md`](ESTADO.md) | Technical state and manual build steps |

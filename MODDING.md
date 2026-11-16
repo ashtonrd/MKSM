@@ -170,6 +170,7 @@ Mod fácil: **intensidade do bloom**. Gravar outro valor em `0x4F6E70+0x28` depo
   - Tabela de vida por bloco: `0x4EBC58 + 0x14 × upgrade + 4 × (modo + 1)` (200/300/... sozinho, 400/... co-op).
   - Dificuldade: `func_1DAF90(d)`; jogo novo chama de `0x130908`, carregar de `0x1304E8`/`0x141A00`. Diálogo "Select Difficulty" aberto: `0x5CC634 = 1`, `0x5CC608 = 2`, `0x5BE708 = 1`; cursor `0x6FA678` (0 Hard, 1 Normal).
   - Tela Load Game: `0x5B9990 = 0x5D5448 = 9` (itens da lista). Linhas a 33% + 5,8% por slot da altura da imagem.
+  - Liberações do Konten: bits em `0x5D8280` (`CharLocked(n)` testa o bit n; `unlockchar(n)` = `func_1C1A20`). Lutadores do Versus nos bits 80–91 (`0x5D8288`, máscara `0x0FFF0000`), mesmo número do personagem em `estrutura do jogador + 0x1E0E` (Liu Kang 0, Kung Lao 1, Johnny Cage 90). Ver `PLANO_PERSONAGENS.md`.
   - Arquivo do save `mc0/BASLUS-21087/BASLUS-21087` (198.876 bytes): cabeçalho `0x1328` e 9 slots de `0x5400`, cada um igual ao bloco do save da RAM.
 - **Personagem jogável novo:** o caminho realista é **substituir** um existente (modelo, texturas, som e golpes), não adicionar um slot. Adicionar slot exige mexer na seleção (`Character Select`), nos bancos de som e nas tabelas de golpes. Fazer isso por código C++ (seção 2) é mais fácil que editar o ELF.
 - A seleção de personagens já funciona no runtime (Liu Kang / Kung Lao) [medido].

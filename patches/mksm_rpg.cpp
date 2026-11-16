@@ -516,7 +516,9 @@ namespace mksm_rpg
     bool loadScreen(const uint8_t *rdram)
     {
         const bool dialog = rd32(rdram, 0x5CC634u) == 1u && rd32(rdram, 0x5CC608u) == 2u; // "No/Yes" por cima da lista
-        return rd32(rdram, 0x5B9990u) == 9u && rd32(rdram, 0x5D5448u) == 9u && rd32(rdram, 0x4F4B68u) == 0u && !dialog;
+        // A seleção do Versus também é uma lista de 9: 0x4AFC1C e 0x64D8B0 valem 1 só no Load Game.
+        return rd32(rdram, 0x5B9990u) == 9u && rd32(rdram, 0x5D5448u) == 9u && rd32(rdram, 0x4AFC1Cu) == 1u &&
+               rd32(rdram, 0x64D8B0u) == 1u && rd32(rdram, 0x4F4B68u) == 0u && !dialog;
     }
 
     void noteCardFile(int port, const std::string &path)
