@@ -2550,7 +2550,7 @@ index b1bb6d8..743297c 100644
          {
              runtime->gs().writeRegister(static_cast<uint8_t>(pairs[i].reg & 0xFFu), pairs[i].value);
 diff --git a/ps2xRuntime/src/lib/Kernel/Stubs/MPEG.cpp b/ps2xRuntime/src/lib/Kernel/Stubs/MPEG.cpp
-index 44eaef4..818fed8 100644
+index 44eaef4..22b24e9 100644
 --- a/ps2xRuntime/src/lib/Kernel/Stubs/MPEG.cpp
 +++ b/ps2xRuntime/src/lib/Kernel/Stubs/MPEG.cpp
 @@ -10,17 +10,29 @@
@@ -2883,9 +2883,15 @@ index 44eaef4..818fed8 100644
          (void)rdram;
  
          const uint32_t mpegAddr = getRegU32(ctx, 4);
-@@ -2072,6 +2363,11 @@ namespace ps2_stubs
+@@ -2071,7 +2362,17 @@ namespace ps2_stubs
+             std::lock_guard<std::mutex> lock(g_mpeg_stub_mutex);
              g_mpeg_stub_state.callbacksByMpeg.erase(mpegAddr);
              g_mpeg_stub_state.playbackByMpeg.erase(mpegAddr);
++#if PS2X_HAS_FFMPEG
++            // The same movie again (OPENING plays at boot and as the menu's attract movie) starts
++            // over with its sound from the file; kept open, it resumed mid-file on the emulated sound.
++            g_movieFile.close();
++#endif
          }
 +#if PS2X_HAS_FFMPEG
 +        // The movie ended or was skipped: its sound stops with it.
@@ -2895,7 +2901,7 @@ index 44eaef4..818fed8 100644
          runtime->eeScheduler().completeExternalWait(kMpegPictureWaitType, mpegAddr, KE_WAIT_DELETE);
          setReturnU32(ctx, 0u);
      }
-@@ -2289,9 +2585,35 @@ namespace ps2_stubs
+@@ -2289,9 +2590,35 @@ namespace ps2_stubs
          uint32_t frameCount = 0u;
          bool haveFrame = false;
          MpegDecodedFrame frame;
@@ -2931,7 +2937,7 @@ index 44eaef4..818fed8 100644
              if (playback.decodedFrames.empty() &&
                  !g_mpeg_stub_state.currentCdStreamEofSeen &&
                  !playback.streamEnded &&
-@@ -2393,7 +2715,8 @@ namespace ps2_stubs
+@@ -2393,7 +2720,8 @@ namespace ps2_stubs
          mpegGuestWrite32(rdram, mpegAddr + 0x04u, height);
          mpegGuestWrite32(rdram, mpegAddr + 0x08u, frameCount);
  
@@ -2941,7 +2947,7 @@ index 44eaef4..818fed8 100644
          {
              const uint32_t iVar1 = *reinterpret_cast<uint32_t *>(base + 0x40);
              if (uint8_t *inner = getMemPtr(rdram, iVar1))
-@@ -2415,7 +2738,40 @@ namespace ps2_stubs
+@@ -2415,7 +2743,40 @@ namespace ps2_stubs
              writeBlankMpegFrame(rdram, imageAddr, width, height);
          }
  
@@ -5859,38 +5865,86 @@ index 37b6a4d..4377297 100644
          // path above; kept correct for direct callers.
          const uint32_t off = address & 7u;
 diff --git a/ps2xRuntime/src/lib/ps2_pad.cpp b/ps2xRuntime/src/lib/ps2_pad.cpp
-index 8590f14..7539453 100644
+index 8590f14..5f9cb7e 100644
 --- a/ps2xRuntime/src/lib/ps2_pad.cpp
 +++ b/ps2xRuntime/src/lib/ps2_pad.cpp
-@@ -1,7 +1,18 @@
+@@ -1,6 +1,19 @@
 +#include <algorithm>
 +#include <cassert>
 +#include <chrono>
 +#include <cmath>
  #include "runtime/ps2_pad.h"
  #include "ps2_host_backend.h"
++#include "ps2_pad_bindings.h"
 +#include <cstdio>
 +#include <cstdlib>
  #include <cstring>
- 
++#include <string>
++
 +#include <atomic>
 +
 +void gsRecordScene(); // gs/gs_recording_backend.cpp
 +extern std::atomic<bool> g_gfxBlockInput; // ps2_runtime.cpp: the Graphics menu is open
-+
+ 
  namespace
  {
-     constexpr uint8_t kPadAnalogMarker = 0x73;
-@@ -25,7 +36,7 @@ namespace
+@@ -25,7 +38,54 @@ namespace
      constexpr uint16_t PAD_L2 = 0x0100u;
  }
  
 -bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t size)
++const PadBinding *padBindingDefaults()
++{
++    static const PadBinding defaults[kPadBindingCount] = {
++        {PAD_UP, "Cima", "CIMA", GAMEPAD_BUTTON_LEFT_FACE_UP, KEY_UP, KEY_W},
++        {PAD_DOWN, "Baixo", "BAIXO", GAMEPAD_BUTTON_LEFT_FACE_DOWN, KEY_DOWN, KEY_S},
++        {PAD_LEFT, "Esquerda", "ESQUERDA", GAMEPAD_BUTTON_LEFT_FACE_LEFT, KEY_LEFT, KEY_A},
++        {PAD_RIGHT, "Direita", "DIREITA", GAMEPAD_BUTTON_LEFT_FACE_RIGHT, KEY_RIGHT, KEY_D},
++        {PAD_CROSS, "X (cruz)", "X", GAMEPAD_BUTTON_RIGHT_FACE_DOWN, KEY_X, KEY_SPACE},
++        {PAD_CIRCLE, "Círculo", "CIRCULO", GAMEPAD_BUTTON_RIGHT_FACE_RIGHT, KEY_C, KEY_ESCAPE},
++        {PAD_SQUARE, "Quadrado", "QUADRADO", GAMEPAD_BUTTON_RIGHT_FACE_LEFT, KEY_Z, KEY_KP_0},
++        {PAD_TRIANGLE, "Triângulo", "TRIANGULO", GAMEPAD_BUTTON_RIGHT_FACE_UP, KEY_V, KEY_KP_1},
++        {PAD_L1, "L1", "L1", GAMEPAD_BUTTON_LEFT_TRIGGER_1, KEY_Q, 0},
++        {PAD_R1, "R1", "R1", GAMEPAD_BUTTON_RIGHT_TRIGGER_1, KEY_E, 0},
++        {PAD_L2, "L2", "L2", GAMEPAD_BUTTON_LEFT_TRIGGER_2, KEY_LEFT_SHIFT, 0},
++        {PAD_R2, "R2", "R2", GAMEPAD_BUTTON_RIGHT_TRIGGER_2, KEY_RIGHT_SHIFT, 0},
++        {PAD_START, "Start", "START", GAMEPAD_BUTTON_MIDDLE_RIGHT, KEY_ENTER, 0},
++        {PAD_SELECT, "Select", "SELECT", GAMEPAD_BUTTON_MIDDLE_LEFT, KEY_TAB, 0},
++        {PAD_L3, "L3", "L3", GAMEPAD_BUTTON_LEFT_THUMB, 0, 0},
++        {PAD_R3, "R3", "R3", GAMEPAD_BUTTON_RIGHT_THUMB, 0, 0},
++    };
++    return defaults;
++}
++
++PadBinding *padBindings()
++{
++    static PadBinding *current = []
++    {
++        static PadBinding table[kPadBindingCount];
++        const PadBinding *defaults = padBindingDefaults();
++        for (int i = 0; i < kPadBindingCount; ++i)
++        {
++            table[i] = defaults[i];
++            const std::string name = defaults[i].iniName;
++            if (const char *v = std::getenv(("PS2X_PAD_" + name).c_str()))
++                table[i].gamepad = std::clamp(std::atoi(v), 0, static_cast<int>(GAMEPAD_BUTTON_RIGHT_THUMB));
++            if (const char *v = std::getenv(("PS2X_TECLA_" + name).c_str()))
++            {
++                const char *comma = std::strchr(v, ',');
++                table[i].key = std::clamp(std::atoi(v), 0, 511);
++                table[i].key2 = comma ? std::clamp(std::atoi(comma + 1), 0, 511) : 0;
++            }
++        }
++        return table;
++    }();
++    return current;
++}
++
 +bool PSPadBackend::readState(int port, int /*slot*/, uint8_t *data, size_t size)
  {
      if (!data || size < 32)
          return false;
-@@ -37,8 +48,11 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+@@ -37,86 +97,139 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
      data[3] = 0xFF;
      data[4] = data[5] = data[6] = data[7] = kPadStickCenter;
  
@@ -5903,7 +5957,47 @@ index 8590f14..7539453 100644
      const bool useGamepad = IsGamepadAvailable(kGamepad);
      auto clearBit = [&btns](uint16_t mask)
      { btns &= ~mask; };
-@@ -82,12 +96,50 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
+ 
++    const PadBinding *bindings = padBindings();
+     if (useGamepad)
+     {
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_LEFT_FACE_UP))
+-            clearBit(PAD_UP);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_LEFT_FACE_DOWN))
+-            clearBit(PAD_DOWN);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_LEFT_FACE_LEFT))
+-            clearBit(PAD_LEFT);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_LEFT_FACE_RIGHT))
+-            clearBit(PAD_RIGHT);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
+-            clearBit(PAD_CROSS);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))
+-            clearBit(PAD_CIRCLE);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_RIGHT_FACE_LEFT))
+-            clearBit(PAD_SQUARE);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_RIGHT_FACE_UP))
+-            clearBit(PAD_TRIANGLE);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1))
+-            clearBit(PAD_L1);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1))
+-            clearBit(PAD_R1);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_2))
+-            clearBit(PAD_L2);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_2))
+-            clearBit(PAD_R2);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_MIDDLE_RIGHT))
+-            clearBit(PAD_START);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_MIDDLE_LEFT))
+-            clearBit(PAD_SELECT);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_LEFT_THUMB))
+-            clearBit(PAD_L3);
+-        if (IsGamepadButtonDown(kGamepad, GAMEPAD_BUTTON_RIGHT_THUMB))
+-            clearBit(PAD_R3);
++        for (int i = 0; i < kPadBindingCount; ++i)
++            if (bindings[i].gamepad != 0 && IsGamepadButtonDown(kGamepad, bindings[i].gamepad))
++                clearBit(bindings[i].bit);
+ 
+         float lx = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_LEFT_X);
          float ly = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_LEFT_Y);
          float rx = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_RIGHT_X);
          float ry = GetGamepadAxisMovement(kGamepad, GAMEPAD_AXIS_RIGHT_Y);
@@ -5952,13 +6046,10 @@ index 8590f14..7539453 100644
 -    else
 +
 +    if (port == 0)
-     {
-         if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))
-             clearBit(PAD_UP);
-@@ -119,6 +171,73 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
-             clearBit(PAD_SELECT);
-     }
- 
++        for (int i = 0; i < kPadBindingCount; ++i)
++            if ((bindings[i].key != 0 && IsKeyDown(bindings[i].key)) || (bindings[i].key2 != 0 && IsKeyDown(bindings[i].key2)))
++                clearBit(bindings[i].bit);
++
 +    // Diagnóstico: MKSM_AUTO_PAD="xds" aperta Cross/Down/Start em ciclo, 6 leituras a cada 200.
 +    // Test harness (see ARQUITETURA.md §6): timed holds and taps, and stopping MKSM_AUTO_PAD.
 +    static const auto diagStart = std::chrono::steady_clock::now();
@@ -6007,7 +6098,35 @@ index 8590f14..7539453 100644
 +        }
 +    if (const char *script = std::getenv("MKSM_AUTO_PAD"); script != nullptr && script[0] != '\0' && port == 0 &&
 +        (padUntil == nullptr || diagSeconds < std::atof(padUntil)))
-+    {
+     {
+-        if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))
+-            clearBit(PAD_UP);
+-        if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S))
+-            clearBit(PAD_DOWN);
+-        if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))
+-            clearBit(PAD_LEFT);
+-        if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D))
+-            clearBit(PAD_RIGHT);
+-        if (IsKeyDown(KEY_X) || IsKeyDown(KEY_SPACE))
+-            clearBit(PAD_CROSS);
+-        if (IsKeyDown(KEY_C) || IsKeyDown(KEY_ESCAPE))
+-            clearBit(PAD_CIRCLE);
+-        if (IsKeyDown(KEY_Z) || IsKeyDown(KEY_KP_0))
+-            clearBit(PAD_SQUARE);
+-        if (IsKeyDown(KEY_V) || IsKeyDown(KEY_KP_1))
+-            clearBit(PAD_TRIANGLE);
+-        if (IsKeyDown(KEY_Q))
+-            clearBit(PAD_L1);
+-        if (IsKeyDown(KEY_E))
+-            clearBit(PAD_R1);
+-        if (IsKeyDown(KEY_LEFT_SHIFT))
+-            clearBit(PAD_L2);
+-        if (IsKeyDown(KEY_RIGHT_SHIFT))
+-            clearBit(PAD_R2);
+-        if (IsKeyDown(KEY_ENTER))
+-            clearBit(PAD_START);
+-        if (IsKeyDown(KEY_TAB))
+-            clearBit(PAD_SELECT);
 +        static uint32_t reads = 0u;
 +        const uint32_t count = reads++;
 +        if (count % 200u < 6u)
@@ -6024,13 +6143,11 @@ index 8590f14..7539453 100644
 +            else if (step == 's')
 +                clearBit(PAD_START);
 +        }
-+    }
-+
+     }
+ 
      data[2] = static_cast<uint8_t>(btns & 0xFF);
-     data[3] = static_cast<uint8_t>(btns >> 8);
-     return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..3d75881 100644
+index 45cb9d2..f3f00b5 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -6042,15 +6159,16 @@ index 45cb9d2..3d75881 100644
  #include "ps2_runtime.h"
  #include "ps2_log.h"
  #include "ps2_stubs.h"
-@@ -6,6 +11,7 @@
+@@ -6,6 +11,8 @@
  #include "ps2_runtime_macros.h"
  #include "runtime/gs/gs_frontend.h"
  #include "runtime/ee_scheduler.h"
 +#include "runtime/ps2_perf.h"
++#include "ps2_pad_bindings.h"
  #include "ThreadNaming.h"
  #include "Kernel/Stubs/Audio.h"
  #include "Kernel/Stubs/GS.h"
-@@ -14,8 +20,12 @@
+@@ -14,8 +21,12 @@
  #include "ps2_iop_host.h"
  #include "ps2x/iop/iop_subsystem.h"
  
@@ -6063,7 +6181,7 @@ index 45cb9d2..3d75881 100644
  #include <fstream>
  #include <algorithm>
  #include <array>
-@@ -27,6 +37,8 @@
+@@ -27,6 +38,8 @@
  #include <unordered_map>
  #include <sstream>
  
@@ -6072,7 +6190,7 @@ index 45cb9d2..3d75881 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -373,10 +385,270 @@ namespace
+@@ -373,10 +386,421 @@ namespace
      }
  }
  
@@ -6141,14 +6259,24 @@ index 45cb9d2..3d75881 100644
 +            for (std::string line; std::getline(in, line);)
 +                lines.push_back(line);
 +        }
-+        for (const auto &[key, value] : values)
++        const auto set = [&lines](const std::string &key, const std::string &value, bool append)
 +        {
 +            bool found = false;
 +            for (std::string &line : lines)
 +                if (line.rfind(key + "=", 0) == 0)
 +                    line = key + "=" + value, found = true;
-+            if (!found)
++            if (!found && append)
 +                lines.push_back(key + "=" + value);
++        };
++        for (const auto &[key, value] : values)
++            set(key, value, true);
++        // Buttons (Controles tab): a line only once a binding leaves its default.
++        const PadBinding *b = padBindings(), *d = padBindingDefaults();
++        for (int i = 0; i < kPadBindingCount; ++i)
++        {
++            const std::string name = d[i].iniName;
++            set("PS2X_PAD_" + name, std::to_string(b[i].gamepad), b[i].gamepad != d[i].gamepad);
++            set("PS2X_TECLA_" + name, std::to_string(b[i].key) + "," + std::to_string(b[i].key2), b[i].key != d[i].key || b[i].key2 != d[i].key2);
 +        }
 +        std::ofstream out(path, std::ios::trunc);
 +        for (const std::string &line : lines)
@@ -6157,11 +6285,104 @@ index 45cb9d2..3d75881 100644
 +    }
 +
 +    enum GfxRow { RowPreset, RowScale, RowWide, RowFxaa, RowFilter, RowBlend, RowEffects, RowRenderer, RowThread, RowReset, RowClose, RowCount };
++    enum CtlRow { CtlReset = kPadBindingCount, CtlClose, CtlRowCount }; // "Controles" tab: one row per PS2 button, then these
 +    struct GfxMenu
 +    {
-+        bool open = false, waitRelease = false, saveTried = false, saved = false;
-+        int row = 0;
++        bool open = false, waitRelease = false, saveTried = false, saved = false, captureArmed = false;
++        int row = 0, tab = 0; // tab 0 Gráfico, 1 Controles
++        int capture = -1;     // Controles row waiting for a button or key
 +    } g_gfxMenu;
++
++    const char *gamepadButtonName(int button)
++    {
++        static const char *names[] = {"-", "Direcional cima", "Direcional direita", "Direcional baixo", "Direcional esquerda",
++                                      "Y / Triângulo", "B / Círculo", "A / Cruz", "X / Quadrado", "LB / L1", "LT / L2", "RB / R1",
++                                      "RT / R2", "Back / Select", "Guide", "Start", "L3", "R3"};
++        return button >= 0 && button < static_cast<int>(std::size(names)) ? names[button] : "?";
++    }
++
++    std::string keyName(int key)
++    {
++        if ((key >= KEY_A && key <= KEY_Z) || (key >= KEY_ZERO && key <= KEY_NINE))
++            return std::string(1, static_cast<char>(key));
++        if (key >= KEY_KP_0 && key <= KEY_KP_9)
++            return "Num " + std::to_string(key - KEY_KP_0);
++        switch (key)
++        {
++        case KEY_SPACE: return "Espaço";
++        case KEY_ENTER: return "Enter";
++        case KEY_TAB: return "Tab";
++        case KEY_ESCAPE: return "Esc";
++        case KEY_UP: return "Seta cima";
++        case KEY_DOWN: return "Seta baixo";
++        case KEY_LEFT: return "Seta esq.";
++        case KEY_RIGHT: return "Seta dir.";
++        case KEY_LEFT_SHIFT: return "Shift esq.";
++        case KEY_RIGHT_SHIFT: return "Shift dir.";
++        case KEY_LEFT_CONTROL: return "Ctrl esq.";
++        case KEY_RIGHT_CONTROL: return "Ctrl dir.";
++        case KEY_LEFT_ALT: return "Alt esq.";
++        case KEY_RIGHT_ALT: return "Alt dir.";
++        default: return "Tecla " + std::to_string(key);
++        }
++    }
++
++    // Controles tab, waiting for a press: the first gamepad button or key takes the PS2 button; a host
++    // button already used by another one swaps with it. F1 and F9-F12 belong to the window; Backspace cancels.
++    void updateCapture()
++    {
++        GfxMenu &m = g_gfxMenu;
++        PadBinding *bindings = padBindings();
++        PadBinding &b = bindings[m.capture];
++        const bool padOk = IsGamepadAvailable(0);
++        if (!m.captureArmed) // the press that started it must be let go first
++        {
++            bool held = IsKeyDown(KEY_ENTER);
++            for (int button = 1; padOk && button <= GAMEPAD_BUTTON_RIGHT_THUMB; ++button)
++                held = held || IsGamepadButtonDown(0, button);
++            while (GetKeyPressed() != 0)
++                ;
++            m.captureArmed = !held;
++            return;
++        }
++        int button = 0, key = 0;
++        for (int i = 1; padOk && i <= GAMEPAD_BUTTON_RIGHT_THUMB && button == 0; ++i)
++            if (IsGamepadButtonPressed(0, i))
++                button = i;
++        for (int k = GetKeyPressed(); k != 0; k = GetKeyPressed())
++            if (k != KEY_F1 && (k < KEY_F9 || k > KEY_F12))
++                key = key ? key : k;
++        if (key == KEY_BACKSPACE)
++        {
++            m.capture = -1;
++            return;
++        }
++        if (button != 0)
++        {
++            for (int i = 0; i < kPadBindingCount; ++i)
++                if (&bindings[i] != &b && bindings[i].gamepad == button)
++                    bindings[i].gamepad = b.gamepad;
++            b.gamepad = button;
++        }
++        else if (key != 0)
++        {
++            for (int i = 0; i < kPadBindingCount; ++i)
++            {
++                if (&bindings[i] == &b)
++                    continue;
++                if (bindings[i].key == key)
++                    bindings[i].key = b.key;
++                if (bindings[i].key2 == key)
++                    bindings[i].key2 = 0;
++            }
++            b.key = key, b.key2 = 0;
++        }
++        else
++            return;
++        m.capture = -1;
++        m.saveTried = true;
++        m.saved = saveGfx();
++    }
 +
 +    bool presetHigh(const GfxSettings &g) { return g.newRenderer && g.scale == 2u && g.fxaa && g.bicubic && g.effects; }
 +    bool presetLow(const GfxSettings &g) { return g.newRenderer && g.scale == 1u && !g.fxaa && !g.bicubic && g.effects; }
@@ -6237,7 +6458,8 @@ index 45cb9d2..3d75881 100644
 +            const char want = button == GAMEPAD_BUTTON_RIGHT_THUMB ? 'o' : button == GAMEPAD_BUTTON_LEFT_FACE_UP ? 'u'
 +                            : button == GAMEPAD_BUTTON_LEFT_FACE_DOWN ? 'd' : button == GAMEPAD_BUTTON_LEFT_FACE_LEFT ? 'l'
 +                            : button == GAMEPAD_BUTTON_LEFT_FACE_RIGHT ? 'r' : button == GAMEPAD_BUTTON_RIGHT_FACE_DOWN ? 'x'
-+                            : button == GAMEPAD_BUTTON_RIGHT_FACE_RIGHT ? 'c' : 0;
++                            : button == GAMEPAD_BUTTON_RIGHT_FACE_RIGHT ? 'c' : button == GAMEPAD_BUTTON_LEFT_TRIGGER_1 ? 'q'
++                            : button == GAMEPAD_BUTTON_RIGHT_TRIGGER_1 ? 'e' : 0;
 +            return (step != 0 && step == want) || (padOk && IsGamepadButtonPressed(0, button));
 +        };
 +        if (!m.open)
@@ -6245,21 +6467,34 @@ index 45cb9d2..3d75881 100644
 +            if (IsKeyPressed(KEY_F1) || (allowR3 && pressed(GAMEPAD_BUTTON_RIGHT_THUMB)))
 +                m.open = true, m.row = 0;
 +        }
++        else if (m.capture >= 0)
++            updateCapture();
 +        else
 +        {
++            if (pressed(GAMEPAD_BUTTON_LEFT_TRIGGER_1) || pressed(GAMEPAD_BUTTON_RIGHT_TRIGGER_1) || IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_E))
++                m.tab = 1 - m.tab, m.row = 0;
++            const int rows = m.tab == 0 ? static_cast<int>(RowCount) : static_cast<int>(CtlRowCount);
 +            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_UP) || IsKeyPressed(KEY_UP))
-+                m.row = (m.row + RowCount - 1) % RowCount;
++                m.row = (m.row + rows - 1) % rows;
 +            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN) || IsKeyPressed(KEY_DOWN))
-+                m.row = (m.row + 1) % RowCount;
++                m.row = (m.row + 1) % rows;
 +            const bool left = pressed(GAMEPAD_BUTTON_LEFT_FACE_LEFT) || IsKeyPressed(KEY_LEFT);
 +            const bool right = pressed(GAMEPAD_BUTTON_LEFT_FACE_RIGHT) || IsKeyPressed(KEY_RIGHT);
 +            const bool accept = pressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || IsKeyPressed(KEY_ENTER);
 +            const bool back = pressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) || pressed(GAMEPAD_BUTTON_RIGHT_THUMB) ||
 +                              IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_F1);
-+            if (back || (accept && m.row == RowClose))
++            if (back || (accept && m.row == (m.tab == 0 ? static_cast<int>(RowClose) : static_cast<int>(CtlClose))))
 +                m.open = false;
-+            else if ((left || right || accept) && (m.row != RowReset || accept))
++            else if (m.tab == 0 && (left || right || accept) && (m.row != RowReset || accept))
 +                changeGfxRow(m.row, left ? -1 : 1);
++            else if (m.tab == 1 && accept && m.row == CtlReset)
++            {
++                std::copy(padBindingDefaults(), padBindingDefaults() + kPadBindingCount, padBindings());
++                m.saveTried = true;
++                m.saved = saveGfx();
++            }
++            else if (m.tab == 1 && accept && m.row < kPadBindingCount)
++                m.capture = m.row, m.captureArmed = false;
 +        }
 +        // The buttons that closed the menu must not reach the game either: wait until they are let go.
 +        bool held = false;
@@ -6289,52 +6524,86 @@ index 45cb9d2..3d75881 100644
 +            }
 +            return;
 +        }
-+        const float line = font * 1.6f;
-+        const float width = std::min(area.width * 0.9f, font * 30.0f), height = line * (RowCount + 5);
++        // The Controles tab has more rows: a smaller font keeps the panel inside the picture.
++        const int rowCount = m.tab == 0 ? static_cast<int>(RowCount) : static_cast<int>(CtlRowCount);
++        const int rowFont = m.tab == 0 ? font : static_cast<int>(std::max(11.0f, area.height / 42.0f));
++        const float line = rowFont * 1.55f;
++        const float width = std::min(area.width * 0.92f, font * 32.0f), height = line * rowCount + font * 6.5f;
 +        const Rectangle panel{area.x + (area.width - width) * 0.5f, area.y + (area.height - height) * 0.5f, width, height};
 +        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{0, 0, 0, 120});
 +        DrawRectangleRec(panel, Color{10, 12, 16, 235});
 +        DrawRectangleLinesEx(panel, 2.0f, gold);
 +        const int left = static_cast<int>(panel.x + font), right = static_cast<int>(panel.x + panel.width - font);
++        const int small = std::max(10, font * 3 / 4);
 +        int y = static_cast<int>(panel.y + font * 0.8f);
-+        DrawText("Gráfico", left, y, font + font / 2, gold);
-+        y += static_cast<int>(line * 1.4f);
-+        const auto onOff = [](bool on) { return on ? "Ligada" : "Desligada"; };
-+        char scaleText[48];
-+        std::snprintf(scaleText, sizeof(scaleText), GSHwBackend::Active() ? "%ux" : "%ux (renderizador novo)", g.scale);
-+        const char *rows[RowCount][2] = {
-+            {"Predefinição", presetHigh(g) ? "Alto" : presetLow(g) ? "Leve" : presetMin(g) ? "Mínimo" : "Personalizado"},
-+            {"Resolução interna", scaleText},
-+            {"Tela", g.widescreen ? "16:9" : "4:3"},
-+            {"Suavização (FXAA)", onOff(g.fxaa)},
-+            {"Filtro de ampliação", g.bicubic ? "Bicúbico" : "Bilinear"},
-+            {"Mistura de campos", onOff(g.blend)},
-+            {"Efeitos de luz", g.effects ? "Completos" : "Simples"},
-+            {"Renderizador", g.newRenderer != g.runningNew ? (g.newRenderer ? "Novo *" : "Antigo *") : (g.newRenderer ? "Novo" : "Antigo")},
-+            {"Thread de desenho", g.thread != g.runningThread ? (g.thread ? "Ligada *" : "Desligada *") : onOff(g.thread)},
-+            {"Restaurar recomendado", ""},
-+            {"Fechar", ""}};
-+        for (int row = 0; row < RowCount; ++row, y += static_cast<int>(line))
++        const char *tabs[] = {"Gráfico", "Controles"};
++        for (int t = 0, x = left; t < 2; ++t)
++        {
++            DrawText(tabs[t], x, y, font + font / 2, t == m.tab ? gold : dim);
++            x += MeasureText(tabs[t], font + font / 2) + font * 2;
++        }
++        DrawText("L1/R1: aba", right - MeasureText("L1/R1: aba", small), y + font / 2, small, dim);
++        y += static_cast<int>(font * 2.1f);
++        const auto drawRow = [&](int row, const char *label, const std::string &value)
 +        {
 +            const bool selected = row == m.row;
 +            if (selected)
-+                DrawRectangle(left - font / 2, y - font / 4, right - left + font, static_cast<int>(line) - font / 4, Color{70, 52, 22, 230});
-+            DrawText(rows[row][0], left, y, font, selected ? gold : text);
-+            if (rows[row][1][0] != '\0')
-+            {
-+                char value[64];
-+                std::snprintf(value, sizeof(value), "< %s >", rows[row][1]);
-+                DrawText(value, right - MeasureText(value, font), y, font, selected ? gold : text);
-+            }
++                DrawRectangle(left - font / 2, y - rowFont / 4, right - left + font, static_cast<int>(line) - rowFont / 4, Color{70, 52, 22, 230});
++            DrawText(label, left, y, rowFont, selected ? gold : text);
++            if (!value.empty())
++                DrawText(value.c_str(), right - MeasureText(value.c_str(), rowFont), y, rowFont, selected ? gold : text);
++            y += static_cast<int>(line);
++        };
++        if (m.tab == 0)
++        {
++            const auto onOff = [](bool on) { return on ? "Ligada" : "Desligada"; };
++            char scaleText[48];
++            std::snprintf(scaleText, sizeof(scaleText), GSHwBackend::Active() ? "%ux" : "%ux (renderizador novo)", g.scale);
++            const char *rows[RowCount][2] = {
++                {"Predefinição", presetHigh(g) ? "Alto" : presetLow(g) ? "Leve" : presetMin(g) ? "Mínimo" : "Personalizado"},
++                {"Resolução interna", scaleText},
++                {"Tela", g.widescreen ? "16:9" : "4:3"},
++                {"Suavização (FXAA)", onOff(g.fxaa)},
++                {"Filtro de ampliação", g.bicubic ? "Bicúbico" : "Bilinear"},
++                {"Mistura de campos", onOff(g.blend)},
++                {"Efeitos de luz", g.effects ? "Completos" : "Simples"},
++                {"Renderizador", g.newRenderer != g.runningNew ? (g.newRenderer ? "Novo *" : "Antigo *") : (g.newRenderer ? "Novo" : "Antigo")},
++                {"Thread de desenho", g.thread != g.runningThread ? (g.thread ? "Ligada *" : "Desligada *") : onOff(g.thread)},
++                {"Restaurar recomendado", ""},
++                {"Fechar", ""}};
++            for (int row = 0; row < RowCount; ++row)
++                drawRow(row, rows[row][0], rows[row][1][0] ? std::string("< ") + rows[row][1] + " >" : std::string());
 +        }
-+        y += static_cast<int>(line * 0.4f);
-+        const int small = std::max(10, font * 3 / 4);
-+        DrawText("* vale ao reiniciar o jogo", left, y, small, dim);
-+        y += static_cast<int>(small * 1.5f);
-+        DrawText("Cima/Baixo: escolher   Esquerda/Direita ou X: mudar   O ou R3: fechar", left, y, small, dim);
++        else
++        {
++            const PadBinding *b = padBindings();
++            for (int row = 0; row < kPadBindingCount; ++row)
++            {
++                std::string keys = b[row].key ? keyName(b[row].key) : std::string("-");
++                if (b[row].key2)
++                    keys += " / " + keyName(b[row].key2);
++                drawRow(row, b[row].name, row == m.capture ? std::string("Aperte um botão ou tecla (Backspace cancela)")
++                                                           : std::string(gamepadButtonName(b[row].gamepad)) + "   ·   " + keys);
++            }
++            drawRow(CtlReset, "Restaurar padrão", "");
++            drawRow(CtlClose, "Fechar", "");
++        }
++        y += static_cast<int>(line * 0.3f);
++        if (m.tab == 0)
++        {
++            DrawText("* vale ao reiniciar o jogo", left, y, small, dim);
++            y += static_cast<int>(small * 1.5f);
++            DrawText("Cima/Baixo: escolher   Esquerda/Direita ou X: mudar   O ou R3: fechar", left, y, small, dim);
++        }
++        else
++        {
++            DrawText("Controle   ·   teclado. O teclado vale só para o jogador 1.", left, y, small, dim);
++            y += static_cast<int>(small * 1.5f);
++            DrawText("Cima/Baixo: escolher   X: trocar o botão   O ou R3: fechar", left, y, small, dim);
++        }
 +        y += static_cast<int>(small * 1.5f);
 +        if (m.saveTried)
-+            DrawText(m.saved ? "Salvo no mksm.ini" : "Não salvo: abra o jogo pelo scripts/jogar.sh", left, y, small, m.saved ? dim : gold);
++            DrawText(m.saved ? "Salvo no mksm.ini" : "Não salvo: abra o jogo pelo jogar.sh", left, y, small, m.saved ? dim : gold);
 +    }
 +}
 +
@@ -6345,7 +6614,7 @@ index 45cb9d2..3d75881 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,21 +659,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +811,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -6370,7 +6639,35 @@ index 45cb9d2..3d75881 100644
      uint32_t width = 0u;
      uint32_t height = 0u;
      uint32_t displayFbp = 0u;
-@@ -450,13 +711,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -414,14 +827,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+                                                    &sourceFbp,
+                                                    &usedPreferredDisplaySource))
+     {
+-        Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, MAGENTA);
+-        UpdateTexture(tex, blank.data);
+-        UnloadImage(blank);
+-        outWidth = FB_WIDTH;
+-        outHeight = DEFAULT_DISPLAY_HEIGHT;
+-        s_lastWidth = outWidth;
+-        s_lastHeight = outHeight;
+-        s_hasUploadedFrame = true;
++        // No frame this window tick (boot, a movie starting): keep the last picture, black before
++        // the first one. It was a magenta debug fill, seen as a pink flash before some movies.
++        if (!s_hasUploadedFrame)
++        {
++            Image blank = GenImageColor(tex.width, tex.height, BLACK);
++            UpdateTexture(tex, blank.data);
++            UnloadImage(blank);
++            s_lastWidth = FB_WIDTH;
++            s_lastHeight = DEFAULT_DISPLAY_HEIGHT;
++            s_hasUploadedFrame = true;
++        }
++        outWidth = s_lastWidth;
++        outHeight = s_lastHeight;
+         return;
+     }
+ 
+@@ -450,13 +868,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
@@ -6407,7 +6704,7 @@ index 45cb9d2..3d75881 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +749,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +906,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -6443,7 +6740,7 @@ index 45cb9d2..3d75881 100644
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +788,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +945,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -6452,7 +6749,7 @@ index 45cb9d2..3d75881 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +836,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +993,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -6462,7 +6759,7 @@ index 45cb9d2..3d75881 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +976,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +1133,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -6558,7 +6855,7 @@ index 45cb9d2..3d75881 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -732,9 +1062,49 @@ bool PS2Runtime::initialize(const char *title)
+@@ -732,9 +1219,49 @@ bool PS2Runtime::initialize(const char *title)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
          SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -6608,7 +6905,7 @@ index 45cb9d2..3d75881 100644
  #endif
          SetTargetFPS(60);
          if (m_debugUiInitCallback)
-@@ -2214,6 +2584,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +2741,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -6620,7 +6917,7 @@ index 45cb9d2..3d75881 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +2735,16 @@ void PS2Runtime::run()
+@@ -2360,13 +2892,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -6637,7 +6934,7 @@ index 45cb9d2..3d75881 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +2766,63 @@ void PS2Runtime::run()
+@@ -2388,9 +2923,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -6702,7 +6999,7 @@ index 45cb9d2..3d75881 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +2833,202 @@ void PS2Runtime::run()
+@@ -2401,25 +2990,202 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -6919,7 +7216,7 @@ index 45cb9d2..3d75881 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3039,196 @@ void PS2Runtime::run()
+@@ -2430,21 +3196,196 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());

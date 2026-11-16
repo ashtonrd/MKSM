@@ -8,6 +8,7 @@ ps2_perf.cpp                 ps2xRuntime/src/lib
 ps2_spu2_stream.cpp          ps2xRuntime/src/lib
 ps2_vu1_thread.cpp           ps2xRuntime/src/lib
 ps2_vu1_thread.h             ps2xRuntime/src/lib
+ps2_pad_bindings.h           ps2xRuntime/src/lib
 ps2_vu1_jit.cpp              ps2xRuntime/src/lib/vu
 ps2_vu_clip.h                ps2xRuntime/include/runtime
 ps2_vu_sub.h                 ps2xRuntime/include/runtime

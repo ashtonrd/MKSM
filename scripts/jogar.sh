@@ -13,6 +13,7 @@
 #   PS2X_GPU_AUTO=0       não força a placa NVIDIA na janela
 #   PS2X_RUMBLE=0         sem vibração no controle
 #   PS2X_DEADZONE=25      zona morta do analógico em % (aumente se o personagem anda sozinho)
+#   PS2X_PAD_X=7 / PS2X_TECLA_X=88,32   botão do controle e teclas de cada botão do PS2 (o menu, aba Controles, grava isto)
 #   PS2X_MOVIE_AUDIO=0    som dos filmes pelo caminho emulado (o padrão toca direto do .SFD)
 #   PS2X_GS_CSR_LAG=0     o jogo espera o GS terminar cada quadro (mais lento; só para comparar)
 #   PS2X_GS_HW=0          renderizador antigo, só na resolução do PS2 (o padrão é o novo, por lotes, em 2x)

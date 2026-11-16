@@ -113,7 +113,7 @@ Seis atributos, todos sem mexer em velocidade, aprovados pelo usuário em 15/11 
 
 ### 3.4 Onde se joga: janela "Opções", abas Gráfico e RPG
 
-O menu Gráfico vira uma janela com **duas abas lado a lado**. O uso pedido: subiu de nível, pausa (Select), R3, distribui.
+A janela do F1/R3 já tem abas desde a N19 (Gráfico | Controles); o RPG acrescenta a terceira: **Gráfico | Controles | RPG**, L1/R1 passando de uma para a outra. O uso pedido: subiu de nível, pausa (Select), R3, distribui.
 
 ```
   Gráfico   [ RPG ]                              L1/R1: trocar aba
@@ -425,8 +425,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
 
 - [ ] **C1 Janela Opções com abas**
   - **Faça:**
-    - O menu Gráfico vira a aba Gráfico de uma janela com abas (3.4), sem mudar nada dentro dela.
-    - L1/R1 e Q/E trocam de aba; o `MKSM_GFX_SCRIPT` ganha `q`/`e`.
+    - As abas já existem (N19: Gráfico | Controles, L1/R1 e Q/E, `q`/`e` no `MKSM_GFX_SCRIPT`). Acrescentar a terceira, RPG, com L1/R1 girando pelas três.
     - A aba RPG pode estar vazia nesta tarefa.
   - **Verifique:** capturas da aba Gráfico iguais às de antes (fora o título das abas); roteiro troca de aba e volta.
   - **Pronto quando:** capturas anotadas.

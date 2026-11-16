@@ -14,6 +14,7 @@ namespace ps2_perf
         std::atomic<uint64_t> newImages{0}; // window frames that show a newly completed game frame
         std::atomic<uint64_t> gameFrames{0};
         std::atomic<uint64_t> worstFrameGapNs{0}; // longest wait between two game frames (a stutter)
+        std::atomic<uint64_t> imageAgeNs{0};      // sum, over the new images shown, of field done -> window shows it
         std::atomic<uint64_t> vsyncs{0};
         std::atomic<uint64_t> gsBusyNs{0};
         std::atomic<uint64_t> eeWaitingGsNs{0};

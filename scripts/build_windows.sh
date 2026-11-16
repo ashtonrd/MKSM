@@ -78,6 +78,7 @@ CONTROLES
     X ou Espaço = X                   C ou Esc = Círculo
     Z = Quadrado                      V = Triângulo
     Q/E = L1/R1, Shift esquerdo/direito = L2/R2
+  Para trocar os botões: F1 (ou R3 nos menus), L1/R1 até a aba Controles.
   F1 = menu Gráfico    F11 = tela cheia    F10 = salva a tela em capturas\
 
 CONFIGURAÇÃO

@@ -886,6 +886,7 @@ struct GSHwBackend::Renderer
         uint64_t serial = 0, seq = 0;
         bool doubleRows = false;
         uint32_t fbp = 0;
+        uint64_t recordedNs = 0; // PS2X_PERF: when the game finished this field
     };
     // Up to kSlots copies can be in flight (one submit each), one is read: two more keep a
     // finished one when the GPU lags (with three, a GPU two fields behind showed nothing new).
@@ -893,6 +894,7 @@ struct GSHwBackend::Renderer
     PresentCopy presentCopies[kPresentCopies];
     std::mutex presentMutex;      // guards the indices, seq, presentGeom and presentFailed
     int published = -1, reading = -1;
+    int backlogTicks = 0; // window frames in a row with two finished copies waiting (takeNewest)
     uint64_t publishedSeq = 0;
     GSPresentationRequest presentGeom{}; // the window's last request (display geometry)
     bool hasPresentGeom = false, presentFailed = false;
@@ -3128,6 +3130,7 @@ bool GSHwBackend::Renderer::record(const GSPresentationRequest &request, uint32_
     cur.w = pw, cur.h = ph, cur.doubleRows = doubleRows, cur.fbp = fbp;
     std::lock_guard<std::mutex> lock(presentMutex);
     cur.seq = ++publishedSeq;
+    cur.recordedNs = ps2_perf::nowNs();
     published = next;
     presentFailed = false;
     return true;
@@ -3167,7 +3170,9 @@ bool GSHwBackend::Renderer::copyDone(const PresentCopy &copy) const
 // Window side: the next finished copy, or the last one shown while the GPU is still on it.
 // One copy per window frame, oldest first: the window and the game tick on separate 60 Hz clocks,
 // and taking only the newest showed a field twice and dropped the next one 2-5 times a second
-// (57 of 60 game frames/s shown). Past two waiting it jumps to the newest, so the delay stays ~1 field.
+// (57 of 60 game frames/s shown). Past two waiting it jumps to the newest, so the delay stays ~1 field;
+// two waiting for half a second (the clocks drifted a field apart: 54 ms from field to window instead of
+// 20-29) also jump once.
 bool GSHwBackend::Renderer::takeNewest(PresentationFrame &out)
 {
     int index = -1;
@@ -3183,8 +3188,9 @@ bool GSHwBackend::Renderer::takeNewest(PresentationFrame &out)
                 if (newest < 0 || presentCopies[i].seq > presentCopies[newest].seq)
                     newest = i;
             }
-        if (waiting > 2)
-            index = newest;
+        backlogTicks = waiting >= 2 ? backlogTicks + 1 : 0;
+        if (waiting > 2 || backlogTicks >= 30)
+            index = newest, backlogTicks = 0;
         reading = index;
     }
     if (index >= 0)
@@ -3193,6 +3199,8 @@ bool GSHwBackend::Renderer::takeNewest(PresentationFrame &out)
         convertPresent(copy, shown);
         shownSeq = copy.seq;
         ps2_perf::counters().newImages.fetch_add(1u, std::memory_order_relaxed);
+        if (ps2_perf::enabled())
+            ps2_perf::counters().imageAgeNs.fetch_add(ps2_perf::nowNs() - copy.recordedNs, std::memory_order_relaxed);
         std::lock_guard<std::mutex> lock(presentMutex);
         reading = -1;
     }
