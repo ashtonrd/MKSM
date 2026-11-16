@@ -636,6 +636,16 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
       3. **Flags MAC/status no JIT:** os pares perto de leitores de flag deixam o interpretador. Até ~12% da VU1.
       4. **IOP numa thread própria:** −14% do EE, mas mexe no tempo do som (ver as armadilhas do IOP no ARQUITETURA); só com medida de áudio antes/depois.
       5. **Medir onde o usuário está** (save em `portatil/backup_save_mc0_15nov`): áreas mais pesadas que o Goro's Lair podem ter outro gargalo.
+- **15/11, madrugada (depois da sessão medida do usuário):**
+    - **Sessão do usuário (pasta portátil, `PS2X_PERF` + F8):** na luta pesada do fim, 50 s seguidos a 33–43 quadros/s (lentidão de verdade, o jogo conta o tempo em quadros) com **VU1 19–26 ms** por quadro, `GSHwWorker` 14–16, EE esperando a VU1 7–14. Perfis do trecho iguais aos dos vales da cutscene: é a VU1.
+    - **Cortes desta rodada (todos conferidos com `PS2X_VU_JIT_CHECK=1`: 7,3 M blocos da VU1 e 3,1 M da VU0, 0 diferenças, inclusive de ciclos; testes 460/3):**
+      - **MPG idêntico não muda o código:** o MKSM reenvia os mesmos programas várias vezes por quadro; agora o VIF compara antes de copiar e só então incrementa a geração do código. O JIT e o cache decodificado deixam de refazer o hash de 16 KB (`prepareJitTable` era 2,5% da VU1 na luta).
+      - **Geração do código conferida no despacho sem chamar `prepareJitTable`** a cada bloco.
+      - **JIT:** a constante do teste de resultado exato fica em `xmm8` (era `movabs` + `movups` em cada FMAC), e os dois operandos de um FMAC são conferidos juntos (um desvio em vez de dois). O montador ganhou REX para `xmm8–15`.
+      - **VU0, fim de programa:** o jogo lê MAC (`$vi17`) e CLIP (`$vi18`) depois da VU0, nunca STATUS. A janela no interpretador agora vai só do último par que escreve MAC até o fim (era 16 pares), quando nenhum desvio fica no trecho, nenhum desvio relativo cai dentro dele e não há JR/JALR no código. Pares da VU0 no interpretador: 22 M → 4,7 M na R5 (−79%).
+      - **WAITQ abre bloco:** o par com WAITQ (divisão de perspectiva) ia sempre ao interpretador; agora pode ser o primeiro par de um bloco, e o despacho espera o FDIV antes de entrar (o mesmo atraso do interpretador).
+    - **Resultado (R5, duas rodadas):** cutscene 50,6 → 54,2–54,4 de média, mínimo 25,5 → 37,5–39, VU1 15,8 → 14,6–15,0 ms (pico 25,9 → 23,1–24,1); gameplay 59,6 → 59,9–60,0 (mín 57,5 → 59,0–59,5), VU1 12,3 → 11,4–11,5.
+    - **O que sobra no interpretador da VU1:** pares de fim de programa (bit E e o par seguinte), XGKICK isolado (bloco de 1 par fica abaixo de `kMinBlockPairs`) e pares em slot de atraso depois de desvio interpretado.
 - **Pronto quando:** R5 sem variáveis, três rodadas: cutscene e gameplay sem intervalo de 2 s abaixo de 58 quadros/s, e "imagens novas" igual a "jogo".
 - **Estimativa honesta:**
   - Os trechos de 50–57 devem chegar a 60 com os itens 2 e 5.

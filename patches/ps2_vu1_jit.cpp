@@ -66,9 +66,11 @@ namespace
         }
         void op0F(uint8_t opcode, uint8_t dst, uint8_t src)
         {
+            if (dst >= 8u || src >= 8u) // REX.R/REX.B for xmm8-15, after any mandatory prefix
+                u8(static_cast<uint8_t>(0x40u | ((dst >> 3) << 2) | (src >> 3)));
             u8(0x0F);
             u8(opcode);
-            u8(static_cast<uint8_t>(0xC0u | (dst << 3) | src));
+            u8(static_cast<uint8_t>(0xC0u | ((dst & 7u) << 3) | (src & 7u)));
         }
 
         void loadState(uint8_t xmm, uint32_t disp) { u8(0x0F); u8(0x10); modrmDisp(xmm, disp); }
@@ -84,7 +86,9 @@ namespace
             const uint64_t value = reinterpret_cast<uint64_t>(address);
             for (int shift = 0; shift < 64; shift += 8)
                 u8(static_cast<uint8_t>(value >> shift));
-            u8(0x0F); u8(0x10); u8(static_cast<uint8_t>((xmm << 3) | 0u)); // movups xmm, [rax]
+            if (xmm >= 8u)
+                u8(0x44); // REX.R
+            u8(0x0F); u8(0x10); u8(static_cast<uint8_t>(((xmm & 7u) << 3) | 0u)); // movups xmm, [rax]
         }
         void movaps(uint8_t dst, uint8_t src) { op0F(0x28, dst, src); }
         void addps(uint8_t dst, uint8_t src) { op0F(0x58, dst, src); }
@@ -172,6 +176,24 @@ namespace
             andnps(3, xmm);
             orps(3, 7);
             movaps(xmm, 3);
+        }
+        // Both operands of an FMAC: one test and one branch when neither holds an Inf/NaN pattern
+        // (the usual case), instead of one per operand.
+        void clampOperands(uint8_t first, uint8_t second)
+        {
+            movaps(3, first);
+            andps(3, 5);
+            pcmpeqd(3, 5);
+            movaps(7, second);
+            andps(7, 5);
+            pcmpeqd(7, 5);
+            orps(3, 7);
+            movmskpsEax(3);
+            testEaxEax();
+            const size_t skip = jzFar();
+            clampOperand(first);
+            clampOperand(second);
+            patchJump(skip);
         }
         void blendps(uint8_t dst, uint8_t src, uint8_t imm)
         {
@@ -450,11 +472,14 @@ namespace
                                                  op.kind != UpperKind::Itof && op.kind != UpperKind::Ftoi &&
                                                  op.kind != UpperKind::Abs && op.source == UpperSource::Q; }
 
+    // xmm4-6 and xmm8 hold constants for the whole block; a callout clobbers them (System V: all
+    // xmm are caller-saved), so they are loaded again after each one.
     void loadJitConstants(Assembler &a)
     {
         a.loadConstant(4, &kVecMax);
         a.loadConstant(5, &kVecExponent);
         a.loadConstant(6, &kVecSign);
+        a.loadConstant(8, &kExponentBelowFe); // the exact-result check of every FMAC (emitExactFmacFixup)
     }
 
     // Lanes where truncated single precision and the interpreter's exact form part ways:
@@ -484,15 +509,13 @@ namespace
             a.andnps(7, 2);
             a.movaps(2, 7);
         }
-        a.loadConstant(7, &kExponentBelowFe);
-        a.pcmpgtd(3, 7);
+        a.pcmpgtd(3, 8); // xmm8 = kExponentBelowFe (loadJitConstants)
         if (checksProduct)
         {
             a.orps(3, 2);
             a.movaps(2, 1);
             a.andps(2, 5);
-            a.loadConstant(7, &kExponentBelowFe);
-            a.pcmpgtd(2, 7);
+            a.pcmpgtd(2, 8);
             a.orps(3, 2);
         }
         a.movmskpsEax(3);
@@ -531,43 +554,54 @@ namespace
             case UpperSource::I: a.loadScalarState(xmm, iOffset()); break;
             case UpperSource::Vector: a.loadState(xmm, vfOffset(ft)); break;
             }
-            if (op.source == UpperSource::Q || op.source == UpperSource::I || !finiteVf[ft])
-                a.clampOperand(xmm);
         };
+        const bool clampSource = op.source == UpperSource::Q || op.source == UpperSource::I || !finiteVf[ft];
         const auto loadFs = [&](uint8_t xmm)
         {
             a.loadState(xmm, vfOffset(fs));
             if (!finiteVf[fs])
                 a.clampOperand(xmm);
         };
+        // fs into one register, the source into the other, each clamped unless known finite.
+        const auto loadOperands = [&](uint8_t fsXmm, uint8_t sourceXmm)
+        {
+            a.loadState(fsXmm, vfOffset(fs));
+            loadSource(sourceXmm);
+            if (!finiteVf[fs] && clampSource)
+                a.clampOperands(fsXmm, sourceXmm);
+            else if (!finiteVf[fs])
+                a.clampOperand(fsXmm);
+            else if (clampSource)
+                a.clampOperand(sourceXmm);
+        };
 
         switch (op.kind)
         {
         case UpperKind::Add:
-            loadFs(0); loadSource(1); a.addps(0, 1);
+            loadOperands(0, 1); a.addps(0, 1);
             emitExactFmacFixup(a, instr, false, fixup);
             break;
         case UpperKind::Sub:
-            loadFs(0); loadSource(1); a.subps(0, 1);
+            loadOperands(0, 1); a.subps(0, 1);
             emitExactFmacFixup(a, instr, false, fixup);
             break;
         case UpperKind::Mul:
-            loadFs(0); loadSource(1); a.mulps(0, 1);
+            loadOperands(0, 1); a.mulps(0, 1);
             emitExactFmacFixup(a, instr, false, fixup);
             break;
         case UpperKind::Max:
-            loadFs(0); loadSource(1); a.vuMinMax(true);
+            loadOperands(0, 1); a.vuMinMax(true);
             break;
         case UpperKind::Min:
-            loadFs(0); loadSource(1); a.vuMinMax(false);
+            loadOperands(0, 1); a.vuMinMax(false);
             break;
         case UpperKind::Madd:
-            loadFs(1); loadSource(2); a.mulps(1, 2);
+            loadOperands(1, 2); a.mulps(1, 2);
             a.loadState(0, accOffset()); a.addps(0, 1);
             emitExactFmacFixup(a, instr, true, fixup);
             break;
         case UpperKind::Msub:
-            loadFs(1); loadSource(2); a.mulps(1, 2);
+            loadOperands(1, 2); a.mulps(1, 2);
             a.loadState(0, accOffset()); a.subps(0, 1);
             emitExactFmacFixup(a, instr, true, fixup);
             break;
@@ -881,6 +915,7 @@ struct VU1Interpreter::JitBlock
     uint16_t qFirstOffset = kNone, qLastOffset = kNone; // issue cycles of the first and last Q readers
     JitBlock *qSyncVariant = nullptr; // same pairs, Q brought up to date before each later reader
     bool startsWithBranch = false;
+    bool startsWithWaitQ = false; // its first lower is WAITQ: runJitBlock enters once the FDIV result landed
     std::vector<Timing> reads;  // earliest offset first
     std::vector<Timing> writes; // latest offset first
     // The same, as pointers into this interpreter's ready arrays: runJitBlock walks ~9 reads and the
@@ -971,7 +1006,12 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
             return true;
         if (pair.lowerUsage.pipeline == PipelineBranch)
             return true; // a callout, followed by its delay slot (see the pair loop)
-        if ((!lowerIsSupported(pair.lower) && !calloutLower) || pair.lowerUsage.waitQ || pair.lowerUsage.waitP)
+        // WAITQ opens a block (its wait is the block's entry, see runJitBlock); the perspective divide
+        // of MKSM's vertex loops sent those pairs to the interpreter. Inside a block it would make
+        // every later offset variable.
+        const bool openingWaitQ = isFirst && pair.lowerUsage.waitQ && !pair.lowerUsage.waitP;
+        if ((!lowerIsSupported(pair.lower) && !calloutLower && !openingWaitQ) || (pair.lowerUsage.waitQ && !openingWaitQ) ||
+            pair.lowerUsage.waitP)
             return false;
         if (calloutLower && pair.lowerUsage.vfWrite.reg != 0u && pair.suppressedLowerVf == pair.lowerUsage.vfWrite.reg)
             return false;
@@ -1297,6 +1337,10 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
             else if (pair.lowerUsage.pipeline == PipelineEfu)
                 block->efuOffset = static_cast<uint16_t>(cycle);
         }
+        else if (!pair.iBit && pair.lowerUsage.waitQ)
+        {
+            // the opening WAITQ: nothing to run, the block starts after the FDIV landed
+        }
         else
         {
             emitLower(a, pair.lower, dataMask, pair.suppressedLowerVf);
@@ -1394,6 +1438,7 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
     block->cycles = cycle;
     block->endsWithBranch = endsWithBranch;
     block->startsWithBranch = isBranch(pairs.front());
+    block->startsWithWaitQ = !pairs.front().iBit && pairs.front().lowerUsage.waitQ;
     JitBlock *result = block.release();
     jit.known.emplace(hash, result);
     return result;
@@ -1440,11 +1485,54 @@ void VU1Interpreter::prepareJitTable(const uint8_t *vuCode, uint32_t codeSize, P
         uint32_t lower = 0u, upper = 0u;
         std::memcpy(&lower, vuCode + index * 8u, 4u);
         std::memcpy(&upper, vuCode + index * 8u + 4u, 4u);
-        // VU0: the EE reads MAC/STATUS (CFC2) once the program stops, so its end counts
-        // as a flag reader. A VU1 program's end is observed by no one.
+        // VU0: the EE reads the flags (CFC2) once the program stops, so its end counts as a flag
+        // reader. A VU1 program's end is observed by no one. MKSM's code reads MAC ($vi17) and
+        // CLIP ($vi18, kept by the CLIP callout) after VU0 work, never STATUS ($vi16): the last
+        // MAC-writing pair before the end decides what the EE sees, so the pairs from there to the
+        // end stay interpreted instead of the whole 16-pair window (VU0 ran ~94% interpreted, ~10%
+        // of the game thread). With a branch in the tail the end can be reached without that pair:
+        // then the whole window stays.
         if (m_unit == Unit::VU0 && (upper & 0x40000000u) != 0u)
         {
-            const uint32_t first = index > kFlagReaderWindow ? index - kFlagReaderWindow : 0u;
+            uint32_t first = index > kFlagReaderWindow ? index - kFlagReaderWindow : 0u;
+            bool branchInTail = false;
+            uint32_t lastMacWriter = ~0u;
+            for (uint32_t back = 0u; back <= kFlagReaderWindow && back <= index; ++back)
+            {
+                uint32_t tailLower = 0u, tailUpper = 0u;
+                std::memcpy(&tailLower, vuCode + (index - back) * 8u, 4u);
+                std::memcpy(&tailUpper, vuCode + (index - back) * 8u + 4u, 4u);
+                const uint8_t tailOp = (tailLower >> 25) & 0x7Fu;
+                if ((tailUpper & 0x80000000u) == 0u && tailOp >= 0x20u && tailOp <= 0x2Fu) // B/BAL/JR/JALR/IB*
+                    branchInTail = true;
+                const UpperKind kind = decodeUpper(tailUpper).kind;
+                if (lastMacWriter == ~0u && (kind == UpperKind::Add || kind == UpperKind::Sub || kind == UpperKind::Mul ||
+                                             kind == UpperKind::Madd || kind == UpperKind::Msub))
+                    lastMacWriter = index - back;
+            }
+            // Nor may a branch from elsewhere land between that pair and the end (it would skip it):
+            // relative branches are checked by their targets, an indirect one (JR/JALR) anywhere keeps
+            // the whole window.
+            bool entersTail = false;
+            for (uint32_t at = 0u; at < count && !branchInTail && lastMacWriter != ~0u && !entersTail; ++at)
+            {
+                uint32_t anyLower = 0u, anyUpper = 0u;
+                std::memcpy(&anyLower, vuCode + at * 8u, 4u);
+                std::memcpy(&anyUpper, vuCode + at * 8u + 4u, 4u);
+                const uint8_t anyOp = (anyLower >> 25) & 0x7Fu;
+                if ((anyUpper & 0x80000000u) != 0u || anyOp < 0x20u || anyOp > 0x2Fu)
+                    continue;
+                if (anyOp == 0x24u || anyOp == 0x25u) // JR, JALR
+                {
+                    entersTail = true;
+                    continue;
+                }
+                const int32_t offset = static_cast<int32_t>(anyLower << 21) >> 21; // imm11, in pairs
+                const int64_t target = static_cast<int64_t>(at) + 1 + offset;
+                entersTail = target > static_cast<int64_t>(lastMacWriter) && target <= static_cast<int64_t>(index) + 1;
+            }
+            if (!branchInTail && !entersTail && lastMacWriter != ~0u)
+                first = lastMacWriter;
             for (uint32_t covered = first; covered <= index + 1u && covered < count; ++covered) // + delay slot
                 jit.tables->nearFlagReader[covered] = true;
             continue;
@@ -1494,7 +1582,9 @@ bool VU1Interpreter::runJitBlock(uint8_t *vuCode, uint32_t codeSize, uint8_t *vu
     const uint32_t pairIndex = m_state.pc / 8u;
     if ((m_state.pc & 7u) != 0u || pairIndex >= kMaxDecodedPairs)
         return false;
-    prepareJitTable(vuCode, codeSize, memory);
+    // The code memory almost never changes between blocks: test its generation here, without the call.
+    if (jit.generation != (m_unit == Unit::VU1 ? memory->getVU1CodeGeneration() : memory->getVU0CodeGeneration()))
+        prepareJitTable(vuCode, codeSize, memory);
 
     JitBlock *block = jit.tables->blocks[pairIndex];
     if (block == nullptr)
@@ -1529,6 +1619,8 @@ bool VU1Interpreter::runJitBlock(uint8_t *vuCode, uint32_t codeSize, uint8_t *vu
         if (*read.ready > entry + read.offset)
             entry = *read.ready - read.offset;
     }
+    if (block->startsWithWaitQ && m_fdiv.valid && m_fdiv.readyCycle > entry) // the interpreter's WAITQ stall
+        entry = m_fdiv.readyCycle;
     if (entry + block->cycles >= budgetEnd)
         return false;
     // A busy FDIV or EFU would stall the pair: leave that to the interpreter.

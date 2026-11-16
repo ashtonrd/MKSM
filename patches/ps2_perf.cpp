@@ -52,8 +52,8 @@ namespace ps2_perf
                 last = now;
                 const uint64_t frames = c.gameFrames.exchange(0), images = c.newImages.load();
                 std::fprintf(stderr,
-                             "[perf] janela %.1f fps (imagens novas %.1f/s, %.1f ms do fim do campo à janela) | jogo %.1f quadros/s (pior intervalo %.0f ms) | vsync %.1f/s | GS ocupado %.0f%% | jogo esperando o GS %.0f%%\n",
-                             c.windowFrames.exchange(0) / seconds, c.newImages.exchange(0) / seconds,
+                             "[perf] t=%.1f janela %.1f fps (imagens novas %.1f/s, %.1f ms do fim do campo à janela) | jogo %.1f quadros/s (pior intervalo %.0f ms) | vsync %.1f/s | GS ocupado %.0f%% | jogo esperando o GS %.0f%%\n",
+                             now / 1e9, c.windowFrames.exchange(0) / seconds, c.newImages.exchange(0) / seconds,
                              images ? c.imageAgeNs.exchange(0) / 1e6 / static_cast<double>(images) : 0.0, frames / seconds,
                              c.worstFrameGapNs.exchange(0) / 1e6,
                              c.vsyncs.exchange(0) / seconds, c.gsBusyNs.exchange(0) / (seconds * 1e7),
