@@ -96,9 +96,18 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) �
 ## Other fighters
 
 - **Versus mode:** all 8 fighters (Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage) come unlocked. `MKSM_VERSUS_TODOS=0` in `mksm.ini` restores the original unlocks.
-- **Story and Ko-op with another fighter:** on a **new game**, on the *Select Difficulty* screen, each player presses **L1/R1** on their own controller (**Q/E** on the keyboard for player 1) to pick a fighter. The choice is saved with the game and can't be changed afterwards, so bought moves never mix between characters.
-- **List:** the 8 Versus fighters. Goro, Shang Tsung and a lava demon are marked experimental: they load and attack, but they are big or odd.
-- **Not perfect yet:** Versus fighters were made for 1-on-1 fights. Their basic attacks work in the story, but the move shop, story fatalities and cutscenes (which still show the monks) may not fit. Status and character IDs: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
+- **Story and Ko-op with another fighter:** on a **new game**, on the *Select Difficulty* screen, each player presses **L1/R1** on their own controller (**Q/E** on the keyboard for player 1) to pick a fighter. The choice is saved with the game and can't be changed afterwards, so bought moves never mix between characters. In the story, specials are **R1 + a button**.
+
+| Fighter | Attacks | Specials | Status |
+|---|---|---|---|
+| Liu Kang, Kung Lao, Sub-Zero, Scorpion | yes | yes | Confirmed by playing |
+| Johnny Cage | yes | yes (green fireball, shadow kick) | The in-game move list shows generic names |
+| Reptile, Baraka, Kitana | yes | not tested one by one | Expected to behave like Johnny Cage |
+| Goro, Shang Tsung, lava demon | yes (their own) | — | Experimental: big, odd camera and collision |
+| Ermac, and the cut characters Armor Lion, Ninja and Shiva | **no** | — | Just to look at: they load and walk, but have no player moves (Ninja and Shiva have no animation) |
+
+- **Not perfect yet:** Versus fighters were made for 1-on-1 fights. The move shop, story fatalities and cutscenes (which still show the monks) may not fit. Giving Ermac and the cut characters another fighter's moves would mean mixing two characters' data packs, which hasn't been figured out yet. Status, character IDs and the game's damage formula: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
+- **Testing:** the Windows portable folder includes `TESTAR.txt`, a step-by-step checklist (RPG, fighters, Ko-op, Versus, saves).
 
 ## RPG mode (optional)
 
@@ -124,7 +133,7 @@ PS2Recomp is **not vendored**. `scripts/aplicar_patches.sh` clones it at the com
 | [`ARQUITETURA.md`](ARQUITETURA.md) | Architecture: threads, locks, the path of a frame, timing, game traps, testing without booting the game. **Start here.** |
 | [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) | The active plan: performance, image, open tasks, measurements |
 | [`PLANO_RPG.md`](PLANO_RPG.md) | The optional RPG mode: design, game addresses, test status |
-| [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md) | Versus fighters: unlocks, IDs, plan to play them in the story |
+| [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md) | Extra fighters: unlocks, character IDs, damage formula, what works in the story |
 | [`PLANO.md`](PLANO.md) | History: the investigation log up to 13/11, with the evidence for each fix |
 | [`MODDING.md`](MODDING.md) | Game addresses and formats (level select, stage data, bloom...) |
 | [`ESTADO.md`](ESTADO.md) | Technical state and manual build steps |

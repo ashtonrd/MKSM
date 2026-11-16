@@ -96,9 +96,18 @@ Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 ## Outros lutadores
 
 - **Modo Versus:** os 8 lutadores (Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage) vêm liberados. `MKSM_VERSUS_TODOS=0` no `mksm.ini` volta às liberações originais.
-- **História e Ko-op com outro lutador:** num **jogo novo**, na tela *Select Difficulty*, cada jogador aperta **L1/R1** no próprio controle (**Q/E** no teclado, jogador 1) para escolher o lutador. A escolha fica no save e não muda depois, para os golpes comprados nunca se misturarem entre personagens.
-- **Lista:** os 8 do Versus. Goro, Shang Tsung e um demônio de lava estão marcados como experimentais: carregam e atacam, mas são grandes ou estranhos.
-- **Ainda não é perfeito:** os lutadores do Versus foram feitos para luta 1 contra 1. Os golpes básicos funcionam na história, mas a loja de golpes, as fatalities da história e as cutscenes (que continuam mostrando os monges) podem não casar. Situação e números de cada personagem: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
+- **História e Ko-op com outro lutador:** num **jogo novo**, na tela *Select Difficulty*, cada jogador aperta **L1/R1** no próprio controle (**Q/E** no teclado, jogador 1) para escolher o lutador. A escolha fica no save e não muda depois, para os golpes comprados nunca se misturarem entre personagens. Na história, os especiais são **R1 + um botão**.
+
+| Lutador | Golpes | Especiais | Situação |
+|---|---|---|---|
+| Liu Kang, Kung Lao, Sub-Zero, Scorpion | sim | sim | Confirmados jogando |
+| Johnny Cage | sim | sim (bola verde, chute de sombra) | A lista de golpes do jogo mostra nomes genéricos |
+| Reptile, Baraka, Kitana | sim | não testados um a um | Devem se comportar como o Johnny Cage |
+| Goro, Shang Tsung, demônio de lava | sim (próprios) | — | Experimentais: grandes, câmera e colisão estranhas |
+| Ermac e os personagens cortados Armor Lion, Ninja e Shiva | **não** | — | Só para ver: carregam e andam, mas não têm golpes de jogador (Ninja e Shiva sem animação) |
+
+- **Ainda não é perfeito:** os lutadores do Versus foram feitos para luta 1 contra 1. A loja de golpes, as fatalities da história e as cutscenes (que continuam mostrando os monges) podem não casar. Dar ao Ermac e aos cortados os golpes de outro lutador exige misturar os pacotes de dados de dois personagens, o que ainda não foi descoberto. Situação, números dos personagens e a fórmula de dano do jogo: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
+- **Teste:** a pasta portátil do Windows traz o `TESTAR.txt`, um roteiro passo a passo (RPG, lutadores, Ko-op, Versus, saves).
 
 ## Modo RPG (opcional)
 
@@ -124,7 +133,7 @@ O PS2Recomp **não é copiado para cá**. O `scripts/aplicar_patches.sh` clona-o
 | [`ARQUITETURA.md`](ARQUITETURA.md) | Arquitetura: threads, locks, o caminho de um quadro, tempo, armadilhas do jogo, testes sem bootar o jogo. **Comece por aqui.** |
 | [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) | O plano ativo: desempenho, imagem, tarefas em aberto, medições |
 | [`PLANO_RPG.md`](PLANO_RPG.md) | O modo RPG opcional: desenho, endereços do jogo, o que foi testado |
-| [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md) | Lutadores do Versus: liberação, números, plano para jogar com eles na história |
+| [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md) | Lutadores extras: liberação, números dos personagens, fórmula de dano, o que funciona na história |
 | [`PLANO.md`](PLANO.md) | Histórico: o diário de investigação até 13/11, com a evidência de cada correção |
 | [`MODDING.md`](MODDING.md) | Endereços e formatos do jogo (level select, dados das fases, bloom...) |
 | [`ESTADO.md`](ESTADO.md) | Estado técnico e passo a passo manual |
