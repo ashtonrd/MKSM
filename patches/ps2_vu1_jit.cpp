@@ -883,6 +883,15 @@ struct VU1Interpreter::JitBlock
     bool startsWithBranch = false;
     std::vector<Timing> reads;  // earliest offset first
     std::vector<Timing> writes; // latest offset first
+    // The same, as pointers into this interpreter's ready arrays: runJitBlock walks ~9 reads and the
+    // late writes of every block (~1.5 M blocks/s), and picking the array per entry cost more than the
+    // compares.
+    struct ReadyRef
+    {
+        uint64_t *ready;
+        uint32_t offset;
+    };
+    std::vector<ReadyRef> readRefs, writeRefs;
 };
 
 struct VU1Interpreter::JitState
@@ -1370,6 +1379,12 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
     }
     std::stable_sort(block->writes.begin(), block->writes.end(), [](const auto &x, const auto &y)
                      { return x.offset > y.offset; });
+    const auto readySlot = [this](const JitBlock::Timing &t) -> uint64_t *
+    { return t.kind == 0u ? &m_vfReady[t.reg & 31u][t.lane & 3u] : t.kind == 1u ? &m_viReady[t.reg & 15u] : &m_accReady[t.lane & 3u]; };
+    for (const JitBlock::Timing &read : block->reads)
+        block->readRefs.push_back({readySlot(read), read.offset});
+    for (const JitBlock::Timing &write : block->writes)
+        block->writeRefs.push_back({readySlot(write), write.offset});
 
     uint8_t *code = g_codeArena.place(a.bytes);
     if (code == nullptr)
@@ -1507,15 +1522,12 @@ bool VU1Interpreter::runJitBlock(uint8_t *vuCode, uint32_t codeSize, uint8_t *vu
     uint64_t entry = m_cycle;
     // A read at offset o stalls only if its value is ready after m_cycle + o.
     const uint64_t horizon = jit.readyMax > m_cycle ? jit.readyMax - m_cycle : 0u;
-    for (const JitBlock::Timing &read : block->reads)
+    for (const JitBlock::ReadyRef &read : block->readRefs)
     {
         if (read.offset >= horizon)
             break;
-        const uint64_t ready = read.kind == 0u   ? m_vfReady[read.reg][read.lane]
-                               : read.kind == 1u ? m_viReady[read.reg]
-                                                 : m_accReady[read.lane];
-        if (ready > entry + read.offset)
-            entry = ready - read.offset;
+        if (*read.ready > entry + read.offset)
+            entry = *read.ready - read.offset;
     }
     if (entry + block->cycles >= budgetEnd)
         return false;
@@ -1558,17 +1570,11 @@ bool VU1Interpreter::runJitBlock(uint8_t *vuCode, uint32_t codeSize, uint8_t *vu
         // A write ready by the block's end can be skipped when the value it replaces is
         // too: past ready cycles never stall anything.
         const bool oldMayBeLate = jit.readyMax > entry + block->cycles;
-        for (const JitBlock::Timing &write : block->writes)
+        for (const JitBlock::ReadyRef &write : block->writeRefs)
         {
             if (write.offset <= block->cycles && !oldMayBeLate)
                 break;
-            const uint64_t ready = entry + write.offset;
-            if (write.kind == 0u)
-                m_vfReady[write.reg][write.lane] = ready;
-            else if (write.kind == 1u)
-                m_viReady[write.reg] = ready;
-            else
-                m_accReady[write.lane] = ready;
+            *write.ready = entry + write.offset;
         }
     };
     const auto finishCycles = [&]

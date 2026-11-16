@@ -615,6 +615,27 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
     - **Limite de 30 quadros/s testado e descartado:** com o bit FIELD virando a cada 2 vblanks o jogo vai a 30 cravados (pior intervalo 34–35 ms, sem tranco), mas a lógica anda por quadro: a cutscene levou ~48 s contra ~27 s. Câmera lenta, não serve.
     - **Medida na gameplay (R5 até 310 s):** VU1 13–14 ms por quadro de 16,7 (vales da cutscene 24–28). É a VU1 que segura o ritmo nesta máquina; o gráfico mais leve só alivia a GPU. Novo: `PS2X_PERF` mostra o pior intervalo entre quadros a cada 2 s.
     - **Próximo:** medir onde o usuário está (save dele em `portatil/backup_save_mc0_15nov`), que é mais adiante e mais pesado que o Goro's Lair, e voltar ao item 3 (VU1).
+- **15/11, noite (usuário: "pode fazer até finalizar a N20"):**
+    - **Medida comum:** script de R5 por 120 s, sem toques depois da fase carregar (cutscene inteira), com resumo por trecho. Antes / depois do corte abaixo:
+
+      | trecho | fps méd (mín) | VU1 ms/quadro (máx) | GSHwWorker | EE esperando VU1 |
+      |---|---|---|---|---|
+      | cutscene, antes | 50,6 (25,5) | 15,8 (25,9) | 16,4 | 6,4 |
+      | cutscene, depois | 51,6 (21,0) | 15,3 (25,2) | 16,8 | 5,8 |
+      | gameplay, antes | 59,6 (57,5) | 12,3 (14,9) | 10,5 | 5,1 |
+      | gameplay, depois | 59,8 (58,5) | 11,9 (13,1) | 10,3 | 4,9 |
+
+    - **Perfil da VU1Thread nos vales (64–84 s):** código do JIT 26%, despacho `runJitBlock` 20,6%, `processVIF1Data` 12,6%, interpretador ~12,5% (`execLower` 6,1, `run` 5,0, `execUpper` 1,4), pipelines/ciclos ~6,5%, callouts do JIT 3,1%, `prepareJitTable` 1,8% (hash do código quando o jogo reenvia o programa; as tabelas já ficam por conteúdo), envio ao GS (XGKICK, GIF) ~6%.
+    - **Despacho medido:** 36 leituras por bloco, ~9 conferidas por execução (horizonte médio de 2 ciclos), e só 0,2% dos blocos esperam de fato; ~1,5 milhão de blocos/s. **Feito:** leituras e escritas do bloco viram ponteiros diretos para os contadores de pronto (`ReadyRef`), sem escolher a tabela VF/VI/ACC a cada entrada: VU1 −3% (tabela acima). `PS2X_VU_JIT_CHECK=1`: 7,3 milhões de blocos, 0 diferenças; testes `vu1`/`vu` 87/0.
+    - **Código do JIT:** 200–290 bytes de x86 por par; os 4 blocos mais quentes (laço de vértices, pc 0x0d98, 0x1120, 0x0a18, 0x0318) somam ~16% da VU1Thread. Cada FMAC carrega e limita os operandos, confere as lanes de expoente extremo (`emitExactFmacFixup`) e grava com mistura por lane: é o preço da exatidão bit a bit.
+    - **Perfil da GameThread nos vales:** IOP ~14% (JIT e laço do IOP rodam na mesma thread), VU0 ~10% (boa parte no interpretador: o fim de todo programa da VU0 conta como leitor de flag, e **o jogo lê mesmo** MAC/CLIP com `CFC2 $vi17/$vi18` em 44 funções, então a janela fica), `writeIORegister` + `unordered_map` dos registradores ~7%, salto/`lookupFunction` ~5%, funções do jogo espalhadas (0,5–2% cada: `-O2` no código gerado renderia pouco). Os ~4% do escalonador "fora do executável" são a espera pelo horário real do próximo vblank (folga, não custo).
+    - **Conclusão desta rodada:** nos vales, **três** partes passam de 16,7 ms ao mesmo tempo: VU1 (~25), `GSHwWorker` (16–20) e o EE (~17 de trabalho próprio, fora a espera). Nenhum corte isolado chega aos 30–40% que cada uma precisaria. Na gameplay da primeira sala o jogo já fica em 59,6–59,8 de média (mín 57,5–58,5), com as imagens iguais aos quadros (item 7) e atraso de 20–25 ms (N19).
+    - **Próximos cortes, em ordem de ganho por esforço:**
+      1. **Numa madrugada (recompila os 13 mil arquivos, ~2 h):** tabela simples no lugar do `unordered_map` dos registradores de I/O (`ps2_memory.h`), e os outros cortes que mexem em headers do `ps2_runtime.h`. EE −3 a −5%.
+      2. **JIT da VU1, geração de código (várias sessões):** manter os VF de um bloco em registradores XMM e conferir as lanes extremas uma vez por resultado. Até ~10% da VU1.
+      3. **Flags MAC/status no JIT:** os pares perto de leitores de flag deixam o interpretador. Até ~12% da VU1.
+      4. **IOP numa thread própria:** −14% do EE, mas mexe no tempo do som (ver as armadilhas do IOP no ARQUITETURA); só com medida de áudio antes/depois.
+      5. **Medir onde o usuário está** (save em `portatil/backup_save_mc0_15nov`): áreas mais pesadas que o Goro's Lair podem ter outro gargalo.
 - **Pronto quando:** R5 sem variáveis, três rodadas: cutscene e gameplay sem intervalo de 2 s abaixo de 58 quadros/s, e "imagens novas" igual a "jogo".
 - **Estimativa honesta:**
   - Os trechos de 50–57 devem chegar a 60 com os itens 2 e 5.
