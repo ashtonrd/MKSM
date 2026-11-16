@@ -219,7 +219,8 @@ namespace mksm_rpg
         {
             {
                 std::lock_guard<std::mutex> lock(g_mutex);
-                if (g_fighterPending)
+                static const bool testEveryRoom = std::getenv("MKSM_TEST_LUTADOR") != nullptr; // roteiro de teste: também no Versus
+                if (g_fighterPending || testEveryRoom)
                     if (const uint32_t save = saveBlock(rdram))
                     {
                         for (int j = 0; j < 2; ++j)
@@ -255,12 +256,14 @@ namespace mksm_rpg
         }
 
         // Dano: Defesa e Desafio no que cada jogador recebe; Força, Desafio e Roubo de vida no que causam.
-        // O jogo não diz quem acertou o inimigo: no co-op vale a média dos dois.
+        // Chamada por func_1CBF48 (o golpe: dano base menos a armadura da vítima, vezes a força do atacante) com
+        // o objeto do atacante em a2: no co-op, a Força e o Roubo de vida são de quem bateu.
         void hookDamage(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime)
         {
-            const uint32_t target = getRegU32(ctx, 4);
+            const uint32_t target = getRegU32(ctx, 4), attacker = getRegU32(ctx, 6);
             const int32_t damage = static_cast<int32_t>(getRegU32(ctx, 5));
             int32_t heal = 0;
+            uint32_t healed = 0;
             {
                 std::lock_guard<std::mutex> lock(g_mutex);
                 const int32_t targetMax = static_cast<int32_t>(rd32(rdram, target + 0x3A0u));
@@ -269,36 +272,40 @@ namespace mksm_rpg
                 {
                     const Config &c = cfg();
                     const uint32_t objs[2] = {rd32(rdram, 0x6826A8u), rd32(rdram, 0x6826ACu)};
-                    const Player &p1 = g_state.players[0], &p2 = g_state.players[1];
                     int32_t scaled = damage;
                     if (target == objs[0] || (target == objs[1] && objs[1]))
                     {
-                        const Player &p = target == objs[0] ? p1 : p2;
+                        const Player &p = g_state.players[target == objs[0] ? 0 : 1];
                         scaled = takenDamage(c, damage, p.points[Defesa], levelLocked(p));
                     }
-                    else
+                    else if (attacker != 0 && (attacker == objs[0] || attacker == objs[1]))
                     {
-                        const bool two = g_state.coop && objs[1];
-                        const int forca = two ? (p1.points[Forca] + p2.points[Forca] + 1) / 2 : p1.points[Forca];
-                        const int roubo = two ? (p1.points[Roubo] + p2.points[Roubo] + 1) / 2 : p1.points[Roubo];
-                        const int level = two ? (levelLocked(p1) + levelLocked(p2) + 1) / 2 : levelLocked(p1);
-                        scaled = dealtDamage(c, damage, forca, level);
-                        const double h = scaled * effect(c, Roubo, roubo) + g_state.healCarry;
+                        const int who = attacker == objs[0] ? 0 : 1;
+                        const Player &p = g_state.players[who];
+                        scaled = dealtDamage(c, damage, p.points[Forca], levelLocked(p));
+                        const double h = scaled * effect(c, Roubo, p.points[Roubo]) + g_state.healCarry;
                         heal = static_cast<int32_t>(h);
                         g_state.healCarry = h - heal;
+                        healed = objs[who];
+                    }
+                    else // atacante que não é o objeto de um jogador (projétil, armadilha): Força do jogador 1, média no co-op
+                    {
+                        const Player &p1 = g_state.players[0], &p2 = g_state.players[1];
+                        const bool two = g_state.coop && objs[1];
+                        const int forca = two ? (p1.points[Forca] + p2.points[Forca] + 1) / 2 : p1.points[Forca];
+                        const int level = two ? (levelLocked(p1) + levelLocked(p2) + 1) / 2 : levelLocked(p1);
+                        scaled = dealtDamage(c, damage, forca, level);
                     }
                     SET_GPR_S32(ctx, 5, scaled);
                 }
             }
             g_origDamage(rdram, ctx, runtime);
-            if (heal > 0) // co-op: a cura vai para os dois, como a vida dividida
-                for (const uint32_t obj : {rd32(rdram, 0x6826A8u), rd32(rdram, 0x6826ACu)})
-                    if (obj)
-                    {
-                        const int32_t hp = static_cast<int32_t>(rd32(rdram, obj + 0x398u)), max = static_cast<int32_t>(rd32(rdram, obj + 0x3A0u));
-                        if (hp > 0 && hp < max)
-                            wr32(rdram, obj + 0x398u, static_cast<uint32_t>(std::min(max, hp + heal)));
-                    }
+            if (heal > 0 && healed)
+            {
+                const int32_t hp = static_cast<int32_t>(rd32(rdram, healed + 0x398u)), max = static_cast<int32_t>(rd32(rdram, healed + 0x3A0u));
+                if (hp > 0 && hp < max)
+                    wr32(rdram, healed + 0x398u, static_cast<uint32_t>(std::min(max, hp + heal)));
+            }
         }
 
         // A cada quadro de jogo: vida máxima com o atributo Vida e Regeneração. Sozinho, o jogador tem toda a
