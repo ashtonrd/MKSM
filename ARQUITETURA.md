@@ -226,6 +226,8 @@ Caminhos relativos a `PS2Recomp/ps2xRuntime/` quando não indicado.
 
 ---
 
+**Botões por jogador (`ps2_pad_bindings.h`):** `padBindings(0)` (controle 1 e teclado, `PS2X_PAD_*`/`PS2X_TECLA_*`) e `padBindings(1)` (controle 2, `PS2X_PAD2_*`). A janela R3/F1 é comandada pelo controle que a abriu (`GfxMenu::pad`), e a aba Controles edita os botões dele. `ps2_pad.cpp` guarda os botões de cada porta no último quadro (`g_padButtons`, lido pela defesa dos experimentais) e, no controle 2, o direcional para cima liga uma defesa contínua (`g_p2BlockLatch`: L2 sempre segurado, só numa partida de história/co-op).
+
 **Modo RPG (`mksm_rpg.cpp`, `PLANO_RPG.md`):** as trocas rodam na GameThread e chamam a original pelo ponteiro guardado antes da troca (o dano, `func_284FE0`, recebe o objeto do atacante em `a2`: no co-op a Força é de quem bateu); com o modo desligado só repassam. A janela (aba RPG, indicador acima do EXP, tag no Load Game, marca na dificuldade) lê o estado por `mksm_rpg::snapshot()` sob um mutex. O save é um arquivo por cartão com 9 slots: `MemoryCard.cpp` avisa o RPG ao ler (`noteCardFile`, guarda uma cópia) e ao gravar (`onCardWrite`, o slot que mudou recebe o perfil ou perde o RPG); ao carregar, o slot é o que mais se parece com o bloco do save na RAM. **Armadilhas:** o XP do combate não passa por `func_174C30` (medir a subida do saldo a cada quadro); o objeto do jogador (`0x6826A8`) continua preenchido depois de voltar ao menu (use `0x50BC14`); a pausa do Select tem `0x4F4B68 = 1` (o R3 testa também `0x6BEE2C`); o cartão é lido da pasta do ELF, não da atual (teste numa pasta com links e `mc0` copiado); a vida do co-op é um total dividido entre os dois objetos (cada um com metade da máxima).
 
 ## 7. Ferramentas de investigação que já funcionaram

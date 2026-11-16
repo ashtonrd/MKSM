@@ -71,7 +71,7 @@ It reads optional settings from `mksm.ini` in the project root (one `VARIABLE=va
 
 **Laptops with two GPUs:** the window may open on the integrated GPU. Prefix the command with `prime-run` (or `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`).
 
-**Controller:** a regular USB/Bluetooth gamepad works; the analog sticks have a 25% dead zone (`PS2X_DEADZONE` in `mksm.ini`).
+**Controller:** a regular USB/Bluetooth gamepad works; the analog sticks have a 25% dead zone (`PS2X_DEADZONE` in `mksm.ini`). Each player remaps their own buttons in the **Controles** tab: player 1 with F1/R3, player 2 by pressing **R3 on the second controller** (handy for generic controllers that map buttons differently; saved as `PS2X_PAD2_*`). On the second controller, **D-pad up** toggles a permanent block (as if holding L2), so one person can play Ko-op with a single controller.
 
 Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 

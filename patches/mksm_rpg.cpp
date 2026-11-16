@@ -534,6 +534,7 @@ namespace mksm_rpg
     }
 
     void setInStory(bool on) { g_inStory.store(on, std::memory_order_relaxed); }
+    bool inStory() { return g_inStory.load(std::memory_order_relaxed); }
 
     int fighterPick(int player)
     {

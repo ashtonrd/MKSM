@@ -66,6 +66,9 @@ CONTROLES
     Z = Quadrado                      V = Triângulo
     Q/E = L1/R1, Shift esquerdo/direito = L2/R2
   Para trocar os botões: F1 (ou R3 nos menus), L1/R1 até a aba Controles.
+  Jogador 2 (controle genérico com botões trocados): aperte o R3 do controle 2 nos menus ou na pausa,
+  a janela abre nos botões dele. Controle 2, direcional para cima: liga/desliga a defesa contínua
+  (como segurar L2), para jogar o Ko-op com um controle só.
   F1 = menu Gráfico    F11 = tela cheia    F10 = salva a tela em capturas/
 
 CONFIGURAÇÃO

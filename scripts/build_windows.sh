@@ -81,6 +81,9 @@ CONTROLES
     Z = Quadrado                      V = Triângulo
     Q/E = L1/R1, Shift esquerdo/direito = L2/R2
   Para trocar os botões: F1 (ou R3 nos menus), L1/R1 até a aba Controles.
+  Jogador 2 (controle genérico com botões trocados): aperte o R3 do controle 2 nos menus ou na pausa,
+  a janela abre nos botões dele. Controle 2, direcional para cima: liga/desliga a defesa contínua
+  (como segurar L2), para jogar o Ko-op com um controle só.
   F1 = menu Gráfico    F11 = tela cheia    F10 = salva a tela em capturas\
 
 CONFIGURAÇÃO
@@ -121,6 +124,7 @@ Roteiro de teste no Windows (marque o que funcionou e conte o que não funcionou
    Experimentais: Kintaro, Shadow Priest, demônio de lava. Sem golpes: Ermac, Armor Lion, homem de terno, Shiva
    (só para ver; andam mas não atacam).
 6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L2/R2 no próprio controle.
+   Controle 2 com botões trocados: R3 nele abre a aba Controles dele. Cima no controle 2: defesa contínua.
 7. Versus: todos os 8 lutadores liberados.
 8. Save: salvar num slot, fechar, abrir, Load Game. O slot RPG mostra "RPG · Nv N".
 

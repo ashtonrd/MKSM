@@ -71,7 +71,7 @@ Ele lê configurações opcionais do `mksm.ini` na raiz do projeto (uma `VARIAVE
 
 **Notebook com duas placas de vídeo:** sem isso a janela pode abrir na placa integrada. Rode com `prime-run` na frente (ou `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`).
 
-**Controle:** um controle comum (USB/Bluetooth) funciona; o analógico tem zona morta de 25% (`PS2X_DEADZONE` no `mksm.ini`).
+**Controle:** um controle comum (USB/Bluetooth) funciona; o analógico tem zona morta de 25% (`PS2X_DEADZONE` no `mksm.ini`). Cada jogador remapeia os próprios botões na aba **Controles**: o jogador 1 com F1/R3, o jogador 2 apertando o **R3 do segundo controle** (útil para controles genéricos, que mapeiam os botões diferente; fica como `PS2X_PAD2_*`). No segundo controle, o **direcional para cima** liga e desliga a defesa contínua (como segurar L2), para uma pessoa jogar o Ko-op com um controle só.
 
 Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 
