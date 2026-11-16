@@ -136,8 +136,10 @@ namespace mksm_rpg
             return dir / ("rpg_mc" + std::to_string(port) + "_slot" + std::to_string(slot + 1) + ".ini");
         }
 
-        // Arquivo do save (A5): cabeçalho de 0x1328 bytes e 9 slots de 0x5400; cada slot é o bloco do save da RAM.
-        constexpr size_t kHeader = 0x1328, kSlotSize = 0x5400;
+        // Arquivo do save (A5): cabeçalho de 0x1328 bytes e 9 slots a cada 0x5430 bytes; os primeiros 0x5400 de cada um
+        // são o bloco do save da RAM. (Com passo 0x5400, o slot 2 em diante não batia ao carregar: o RPG não voltava.)
+        constexpr size_t kHeader = 0x1328, kSlotStride = 0x5430, kSlotSize = 0x5400;
+        static_assert(kHeader + 8 * kSlotStride + kSlotSize <= 198876, "9 slots dentro do arquivo do save");
         std::vector<uint8_t> g_card[2]; // cópia do arquivo do cartão (último lido ou gravado)
         std::string g_cardPath[2];
         std::vector<uint8_t> readFile(const std::string &path)
@@ -411,9 +413,9 @@ namespace mksm_rpg
                     int slot = -1;
                     size_t best = 0;
                     const uint32_t save = saveBlock(rdram);
-                    for (int k = 0; save && k < kSlots && kHeader + (k + 1) * kSlotSize <= g_card[0].size(); ++k)
+                    for (int k = 0; save && k < kSlots && kHeader + k * kSlotStride + kSlotSize <= g_card[0].size(); ++k)
                     {
-                        const uint8_t *a = rdram + (save & 0x1FFFFFFu), *b = g_card[0].data() + kHeader + k * kSlotSize;
+                        const uint8_t *a = rdram + (save & 0x1FFFFFFu), *b = g_card[0].data() + kHeader + k * kSlotStride;
                         size_t same = 0, used = 0;
                         for (size_t i = 0; i < kSlotSize; ++i)
                             if (a[i] | b[i])
@@ -609,7 +611,7 @@ namespace mksm_rpg
         const std::vector<uint8_t> &before = g_card[port];
         for (int k = 0; k < kSlots; ++k)
         {
-            const size_t at = kHeader + k * kSlotSize;
+            const size_t at = kHeader + k * kSlotStride;
             if (at + kSlotSize > now.size())
                 break;
             const bool changed = before.size() < at + kSlotSize || !std::equal(now.begin() + at, now.begin() + at + kSlotSize, before.begin() + at);
