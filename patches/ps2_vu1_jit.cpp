@@ -144,6 +144,27 @@ namespace
             u8(0x0F); u8(0x85); u32(0u);
             return bytes.size();
         }
+        size_t jmpFar()
+        {
+            u8(0xE9); u32(0u);
+            return bytes.size();
+        }
+        size_t jaeFar()
+        {
+            u8(0x0F); u8(0x83); u32(0u);
+            return bytes.size();
+        }
+        // Scalar and self-field (rdx = the interpreter) forms used by the native DIV.
+        void loadScalarRaw(uint8_t xmm, uint32_t disp) { u8(0xF3); u8(0x0F); u8(0x10); modrmDisp(xmm, disp); } // movss xmm, [rdi+disp]
+        void storeSelfScalar(uint32_t disp, uint8_t xmm) { u8(0xF3); u8(0x0F); u8(0x11); u8(static_cast<uint8_t>(0x82u | (xmm << 3))); u32(disp); }
+        void ucomiss(uint8_t first, uint8_t second) { op0F(0x2E, first, second); }
+        void divss(uint8_t dst, uint8_t src) { u8(0xF3); op0F(0x5E, dst, src); }
+        void loadSelfRax(uint32_t disp) { u8(0x48); u8(0x8B); u8(0x82); u32(disp); }
+        void storeSelfRax(uint32_t disp) { u8(0x48); u8(0x89); u8(0x82); u32(disp); }
+        void addRaxImm(uint32_t value) { u8(0x48); u8(0x05); u32(value); }
+        void cmpRaxSelf(uint32_t disp) { u8(0x48); u8(0x3B); u8(0x82); u32(disp); }
+        void storeSelfImm32(uint32_t disp, uint32_t value) { u8(0xC7); u8(0x82); u32(disp); u32(value); }
+        void cmpSelfImm8(uint32_t disp, uint8_t value) { u8(0x80); u8(0xBA); u32(disp); u8(value); }
         void patchJump(size_t afterJump)
         {
             const uint32_t distance = static_cast<uint32_t>(bytes.size() - afterJump);
@@ -1329,6 +1350,56 @@ VU1Interpreter::JitBlock *VU1Interpreter::compileJitBlock(const uint8_t *vuCode,
             block->xgkickVfWrite = pair.upperUsage.vfWrite;
             block->xgkickAccWrite = pair.upperUsage.accWrite;
         }
+        else if ((pair.lower >> 25) == 0x40u && (pair.lower & 0x7FFu) == 0x3BCu) // DIV
+        {
+            // Native when the FDIV unit is empty (the usual case after the WAITQ before it): the
+            // interpreter's DIV and queueQ, in place (73% of the callouts, the vertex loops'
+            // perspective divide). Operands clamp Inf/NaN to MAX; DAZ (set by run() for the JIT)
+            // makes denormals zero in the compare and the divide, as normalizeOperand does; the
+            // divide rounds toward zero like the interpreter's; overflow clamps to MAX, FTZ flushes
+            // underflow to signed zero. A result still pending goes through the callout, which
+            // commits it first.
+            const uint32_t fdivValid = selfOffset(&m_fdiv.valid), fdivValue = selfOffset(&m_fdiv.value);
+            const uint32_t fdivReady = selfOffset(&m_fdiv.readyCycle), fdivStatus = selfOffset(&m_fdiv.statusDi);
+            const uint32_t fsf = (pair.lower >> 21) & 3u, ftf = (pair.lower >> 23) & 3u;
+            a.cmpSelfImm8(fdivValid, 0u);
+            const size_t toSlow = a.jnzFar();
+            a.loadScalarRaw(1, vfOffset(FS(pair.lower)) + fsf * 4u);
+            a.loadScalarRaw(2, vfOffset(FT(pair.lower)) + ftf * 4u);
+            a.clampOperand(1);
+            a.clampOperand(2);
+            a.xorps(3, 3);
+            a.ucomiss(2, 3);
+            const size_t toZero = a.jzFar();
+            a.divss(1, 2);
+            a.clampOperand(1);
+            a.storeSelfImm32(fdivStatus, 0u);
+            const size_t toStore = a.jmpFar();
+            a.patchJump(toZero); // divisor 0: MAX with the operands' sign; 0/0 sets I (0x10), x/0 sets D (0x20)
+            a.storeSelfImm32(fdivStatus, 0x20u);
+            a.ucomiss(1, 3);
+            const size_t notZero = a.jnzFar();
+            a.storeSelfImm32(fdivStatus, 0x10u);
+            a.patchJump(notZero);
+            a.xorps(1, 2);
+            a.andps(1, 6);
+            a.orps(1, 4);
+            a.patchJump(toStore);
+            a.storeSelfScalar(fdivValue, 1);
+            a.loadSelfRax(selfOffset(&m_cycle)); // the block's entry cycle while it runs
+            a.addRaxImm(static_cast<uint32_t>(cycle) + 7u);
+            a.storeSelfRax(fdivReady);
+            a.storeSelfImm8(fdivValid, 1u);
+            a.cmpRaxSelf(selfOffset(&m_nextPipelineCycle));
+            const size_t notEarlier = a.jaeFar();
+            a.storeSelfRax(selfOffset(&m_nextPipelineCycle));
+            a.patchJump(notEarlier);
+            const size_t toEnd = a.jmpFar();
+            a.patchJump(toSlow);
+            emitCallout(a, reinterpret_cast<const void *>(lowerCall), pair.lower, cycle);
+            a.patchJump(toEnd);
+            block->fdivOffset = static_cast<uint16_t>(cycle);
+        }
         else if (lowerIsCallout(pair.lower))
         {
             emitCallout(a, reinterpret_cast<const void *>(lowerCall), pair.lower, cycle);
@@ -1705,6 +1776,7 @@ bool VU1Interpreter::runJitBlock(uint8_t *vuCode, uint32_t codeSize, uint8_t *vu
         m_cycle = entry + block->cycles; // Q, P and CLIP as the interpreter will have them
         commitReadyPipelines();
         const VU1State jitState = m_state;
+        const ScalarPipelineEntry fdivJit = m_fdiv; // a pending DIV result (the native DIV writes it)
         std::vector<uint8_t> dataJit(vuData, vuData + dataSize);
 
         m_state = before;
@@ -1737,16 +1809,19 @@ bool VU1Interpreter::runJitBlock(uint8_t *vuCode, uint32_t codeSize, uint8_t *vu
         const bool sameQpc = std::memcmp(&jitState.q, &m_state.q, sizeof(float)) == 0 &&
                              std::memcmp(&jitState.p, &m_state.p, sizeof(float)) == 0 && jitState.clip == m_state.clip;
         const bool sameCycles = entry + block->cycles == m_cycle && jitState.pc == m_state.pc;
+        const bool sameFdiv = fdivJit.valid == m_fdiv.valid &&
+                              (!fdivJit.valid || (fdivJit.readyCycle == m_fdiv.readyCycle && fdivJit.statusDi == m_fdiv.statusDi &&
+                                                  std::memcmp(&fdivJit.value, &m_fdiv.value, sizeof(float)) == 0));
         jit.cycleMismatches += sameCycles ? 0u : 1u;
-        if (!sameVf || !sameVi || !sameAcc || !sameQpc || !sameData || !sameCycles)
+        if (!sameVf || !sameVi || !sameAcc || !sameQpc || !sameData || !sameCycles || !sameFdiv)
         {
             static std::vector<uint32_t> reportedPcs;
             ++jit.mismatches;
             if (reportedPcs.size() < 8u && std::find(reportedPcs.begin(), reportedPcs.end(), before.pc) == reportedPcs.end() &&
                 (reportedPcs.push_back(before.pc), true))
             {
-                std::fprintf(stderr, "[vu-jit] mismatch pc=0x%x pairs=%u vf=%d vi=%d acc=%d qpclip=%d data=%d cycles jit=%llu int=%llu\n",
-                             before.pc, block->pairs, sameVf, sameVi, sameAcc, sameQpc, sameData,
+                std::fprintf(stderr, "[vu-jit] mismatch pc=0x%x pairs=%u vf=%d vi=%d acc=%d qpclip=%d data=%d fdiv=%d cycles jit=%llu int=%llu\n",
+                             before.pc, block->pairs, sameVf, sameVi, sameAcc, sameQpc, sameData, sameFdiv,
                              static_cast<unsigned long long>(entry + block->cycles),
                              static_cast<unsigned long long>(m_cycle));
                 for (uint32_t reg = 0u; reg < 32u; ++reg)
