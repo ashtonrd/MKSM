@@ -59,7 +59,7 @@ Avoid editing headers included by `ps2xRuntime/include/ps2_runtime.h`: they forc
 
 ### Good first areas
 
-See track E in [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) and the ❌ rows in the README: the light rays in Goro's Lair, SPU2 reverb, crackle in the right channel of the movies, higher internal resolution, fullscreen and widescreen, testing other stages, a Windows build.
+See track E in [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) and the ❌ rows in the README: testing the other stages, the Windows build on real Windows, playtesting and balancing the RPG mode ([`PLANO_RPG.md`](PLANO_RPG.md)), and the heavy scenes where VU1 limits the frame rate (N20).
 
 **Playing is contributing too:** play past Goro's Lair and open an issue for anything wrong (stage, what you did, a screenshot). A comparison screenshot from a real PS2 or PCSX2 helps a lot.
 
@@ -126,7 +126,7 @@ Evite mexer nos headers incluídos por `ps2xRuntime/include/ps2_runtime.h`: eles
 
 ### Boas áreas para começar
 
-Veja a trilha E do [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) e as linhas ❌ do README: os raios de luz no Goro's Lair, o eco (reverb) do SPU2, o chiado no canal direito dos filmes, resolução interna maior, tela cheia e widescreen, testar outras fases, build para Windows.
+Veja a trilha E do [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) e as linhas ❌ do README: testar as outras fases, o build do Windows num Windows de verdade, jogar e equilibrar o modo RPG ([`PLANO_RPG.md`](PLANO_RPG.md)) e as cenas pesadas em que a VU1 limita os quadros (N20).
 
 **Jogar também é contribuir:** jogue além do Goro's Lair e abra uma issue para tudo que estiver errado (fase, o que você fez, uma captura). Uma captura de comparação de um PS2 de verdade ou do PCSX2 ajuda muito.
 
