@@ -4,6 +4,9 @@
 # não serve o do Linux. Depois, scripts/build_windows.sh monta a pasta com o .exe otimizado (o cache guarda PS2X_PGO).
 # uso: scripts/pgo_windows.sh [raiz com PS2Recomp/ e extraido_full/] <winlibs.zip>   (precisa do wine e de um build_windows.sh já feito)
 # A libgcov do MinGW do sistema pode não gravar o perfil (a do Arch é reduzida); a do WinLibs (mesmo GCC 16.2) grava.
+# AINDA NÃO FUNCIONA (17/11): a libgcov do WinLibs é UCRT e o build do Arch é MSVCRT; o .exe de treino quebra na
+# abertura (num programa pequeno funcionou). Caminho provável: um MinGW UCRT para o build-win, ou treinar com o
+# .exe compilado pelo próprio WinLibs. Até lá, o .exe do Windows sai sem PGO.
 set -euo pipefail
 AQUI=$(cd "$(dirname "$0")/.." && pwd)
 RAIZ=$(cd "${1:-$AQUI}" && pwd)
