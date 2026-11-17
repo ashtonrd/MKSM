@@ -22,7 +22,8 @@ rsync -a --exclude=.git --exclude=out "$OBRA/ps2recomp/" "$P/vendor/PS2Recomp/"
 echo "== Código das bibliotecas"
 mkdir -p "$P/vendor/deps"
 for n in elfio toml11 fmt libdwarf rabbitizer raylib imgui rlimgui vulkan_headers; do
-    rsync -a --exclude=.git "$DEPS/$n-src/" "$P/vendor/deps/$n/"
+    # testes da elfio (ELFs de exemplo) e exemplos do raylib: o build não usa
+    rsync -a --exclude=.git --exclude=/tests --exclude=/examples "$DEPS/$n-src/" "$P/vendor/deps/$n/"
 done
 
 # Nada do jogo pode ir junto.
