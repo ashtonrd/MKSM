@@ -77,17 +77,17 @@ Como todo save RPG começa do zero (3.6), o XP ganho começa em 0 e não há con
 
 Nível por XP, como o usuário pediu: subir do nível k para o k+1 custa
 
-`custo(k) = RPG_XP_PRIMEIRO + RPG_XP_AUMENTO × (k−1) + RPG_XP_ACELERA × (k−1)(k−2)/2`
+`custo(k) = RPG_XP_PRIMEIRO + RPG_XP_AUMENTO × (k−1) + RPG_XP_ACELERA × (k−1)(k−2)/2 + extra(k)`
 
-Com 300, 100 e 50, os custos são 300, 400, 550, 750, 1000…: cada degrau aumenta 50 a mais que o anterior.
+`extra(k)` (usuário, 17/11: "aumenta 100 até o nível 10, do 10 ao 20 mais 200, 30 ou mais mais 300") = `RPG_XP_EXTRA_1` (100) para k < 10, `RPG_XP_EXTRA_2` (200) para 10 ≤ k < 30 e `RPG_XP_EXTRA_3` (300) de 30 em diante. Do 20 ao 29 o pedido não dizia; ficou com 200 até chegar no 30. Com 300, 100, 50 e os extras, os custos são 400, 500, 650, 850, 1.100…
 
 | Nível | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 12 | 15 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Custo do degrau | 300 | 400 | 550 | 750 | 1.000 | 1.300 | 1.650 | 2.050 | 2.500 | 3.550 | 5.500 |
-| XP ganho total | 300 | 700 | 1.250 | 2.000 | 3.000 | 4.300 | 5.950 | 8.000 | 10.500 | 17.050 | 31.500 |
+| Custo do degrau | 400 | 500 | 650 | 850 | 1.100 | 1.400 | 1.750 | 2.150 | 2.600 | 3.750 | 5.700 |
+| XP ganho total | 400 | 900 | 1.550 | 2.400 | 3.500 | 4.900 | 6.650 | 8.800 | 11.400 | 18.350 | 33.400 |
 
 - **Nível** = maior n com XP ganho ≥ soma dos custos até n, até o **nível máximo 100** (`RPG_NIVEL_MAX`, pedido do usuário). No 100, o indicador mostra "Nv 100 · MÁX".
-- **Quanto custa chegar lá com 300/100/50:** nível 20 = 71.250 de XP ganho; 30 = 232.000; 50 = 1.053.500; 100 = 8.357.250.
+- **Quanto custa chegar lá (300/100/50 e os extras):** nível 20 = 74.150 de XP ganho; 30 = 236.900; 50 = 1.064.400; 100 = 8.383.150. Num save RPG antigo o nível é recalculado pelo XP ganho; se os pontos gastos passarem dos que o nível novo dá, eles voltam todos para distribuir de novo.
 - A A1 mede quanto XP o jogo inteiro dá. Se ficar longe dessas contas, o usuário decide entre deixar o 100 como meta quase inalcançável ou achatar a curva (`RPG_XP_ACELERA` menor). Mudar a curva é só mexer nas três chaves.
 
 ### 3.3 Pontos e atributos
@@ -101,7 +101,7 @@ Seis atributos, todos sem mexer em velocidade, aprovados pelo usuário em 15/11 
 | **Vida** | +5% de vida máxima | 20 pontos (+100%) | Vida máxima do jogador ao começar a sala, ao subir de nível e ao gastar ponto (A3) |
 | **Roubo de vida** *(novo)* | Cura 1% do dano causado | 20 pontos (20%) | Gancho de dano: soma à vida atual do jogador, sem passar da máxima (A3, A4) |
 | **Regeneração** *(novo)* | Recupera 0,1% da vida máxima por segundo | 20 pontos (2%/s) | A cada quadro de gameplay, fora de pausa, menu e cutscene (A3, A7) |
-| **Sabedoria** *(novo)* | +3% de XP para o nível | 20 pontos (+60%) | Só no XP ganho do RPG; o saldo de XP do jogo não muda (regra 6) |
+| **Sabedoria** *(novo)* | +3% de XP para o nível | 5 pontos (+15%; `RPG_TETO_SABEDORIA`) | Só no XP ganho do RPG; o saldo de XP do jogo não muda (regra 6) |
 
 - **Talvez um oitavo, Fúria:** o medidor especial/de fatality enche +5% mais rápido por ponto. Só entra se a A8 achar o medidor e ele puder ser acelerado sem mexer em velocidade.
 - **Ordem do cálculo do dano causado:** base × (1 + Força) ÷ (1 + vida extra dos inimigos, 3.11). O Roubo de vida cura sobre o resultado.
@@ -211,6 +211,7 @@ O RPG é uma **variante do Hard**, escolhida em cima dele (pedido do usuário):
 | `RPG_XP_PRIMEIRO` | 300 | Custo do nível 1 → 2 |
 | `RPG_XP_AUMENTO` | 100 | Quanto o 2º degrau custa a mais que o 1º |
 | `RPG_XP_ACELERA` | 50 | Quanto cada aumento cresce em relação ao anterior |
+| `RPG_XP_EXTRA_1` / `_2` / `_3` | 100 / 200 / 300 | A mais em cada degrau: até o nível 10, do 10 ao 29, do 30 em diante (usuário, 17/11) |
 | `RPG_NIVEL_MAX` | 100 | Nível máximo (usuário, 15/11) |
 | `RPG_FORCA_POR_PONTO` | 5 | % de dano causado por ponto |
 | `RPG_DEFESA_POR_PONTO` | 3 | % de dano recebido a menos por ponto |
@@ -219,6 +220,7 @@ O RPG é uma **variante do Hard**, escolhida em cima dele (pedido do usuário):
 | `RPG_REGEN_POR_PONTO` | 0,1 | % da vida máxima por segundo |
 | `RPG_SABEDORIA_POR_PONTO` | 3 | % de XP a mais para o nível |
 | `RPG_TETO_ATRIBUTO` | 20 | Pontos por atributo; 0 = sem teto |
+| `RPG_TETO_SABEDORIA` | 5 | Pontos na Sabedoria (usuário, 17/11: mais que isso fica roubado); 0 = usa o teto geral. Save antigo com mais: o excesso volta como ponto livre |
 | `RPG_PONTOS_POR_NIVEL` | 1 | Pontos ganhos a cada nível (usuário, 15/11) |
 | `RPG_INIMIGO_DANO` | 30 | % de dano a mais que os inimigos causam (3.11) |
 | `RPG_INIMIGO_VIDA` | 30 | % de vida a mais dos inimigos (3.11) |

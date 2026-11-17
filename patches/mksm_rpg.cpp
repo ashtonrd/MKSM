@@ -47,6 +47,9 @@ namespace mksm_rpg
             int maxLevel = std::clamp(static_cast<int>(envNumber("RPG_NIVEL_MAX", 100)), 2, 1000);
             int pointsPerLevel = std::clamp(static_cast<int>(envNumber("RPG_PONTOS_POR_NIVEL", 1)), 1, 100);
             int cap = std::max(0, static_cast<int>(envNumber("RPG_TETO_ATRIBUTO", 20))); // 0 = sem teto
+            int capWisdom = std::max(0, static_cast<int>(envNumber("RPG_TETO_SABEDORIA", 5))); // a Sabedoria acelera os níveis: teto próprio
+            // Acréscimo por degrau (usuário, 17/11): +100 até o nível 10, +200 do 10 ao 29, +300 do 30 em diante.
+            double xpExtra[3] = {envNumber("RPG_XP_EXTRA_1", 100), envNumber("RPG_XP_EXTRA_2", 200), envNumber("RPG_XP_EXTRA_3", 300)};
             double perPoint[AttrCount] = {envNumber("RPG_FORCA_POR_PONTO", 5),  envNumber("RPG_DEFESA_POR_PONTO", 3),
                                           envNumber("RPG_VIDA_POR_PONTO", 5),   envNumber("RPG_ROUBO_POR_PONTO", 1),
                                           envNumber("RPG_REGEN_POR_PONTO", 0.1), envNumber("RPG_SABEDORIA_POR_PONTO", 3)};
@@ -59,11 +62,19 @@ namespace mksm_rpg
             return c;
         }
 
-        // Custo do nível k para o k+1 (PLANO_RPG.md 3.2): 300, 400, 550, 750...
+        // Custo do nível k para o k+1 (PLANO_RPG.md 3.2): 300, 400, 550, 750... mais o acréscimo da faixa (400, 500, 650, 850...).
         int64_t stepCost(const Config &c, int k)
         {
-            const double cost = c.xpFirst + c.xpStep * (k - 1) + c.xpAccel * (k - 1.0) * (k - 2.0) / 2.0;
+            const double extra = k < 10 ? c.xpExtra[0] : k < 30 ? c.xpExtra[1] : c.xpExtra[2];
+            const double cost = c.xpFirst + c.xpStep * (k - 1) + c.xpAccel * (k - 1.0) * (k - 2.0) / 2.0 + extra;
             return std::max<int64_t>(1, std::llround(cost));
+        }
+        // Teto de pontos de um atributo (0 = sem teto).
+        int capFor(const Config &c, int attr)
+        {
+            if (attr != Sabedoria || c.capWisdom == 0)
+                return c.cap;
+            return c.cap ? std::min(c.cap, c.capWisdom) : c.capWisdom;
         }
         // Nível do XP ganho, com o XP dentro do nível e o custo do degrau (0 no máximo).
         int levelFor(const Config &c, int64_t xp, int64_t *inLevel = nullptr, int64_t *step = nullptr)
@@ -172,7 +183,7 @@ namespace mksm_rpg
                         s.players[j].xpGained = std::clamp<long long>(value, 0, 1000000000000LL);
                     for (int a = 0; a < AttrCount; ++a)
                         if (key == std::string(kKeys[a]) + kSuffix[j])
-                            s.players[j].points[a] = static_cast<int>(std::clamp<long long>(value, 0, c.cap ? c.cap : 100000));
+                            s.players[j].points[a] = static_cast<int>(std::clamp<long long>(value, 0, capFor(c, a) ? capFor(c, a) : 100000));
                 }
             }
             for (Player &p : s.players)
@@ -462,6 +473,8 @@ namespace mksm_rpg
         s.coop = g_state.coop;
         s.maxLevel = cfg().maxLevel;
         s.cap = cfg().cap;
+        for (int a = 0; a < AttrCount; ++a)
+            s.caps[a] = capFor(cfg(), a);
         s.pointsPerLevel = cfg().pointsPerLevel;
         s.xpGained = p.xpGained;
         s.level = levelFor(cfg(), p.xpGained, &s.xpInLevel, &s.xpStep);
@@ -474,7 +487,7 @@ namespace mksm_rpg
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         Player *p = playerLocked(player);
-        if (!g_state.active || !p || attr < 0 || attr >= AttrCount || freeLocked(*p) <= 0 || (cfg().cap && p->points[attr] >= cfg().cap))
+        if (!g_state.active || !p || attr < 0 || attr >= AttrCount || freeLocked(*p) <= 0 || (capFor(cfg(), attr) && p->points[attr] >= capFor(cfg(), attr)))
             return false;
         ++p->points[attr];
         return true;
@@ -627,6 +640,8 @@ namespace mksm_rpg
     {
         Config c; // os padrões do plano, independentes do mksm.ini
         c.xpFirst = 300, c.xpStep = 100, c.xpAccel = 50, c.maxLevel = 100, c.cap = 20, c.enemyDamage = c.enemyHealth = 30, c.enemyPerLevel = 0;
+        c.capWisdom = 5;
+        c.xpExtra[0] = c.xpExtra[1] = c.xpExtra[2] = 0; // a tabela abaixo é a curva base; os acréscimos são conferidos depois
         const double per[AttrCount] = {5, 3, 5, 1, 0.1, 3};
         std::copy(std::begin(per), std::end(per), c.perPoint);
         const int64_t xps[] = {0, 299, 300, 699, 700, 1250, 2000, 10500, 71250, 8357249, 8357250, 999999999};
@@ -636,6 +651,13 @@ namespace mksm_rpg
                 return false;
         int64_t in = 0, step = 0;
         if (levelFor(c, 0, &in, &step) != 1 || in != 0 || step != 300 || (levelFor(c, 1000, &in, &step), in != 300 || step != 550))
+            return false;
+        Config e = c; // com os acréscimos por faixa: +100 até o 10, +200 do 10 ao 29, +300 do 30 em diante
+        e.xpExtra[0] = 100, e.xpExtra[1] = 200, e.xpExtra[2] = 300;
+        if (stepCost(e, 1) != 400 || stepCost(e, 4) != 850 || stepCost(e, 9) != 2600 || stepCost(e, 10) != 3200 ||
+            stepCost(e, 29) != 22200 || stepCost(e, 30) != 23800 || levelFor(e, 399) != 1 || levelFor(e, 400) != 2)
+            return false;
+        if (capFor(c, Sabedoria) != 5 || capFor(c, Forca) != 20)
             return false;
         const auto near = [](double a, double b) { return std::fabs(a - b) < 1e-9; };
         return near(effect(c, Forca, 20), 1.0) && near(effect(c, Defesa, 20), 0.6) && near(effect(c, Defesa, 40), 0.9) &&

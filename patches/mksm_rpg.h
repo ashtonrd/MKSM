@@ -16,6 +16,7 @@ namespace mksm_rpg
         int level = 1, maxLevel = 100, freePoints = 0, cap = 0, pointsPerLevel = 1;
         int64_t xpGained = 0, xpInLevel = 0, xpStep = 0; // progresso: xpInLevel / xpStep (0 no nível máximo)
         int points[AttrCount] = {};
+        int caps[AttrCount] = {}; // teto de cada atributo (0 = sem teto; a Sabedoria tem o dela)
     };
 
     void install(PS2Runtime &runtime); // game_overrides_mksm.cpp: troca as funções do jogo

@@ -23,7 +23,9 @@
 # Modo RPG (jogo novo: na escolha de dificuldade, cursor no Hard, L3 ou F2 liga). Números ajustáveis:
 #   RPG_XP_PRIMEIRO=300   XP do nível 1 para o 2      RPG_XP_AUMENTO=100   quanto o 2º degrau custa a mais
 #   RPG_XP_ACELERA=50     quanto cada aumento cresce   RPG_NIVEL_MAX=100    nível máximo
+#   RPG_XP_EXTRA_1=100    a mais por degrau até o nível 10   RPG_XP_EXTRA_2=200   do 10 ao 29   RPG_XP_EXTRA_3=300   do 30 em diante
 #   RPG_PONTOS_POR_NIVEL=1   pontos a cada nível       RPG_TETO_ATRIBUTO=20 pontos por atributo (0 = sem teto)
+#   RPG_TETO_SABEDORIA=5     pontos na Sabedoria (0 = usa o teto geral)
 #   RPG_FORCA_POR_PONTO=5    % de dano causado         RPG_DEFESA_POR_PONTO=3   % de dano recebido a menos
 #   RPG_VIDA_POR_PONTO=5     % de vida máxima          RPG_ROUBO_POR_PONTO=1    % do dano causado que vira vida
 #   RPG_REGEN_POR_PONTO=0,1  % da vida por segundo     RPG_SABEDORIA_POR_PONTO=3 % de XP a mais para o nível
