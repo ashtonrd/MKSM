@@ -31,14 +31,14 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Música e falas (ADX) | ✅ Funcionando |
 | GS na GPU (Vulkan) | ✅ Renderizador novo por lotes em 2x por padrão (mipmap por pixel); o antigo, exato, fica em `PS2X_GS_HW=0` |
 | VU1 numa thread própria, JIT x86-64 | ✅ Funcionando |
-| Velocidade cheia (60 campos/s) | 🟡 Velocidade certa em tudo (sem câmera lenta); numa GTX 1050 a gameplay roda a ~55–60 quadros/s, e nas cenas pesadas o jogo pula quadros (`PLANO_DESEMPENHO.md`, N20) |
+| Velocidade cheia (60 campos/s) | 🟡 Velocidade certa em tudo (sem câmera lenta); numa GTX 1050 a gameplay roda a ~55–60 quadros/s, e nas cenas pesadas o jogo pula quadros (`PLANO_DESEMPENHO.md`, N20; próximos passos na N22) |
 | Filmes CRI (FMV) | ✅ Abertura e os 8 filmes tocam; Start pula |
 | Memory card (salvar e carregar) | ✅ Funcionando (arquivos em `extraido_full/mc0/`) |
 | Som na gameplay | ✅ 48 kHz sem distorção; eco (reverb) do SPU2 aproximado (`PS2X_REVERB`) |
 | Som dos filmes | ✅ Tocado direto dos arquivos `.SFD` (sem chiado) |
 | Kung Lao como parceiro | ✅ Aparece (era invisível) |
 | Resto das fases testadas do início ao fim | ❌ Falta |
-| Build para Windows | 🟡 Compilado com MinGW-w64 a partir do Linux (`scripts/build_windows.sh`); roda no Wine (menus, Versus, RPG), ainda não testado num Windows de verdade |
+| Build para Windows | 🟡 Compilado com MinGW-w64 a partir do Linux (`scripts/build_windows.sh`); já jogado num Windows de verdade, com pequenos engasgos (plano N22 no [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md)) |
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
 | Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
 | Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos, nos dois renderizadores (limite do EE/VU1, N20) |

@@ -31,14 +31,14 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Music and voices (ADX) | ✅ Working |
 | GS on the GPU (Vulkan) | ✅ New batching renderer at 2x by default (per-pixel mipmaps); the old exact renderer stays behind `PS2X_GS_HW=0` |
 | VU1 on its own thread, x86-64 JIT | ✅ Working |
-| Full speed (60 fields/s) | 🟡 Right speed everywhere (no slow motion); on a GTX 1050 gameplay runs ~55–60 frames/s, heavy scenes drop frames instead (`PLANO_DESEMPENHO.md`, N20) |
+| Full speed (60 fields/s) | 🟡 Right speed everywhere (no slow motion); on a GTX 1050 gameplay runs ~55–60 frames/s, heavy scenes drop frames instead (`PLANO_DESEMPENHO.md`, N20; next steps in N22) |
 | CRI movies (FMV) | ✅ Intro and all 8 movies play; Start skips |
 | Memory card (save and load) | ✅ Working (files in `extraido_full/mc0/`) |
 | Gameplay sound | ✅ 48 kHz without warble; SPU2 reverb approximated (`PS2X_REVERB`) |
 | Movie sound | ✅ Played straight from the `.SFD` files (no hiss) |
 | Kung Lao as partner | ✅ Visible (used to be invisible) |
 | Every other stage tested start to finish | ❌ To do |
-| Windows build | 🟡 Cross-built with MinGW-w64 from Linux (`scripts/build_windows.sh`); runs in Wine (menus, Versus, RPG), not yet tried on real Windows |
+| Windows build | 🟡 Cross-built with MinGW-w64 from Linux (`scripts/build_windows.sh`); already played on real Windows, with small stutters (plan N22 in [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md)) |
 | Floors, walls and light rays in Goro's Lair | ✅ As in the original (the VIF now runs ahead of VU1: the game sends each batch's colors right after starting it) |
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |

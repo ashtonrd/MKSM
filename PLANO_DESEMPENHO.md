@@ -262,6 +262,7 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
     - **Atraso:** `PS2X_PERF` mede o tempo do fim de cada campo até a janela mostrá-lo. Com a fila em ordem da N20 item 7, ele ficava em 20–29 ms e às vezes travava em ~54 ms (dois quadros sempre esperando: os relógios do jogo e da janela se afastaram um campo). Agora a janela pula uma vez quando há dois esperando por meio segundo seguido: menus 4–18 ms, gameplay 20–25 ms, sem os 54 ms, com 59–60 de 60 imagens. O resto do caminho (controle lido uma vez por quadro da janela, ~8 ms em média; o jogo lê no começo do quadro e desenha nele) é do próprio jogo e do raylib.
     - **Quadro cheio (T21): abandonado.** Com o renderizador novo em 2x, juntar os dois campos acrescentaria pouco detalhe e um quadro de atraso.
 - [ ] N20 60 quadros/s fixos e ritmo regular (pedido do usuário em 15/11: "70 fps ou no mínimo 60, pra ficar fluido") — plano na seção 7
+- [ ] N22 60 quadros/s, fase 2 (pedido do usuário em 17/11): engasgo no Windows (medida, threads fixas, vsync) e os vales que sobraram (PGO, JIT da VU1, IOP em thread) — plano na seção 7
 - [x] N21 Opção "Gráfico" para PC fraco (pedido do usuário em 15/11) — feito: menu do runtime por cima do jogo (R3 fora da gameplay, F1 a qualquer hora), escolha do usuário; detalhes na seção 7
 
 ---
@@ -695,7 +696,71 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   - **Achado no caminho:** com a thread ligada, `InvalidateAll` chamado com a trava do renderizador pega travava tudo (ele espera a fila, e a `GSHwWorker` precisa da trava para esvaziá-la). Era o caso do `SetScale`, e também de `Initialize`/`Reset`, que só rodam no boot. Agora usam `invalidateAllLocked`.
 - **Limite honesto:** essas opções aliviam a placa de vídeo (1x desenha ~4× menos pixels que 2x). Num PC com processador fraco, o peso maior é emular o EE e a VU1 (N20), e isso não muda com gráfico mais baixo.
 
+### N22 60 quadros/s, fase 2: Windows e os vales que sobraram
+- **Pedido (17/11):** "vê se tem algum jeito de resolver o 2 dos 60fps, monte um plano". O "2" era: os vales da cutscene do Raiden, o engasgo leve que o usuário sente no Windows e a ideia de passar de 60.
+- **Onde estamos (fim da N20):**
+  - Cutscene: 55 de média, pior trecho de 2 s a ~39. Gameplay da primeira sala: 59,3–60.
+  - Luta pesada do save do usuário: 33–43 por 50 s, com a VU1 em 19–26 ms por quadro.
+  - Nos vales, três partes passam de 16,7 ms ao mesmo tempo: VU1 (~24 ms), `GSHwWorker` (16–20) e o EE (~17 de trabalho próprio).
+  - Para o pior vale chegar a 60, a VU1 precisa ficar ~35–40% mais rápida, e as outras duas ~15–30%.
+- **Passar de 60 não é alvo** (mesmos motivos da N20: a lógica do jogo anda um passo por vsync de 60 Hz). Em monitor de 120/144 Hz, o que ajuda é VRR (G-Sync/FreeSync) ou o monitor a 60/120 Hz.
+- **Achado de 17/11 (lendo o código):**
+  - A janela apresenta por um relógio próprio de 60 Hz (`SetTargetFPS(60)`), sem vsync (sem `FLAG_VSYNC_HINT`).
+  - O raylib já liga o relógio de 1 ms no Windows (`timeBeginPeriod(1)`, `SUPPORT_WINMM_HIGHRES_TIMER`).
+  - A fixação das threads pesadas em núcleos físicos (`ps2_perf::pinHeavyThread`) só existe no Linux: no Windows, duas delas podem cair no mesmo núcleo (no Linux isso custava ~5 quadros/s).
+
+**Fase A: engasgo no Windows** (independe da VU1; rápida)
+- **A1 Medir no Windows.**
+  - **Faça:** a pasta portátil ganha um `Jogar-medindo.bat` (`PS2X_PERF=1`, saída em `medida.txt`). O usuário joga uns 5 minutos onde engasga e manda o arquivo.
+  - **Pronto quando:** dá para dizer se o engasgo vem do jogo abaixo de 60 (VU1/EE, como no Linux) ou do jogo a 60 com imagens em ritmo irregular (apresentação).
+- **A2 Threads fixas também no Windows.**
+  - **Faça:** `pinHeavyThread` com `GetLogicalProcessorInformationEx` (um processador lógico por núcleo físico) e `SetThreadAffinityMask`; `PS2X_PIN=0` desliga, igual ao Linux.
+  - **Pronto quando:** medida do usuário antes e depois.
+- **A3 Sincronia vertical opcional.**
+  - **Por quê:** sem vsync, o relógio de 60 Hz da janela e o do monitor (o DWM compõe a 60,0x Hz) se cruzam aos poucos, e de tempos em tempos uma imagem fica dois refreshes e a seguinte some. É o "engasgo" com o jogo a 60.
+  - **Faça:** `PS2X_VSYNC` e a linha "Sincronia vertical" no menu Gráfico. Com ela ligada, a janela troca de imagem junto com o monitor. Em monitor de 144 Hz, o laço da janela passa a girar a 144: conferir que a fila em ordem do item 7 da N20 continua mostrando cada quadro do jogo uma vez.
+  - **Pronto quando:** histograma dos intervalos entre imagens novas com < 1% fora de 16,7 ± 2 ms no Windows, com o jogo a 60.
+- **A4 Energia (sem código).**
+  - **Faça:** o LEIA-ME do Windows recomenda o plano de energia "Alto desempenho" e o carregador ligado (no "Equilibrado", o notebook baixa o clock).
+
+**Fase B: os vales** (cada item medido antes e depois com a R5, três rodadas; hashes da R4 iguais)
+- **B1 PGO do runtime.**
+  - **Faça:** compilar só o runtime (não os 13 mil arquivos gerados) com `-fprofile-generate`, rodar a cutscene (R5) e o replay de referência, e recompilar com `-fprofile-use`, mais LTO no runtime. O despacho do JIT da VU1, o VIF, o GS e o IOP são o tipo de código que mais ganha com PGO (5–15% é comum). O resultado é o mesmo; muda só a ordem e o encaixe do código de máquina.
+  - **Atenção:** no Windows o perfil precisa sair do mesmo compilador (MinGW). Fazer primeiro no Linux.
+  - **Pronto quando:** VU1 e `GSHwWorker` por quadro anotados antes e depois.
+- **B2 JIT da VU1: VF em registradores** (N20, próximo corte 2).
+  - **Faça:** os VF usados num bloco ficam em registradores XMM do começo ao fim do bloco, e as lanes de expoente extremo são conferidas uma vez por resultado.
+  - **Pronto quando:** até ~10% da VU1; `PS2X_VU_JIT_CHECK=1` sem diferenças.
+- **B3 Flags MAC/status no JIT** (N20, corte 3).
+  - **Faça:** antes, estender o `PS2X_VU_JIT_CHECK` para comparar as flags; depois, o JIT calcula as flags das operações FMAC, e os pares perto de leitores de flag deixam o interpretador.
+  - **Pronto quando:** até ~12% da VU1, verificador sem diferenças.
+- **B4 IOP numa thread própria** (N20, corte 4).
+  - **Por quê:** o IOP é ~14% da GameThread.
+  - **Faça:** medir o som antes e depois (estalos, ritmo do ADX) e seguir as armadilhas do IOP no `ARQUITETURA.md` (interrupções suspensas, DMA).
+- **B5 "VU1 rápida", opcional e desligada por padrão.**
+  - **Por quê:** cada par da VU1 vira 200–290 bytes de x86 por causa das correções de exatidão por lane (`emitExactFmacFixup`, limites dos operandos).
+  - **Faça:** no menu Gráfico, uma opção que pula essas correções, como os modos de "clamping" leves de outros emuladores. Medir o ganho e a diferença de imagem (PSNR nos replays e capturas da cutscene).
+  - **Pronto quando:** só fica se ganhar ≥ 15% da VU1 sem defeito visível; se não, desfazer e anotar.
+- **B6 `GSHwWorker`: cópias de feedback.**
+  - **Por quê:** ~180 por quadro, cada uma fechando o passo de render com barreira completa (o driver é ~25% da thread).
+  - **Faça:** reaproveitar cópias da mesma região e usar barreiras estreitas.
+  - **Pronto quando:** replay de referência com thread ≤ 1,5 s.
+- **B7 (pesquisa, só se B1–B6 não bastarem) VU1 em paralelo.**
+  - **Ideia:** dois executores da VU1 em lotes independentes (um `MSCAL` que só lê o que os próprios UNPACKs escreveram e as constantes), com a saída do GIF na ordem original.
+  - **Risco:** ganho potencial grande; complexidade alta (detectar a dependência entre lotes).
+- **Ordem:** A1, A2, A3 e A4 (Windows; A1 depende do usuário), B1, medir, B2 e B3, B4, B5, B6, B7.
+- **Pronto quando:**
+  - Windows do usuário sem engasgo com o jogo a 60.
+  - R5 com a cutscene sem trecho de 2 s abaixo de 58.
+  - A luta pesada do save do usuário com ≥ 55.
+- **Estimativa honesta:**
+  - A2–A4: uma sessão. B1: meio dia.
+  - B2 e B3: várias sessões, juntas até ~20% da VU1. B4: uma sessão e medida de som.
+  - O pior vale a 60 cravados provavelmente só com B1–B4 somados (talvez B5 ou B7). Os trechos de 50–57 devem chegar antes.
+
 ## 8. Onde estamos
+
+**17/11:** N22 aberta (60 quadros/s, fase 2: Windows e os vales que sobraram; plano na seção 7). Fora do desempenho: modo RPG, 67 lutadores e o nome ShaolinMonks RPG (`ESTADO.md`).
 
 **15/11 (resumo; a tabela abaixo é de 14/11):**
 - 2x com thread é o padrão (N13), com mipmap por pixel (N04).
@@ -737,6 +802,7 @@ O usuário decidiu (12/11): não precisa ser 100% fiel ao PS2; se ficar melhor, 
 
 Perguntas que só o usuário pode responder. **Não pare o trabalho por elas.** Mande a lista inteira no resumo final. Quando ele responder, anote a resposta e apague a pergunta.
 
+- (N22, 17/11) No Windows: quando o `Jogar-medindo.bat` existir, jogar uns 5 minutos onde engasga e mandar o `medida.txt`. Dizer também o processador e a placa de vídeo desse PC e a taxa do monitor (60, 120 ou 144 Hz).
 - (N20, 15/11) Resposta ao pedido de 70 fps: a tela é de 60 Hz e o jogo anda um passo por vsync de 60 Hz; o alvo é 60 fixos com ritmo regular (plano na N20).
 - Respostas de 14/11 (2ª rodada): engasgo principalmente quando o Raiden chega e quando ele para de falar (sem fala); luzes estranhas sempre nos mesmos lugares.
 - **Teste com `PS2X_RAYS=0` (14/11, 3ª rodada):** o raio arco-íris e os degraus **continuam todos**, nos mesmos lugares; as luzes ficam "quadradas e sólidas, muito feio", como antes; o chão continua quadriculado. **Conclusão: não é a troca de blend do `softenLightRay`**, é a forma como os raios são desenhados (textura/mipmap/filtro). Medido na mesma sessão: duas quedas de ~6 s a 31–36/s na cutscene (chegada do Raiden e fim da fala), gameplay 52–60/s.

@@ -59,7 +59,7 @@ Avoid editing headers included by `ps2xRuntime/include/ps2_runtime.h`: they forc
 
 ### Good first areas
 
-See track E in [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) and the ❌ rows in the README: testing the other stages, the Windows build on real Windows, playtesting and balancing the RPG mode ([`PLANO_RPG.md`](PLANO_RPG.md)), and the heavy scenes where VU1 limits the frame rate (N20).
+See track E in [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) and the ❌ rows in the README: testing the other stages, the small stutters on real Windows (N22), playtesting and balancing the RPG mode ([`PLANO_RPG.md`](PLANO_RPG.md)), and the heavy scenes where VU1 limits the frame rate (N20).
 
 **Playing is contributing too:** play past Goro's Lair and open an issue for anything wrong (stage, what you did, a screenshot). A comparison screenshot from a real PS2 or PCSX2 helps a lot.
 
@@ -126,7 +126,7 @@ Evite mexer nos headers incluídos por `ps2xRuntime/include/ps2_runtime.h`: eles
 
 ### Boas áreas para começar
 
-Veja a trilha E do [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) e as linhas ❌ do README: testar as outras fases, o build do Windows num Windows de verdade, jogar e equilibrar o modo RPG ([`PLANO_RPG.md`](PLANO_RPG.md)) e as cenas pesadas em que a VU1 limita os quadros (N20).
+Veja a trilha E do [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md) e as linhas ❌ do README: testar as outras fases, os pequenos engasgos no Windows (N22), jogar e equilibrar o modo RPG ([`PLANO_RPG.md`](PLANO_RPG.md)) e as cenas pesadas em que a VU1 limita os quadros (N20).
 
 **Jogar também é contribuir:** jogue além do Goro's Lair e abra uma issue para tudo que estiver errado (fase, o que você fez, uma captura). Uma captura de comparação de um PS2 de verdade ou do PCSX2 ajuda muito.
 
