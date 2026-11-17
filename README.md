@@ -65,6 +65,19 @@ Detailed state: [`ESTADO.md`](ESTADO.md). Performance plan with measurements: [`
 
 ## Build and run
 
+**The simplest way:**
+
+1. Download the repository (*Code → Download ZIP* on GitHub, or `git clone`) and unpack it.
+2. Put your game's ISO (PS2, USA, `SLUS-210.87`) in the `coloque_o_jogo_aqui` folder.
+3. Double-click the installer:
+   - **Linux:** `Instalar.sh`. It installs what is missing (asks for your password once), builds and assembles `portatil/MKSM-linux`.
+   - **Windows:** `Instalar.bat`. The first time it installs WSL with Ubuntu (asks for admin; reboot, open Ubuntu once to create a user and password, and run `Instalar.bat` again). Then it builds inside WSL and delivers `portatil\MKSM-windows`, which runs **natively** on Windows. WSL is only used to build.
+4. Play: double-click `jogar.sh` (Linux) or `Jogar.bat` (Windows) inside the `portatil` folder.
+
+The first build takes a few hours. If it stops halfway, run the installer again: finished steps are skipped. The `portatil` folder contains your game: it is for you only.
+
+**Manual steps** (what the installers do underneath):
+
 One command extracts the ISO, fetches PS2Recomp at the pinned commit, applies our patches, recompiles the ELF and builds everything:
 
 ```bash

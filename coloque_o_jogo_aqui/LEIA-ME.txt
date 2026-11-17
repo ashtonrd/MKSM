@@ -1,0 +1,3 @@
+Coloque aqui a ISO do seu Mortal Kombat: Shaolin Monks (PS2, USA, SLUS-210.87).
+Depois: Instalar.sh (Linux) ou Instalar.bat (Windows), na pasta de cima.
+A ISO nunca vai para o git (.gitignore).

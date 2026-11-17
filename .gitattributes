@@ -1,3 +1,5 @@
 * text=auto eol=lf
 # Patches must stay byte-exact for git apply.
 patches/*.diff -text diff
+# O Instalar.bat precisa de CRLF no Windows; os .sh ficam LF (o Instalar.bat os roda no WSL).
+*.bat text eol=crlf

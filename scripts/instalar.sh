@@ -7,8 +7,13 @@ cd "$(dirname "$0")/.."
 RAIZ=$PWD
 JOBS=${JOBS:-2}  # build do código gerado usa ~5 GB por job
 
-ISO=${1:-"Mortal Kombat - Shaolin Monks (USA).iso"}
-[ -f "$ISO" ] || { echo "ISO não encontrada: $ISO"; echo "uso: $0 caminho/da/sua.iso"; exit 1; }
+# Sem argumento: a primeira .iso em coloque_o_jogo_aqui/ (o Instalar.sh e o Instalar.bat usam assim).
+ISO=${1:-$(find coloque_o_jogo_aqui -maxdepth 1 -iname '*.iso' 2>/dev/null | head -1)}
+if [ ! -f extraido_full/SLUS_210.87 ]; then # já extraída: a ISO não faz mais falta
+  [ -n "$ISO" ] && [ -f "$ISO" ] || { echo "ISO não encontrada. Coloque a sua .iso (PS2, USA, SLUS-210.87) em coloque_o_jogo_aqui/"; exit 1; }
+fi
+# ATE_RECOMPILAR=1: para depois de gerar o C++ (o build do Windows compila o jogo com o MinGW).
+ATE_RECOMPILAR=${ATE_RECOMPILAR:-0}
 
 for cmd in git cmake ninja 7z g++ glslc; do
   command -v "$cmd" >/dev/null || { echo "Falta instalar: $cmd"; exit 1; }
@@ -31,7 +36,7 @@ fi
 echo "== 3/5 Configurando (GCC: SSE4.1, sem LTO)"
 cd PS2Recomp
 [ -f out/build/build.ninja ] || cmake -S . -B out/build -G Ninja -DCMAKE_BUILD_TYPE=None \
-  -DCMAKE_CXX_FLAGS="-msse4.1 -O1 -g0" \
+  -DCMAKE_CXX_FLAGS="-msse4.1 -O1 -g0" -DPS2X_NATIVE_ARCH=OFF \
   -DPS2X_ENABLE_RUNNER_UNITY_BUILD=OFF -DPS2X_ENABLE_RUNNER_PCH=OFF
 
 echo "== 4/5 Recompilando o ELF para C++"
@@ -44,6 +49,8 @@ if [ ! -f ps2xRuntime/src/runner/.mksm_ok ]; then
   touch PS2Recomp/ps2xRuntime/src/runner/.mksm_ok
   cd PS2Recomp
 fi
+
+if [ "$ATE_RECOMPILAR" = 1 ]; then echo "C++ gerado."; exit 0; fi
 
 echo "== 5/5 Compilando o jogo (demora horas na primeira vez)"
 cmake --build out/build -j"$JOBS" --target ps2EntryRunner

@@ -27,3 +27,8 @@ imgui.ini
 referencias_original/
 capturas/
 mksm.ini
+
+# Instaladores: a ISO do usuário e as pastas prontas
+/coloque_o_jogo_aqui/*
+!/coloque_o_jogo_aqui/LEIA-ME.txt
+/portatil/
