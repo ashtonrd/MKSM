@@ -13,6 +13,10 @@ grep -q '^PS2X_NATIVE_ARCH:BOOL=OFF' "$RAIZ/PS2Recomp/out/build/CMakeCache.txt" 
 
 mkdir -p "$OUT/bin" "$OUT/lib" "$OUT/jogo"
 cp "$BIN" "$OUT/bin/"
+# Num sistema com pacotes x86-64-v3 (CachyOS), os objetos de inicialização da glibc marcam o executável como
+# "precisa de x86-64-v3", embora o código só use até v2; o carregador recusa em CPU sem AVX2 ("CPU ISA level is
+# lower than required"). A marca sai; as instruções não mudam.
+objcopy --remove-section=.note.gnu.property "$OUT/bin/ps2EntryRunner"
 # Arch lista o ld-linux com "=>", Debian/Ubuntu sem.
 ldd "$BIN" | awk '$2 == "=>" && $3 ~ /^\// {print $3} $1 ~ /ld-linux/ && $2 != "=>" {print $1}' |
   while read -r so; do cp -L "$so" "$OUT/lib/"; done
