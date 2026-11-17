@@ -27,17 +27,29 @@ fi
 mkdir -p extraido && cp -u extraido_full/SLUS_210.87 extraido/  # caminho que o sm.toml espera
 
 echo "== 2/5 Baixando o PS2Recomp e aplicando os patches"
-if [ ! -d PS2Recomp ]; then
+if [ ! -d PS2Recomp ] && [ -d vendor/PS2Recomp ]; then
+  echo "(usando a cópia que veio no pacote, sem internet)"
+  cp -r vendor/PS2Recomp PS2Recomp
+elif [ ! -d PS2Recomp ]; then
   scripts/aplicar_patches.sh "$RAIZ/PS2Recomp"
 else
   echo "PS2Recomp/ já existe, mantendo como está"
 fi
 
 echo "== 3/5 Configurando (GCC: SSE4.1, sem LTO)"
+# Pacote offline: as bibliotecas vêm de vendor/deps (CMake desconectado, nada é baixado).
+offline=()
+if [ -d vendor/deps ]; then
+  offline+=(-DFETCHCONTENT_FULLY_DISCONNECTED=ON)
+  for d in vendor/deps/*/; do
+    n=$(basename "$d"); offline+=("-DFETCHCONTENT_SOURCE_DIR_${n^^}=$RAIZ/$d")
+  done
+fi
 cd PS2Recomp
 [ -f out/build/build.ninja ] || cmake -S . -B out/build -G Ninja -DCMAKE_BUILD_TYPE=None \
   -DCMAKE_CXX_FLAGS="-msse4.1 -O1 -g0" -DPS2X_NATIVE_ARCH=OFF \
-  -DPS2X_ENABLE_RUNNER_UNITY_BUILD=OFF -DPS2X_ENABLE_RUNNER_PCH=OFF
+  -DPS2X_ENABLE_RUNNER_UNITY_BUILD=OFF -DPS2X_ENABLE_RUNNER_PCH=OFF \
+  -DPS2X_BUILD_STUDIO=OFF -DPS2X_BUILD_ANALYZER=OFF "${offline[@]}"
 
 echo "== 4/5 Recompilando o ELF para C++"
 if [ ! -f ps2xRuntime/src/runner/.mksm_ok ]; then

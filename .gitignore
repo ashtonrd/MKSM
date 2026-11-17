@@ -32,3 +32,5 @@ mksm.ini
 /coloque_o_jogo_aqui/*
 !/coloque_o_jogo_aqui/LEIA-ME.txt
 /portatil/
+/dist/
+/vendor/

@@ -28,19 +28,20 @@ fi
 
 echo "== Conferindo as ferramentas"
 falta=()
-for c in git cmake ninja 7z g++ glslc rsync python3; do command -v "$c" >/dev/null || falta+=("$c"); done
+for c in cmake ninja 7z g++ glslc rsync python3 pkg-config; do command -v "$c" >/dev/null || falta+=("$c"); done
+pkg-config --exists libavcodec libavformat libswscale 2>/dev/null || falta+=(ffmpeg)
 if ((${#falta[@]})); then
     echo "Faltam: ${falta[*]}. Instalando (pede a senha)."
     if command -v pacman >/dev/null; then
         sudo pacman -S --needed --noconfirm git cmake ninja p7zip gcc shaderc vulkan-icd-loader vulkan-headers \
-            rsync python libx11 libxrandr libxinerama libxcursor libxi mesa
+            ffmpeg pkgconf rsync python libx11 libxrandr libxinerama libxcursor libxi mesa
     elif command -v apt-get >/dev/null; then
         sudo apt-get update
-        sudo apt-get install -y git cmake ninja-build p7zip-full g++ glslc libvulkan-dev rsync python3 \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+        sudo apt-get install -y git cmake ninja-build p7zip-full g++ glslc libvulkan-dev rsync python3 pkg-config \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
     elif command -v dnf >/dev/null; then
-        sudo dnf install -y git cmake ninja-build p7zip p7zip-plugins gcc-c++ glslc vulkan-loader-devel rsync python3 \
-            libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel mesa-libGL-devel
+        sudo dnf install -y git cmake ninja-build p7zip p7zip-plugins gcc-c++ glslc vulkan-loader-devel rsync python3 pkgconf \
+            ffmpeg-free-devel libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel mesa-libGL-devel
     else
         echo "Não reconheci o gerenciador de pacotes. Instale: ${falta[*]} (e as bibliotecas de desenvolvimento do X11 e do Vulkan)."
         exit 1
