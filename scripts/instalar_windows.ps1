@@ -40,14 +40,13 @@ New-Item -ItemType Directory -Force $B | Out-Null
 Rode dlltool @('-d', 'vendor\vulkan-1.def', '-y', "$B\libvulkan-1.a")
 
 Passo '3/6 Configurando'
-$uri = { param($p) 'file:///' + ((Resolve-Path $p).Path -replace '\\', '/') }
 $opcoes = @('-S', 'PS2Recomp', '-B', $B, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=None',
     '-DCMAKE_C_COMPILER=gcc', '-DCMAKE_CXX_COMPILER=g++', '-DCMAKE_CXX_FLAGS=-msse4.1 -O1 -g0',
     '-DCMAKE_EXE_LINKER_FLAGS=-static', '-DPS2X_NATIVE_ARCH=OFF', '-DPS2X_OPTIMIZE_RUNTIME_LIB=ON',
     '-DPS2X_BUILD_ANALYZER=OFF', '-DPS2X_BUILD_STUDIO=OFF', '-DPS2X_BUILD_TEST=OFF', '-DPS2X_SHOW_WINDOWS_CONSOLE=OFF',
     "-DPS2X_VULKAN_LIBRARY=$((Resolve-Path "$B\libvulkan-1.a").Path)",
     "-DPS2X_GS_SHADER_PREBUILT_DIR=$((Resolve-Path 'vendor\gs_shaders').Path)",
-    "-DPS2X_FFMPEG_URL=$(& $uri 'vendor\ffmpeg.zip')", '-DFETCHCONTENT_FULLY_DISCONNECTED=ON')
+    "-DPS2X_FFMPEG_URL=$((Resolve-Path 'vendor\ffmpeg.zip').Path -replace '\\', '/')", '-DFETCHCONTENT_FULLY_DISCONNECTED=ON')
 foreach ($d in Get-ChildItem vendor\deps -Directory) {
     $opcoes += "-DFETCHCONTENT_SOURCE_DIR_$($d.Name.ToUpper())=$($d.FullName)"
 }

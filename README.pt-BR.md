@@ -67,11 +67,11 @@ Estado detalhado: [`ESTADO.md`](ESTADO.md). Plano de desempenho com medições: 
 
 **Do jeito mais simples:**
 
-1. Baixe o repositório (botão *Code → Download ZIP* no GitHub, ou `git clone`) e descompacte.
+1. Baixe o zip do seu sistema na página de *Releases* (`ShaolinMonksRPG-Linux.zip` ou `ShaolinMonksRPG-Windows.zip`: trazem tudo para compilar sem internet) e descompacte. Dá também com o repositório (*Code → Download ZIP* ou `git clone`), mas aí o instalador baixa o que faltar.
 2. Ponha a ISO do seu jogo (PS2, USA, `SLUS-210.87`) na pasta `coloque_o_jogo_aqui`.
 3. Dê dois cliques no instalador:
    - **Linux:** `Instalar.sh`. Ele instala o que faltar (pede a senha uma vez), compila e monta `portatil/MKSM-linux`.
-   - **Windows:** `Instalar.bat`. Na primeira vez ele instala o WSL com Ubuntu (pede administrador; reinicie, abra o Ubuntu uma vez para criar usuário e senha e rode o `Instalar.bat` de novo). Depois compila dentro do WSL e entrega `portatil\MKSM-windows`, que roda **nativo** no Windows. O WSL só é usado para compilar.
+   - **Windows:** `Instalar.bat`. Compila no próprio Windows com o kit que vem no zip do Windows (GCC, CMake e Ninja, na pasta `ferramentas`), **sem instalar nada, sem administrador e sem internet**, monta `portatil\MKSM-windows` e, no fim, apaga o kit e os arquivos intermediários.
 4. Jogue: dois cliques em `jogar.sh` (Linux) ou `Jogar.bat` (Windows) dentro da pasta `portatil`.
 
 A primeira compilação leva algumas horas. Se parar no meio, rode o instalador de novo: as etapas prontas são puladas. A pasta `portatil` leva o seu jogo: é só para você.

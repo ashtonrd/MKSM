@@ -67,11 +67,11 @@ Detailed state: [`ESTADO.md`](ESTADO.md). Performance plan with measurements: [`
 
 **The simplest way:**
 
-1. Download the repository (*Code → Download ZIP* on GitHub, or `git clone`) and unpack it.
+1. Download the zip for your system from the *Releases* page (`ShaolinMonksRPG-Linux.zip` or `ShaolinMonksRPG-Windows.zip`: they carry everything needed to build offline) and unpack it. The repository works too (*Code → Download ZIP* or `git clone`), but then the installer downloads what is missing.
 2. Put your game's ISO (PS2, USA, `SLUS-210.87`) in the `coloque_o_jogo_aqui` folder.
 3. Double-click the installer:
    - **Linux:** `Instalar.sh`. It installs what is missing (asks for your password once), builds and assembles `portatil/MKSM-linux`.
-   - **Windows:** `Instalar.bat`. The first time it installs WSL with Ubuntu (asks for admin; reboot, open Ubuntu once to create a user and password, and run `Instalar.bat` again). Then it builds inside WSL and delivers `portatil\MKSM-windows`, which runs **natively** on Windows. WSL is only used to build.
+   - **Windows:** `Instalar.bat`. It builds on Windows itself with the kit shipped in the Windows zip (GCC, CMake and Ninja, in the `ferramentas` folder), **without installing anything, without admin and without internet**, assembles `portatil\MKSM-windows` and, at the end, deletes the kit and the intermediate files.
 4. Play: double-click `jogar.sh` (Linux) or `Jogar.bat` (Windows) inside the `portatil` folder.
 
 The first build takes a few hours. If it stops halfway, run the installer again: finished steps are skipped. The `portatil` folder contains your game: it is for you only.
