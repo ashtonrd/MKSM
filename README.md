@@ -73,6 +73,8 @@ scripts/instalar.sh "path/to/your.iso"
 
 Use `JOBS=1` if you run out of memory. If it stops halfway, run it again: finished steps are skipped.
 
+Optional, on Linux: `scripts/pgo_runtime.sh` trains the runtime with your game (~15 min, opens the window by itself) and rebuilds it with the profile. The image stays identical, and VU1 and drawing get ~10% lighter.
+
 Play:
 
 ```bash
@@ -94,15 +96,16 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) �
 | `MKSM_SKIP_INTRO=1` | Skips the intro videos |
 | `PS2X_VOL_MASTER`, `PS2X_VOL_MUSIC`, `PS2X_VOL_SFX` | Volumes, 0–100 |
 | `PS2X_REVERB=22` | Echo on sound effects (0 turns it off) |
-| `PS2X_FXAA=0` | No edge smoothing (on by default) |
+| `PS2X_FXAA=1` | Edge smoothing (on by default on Windows; off by default on Linux, which gives more frames) |
 | `PS2X_GS_HW=0` | Old renderer (PS2 resolution, bit-exact) instead of the new one |
 | `PS2X_SCALE=1` | Internal resolution of the new renderer, 1–4 (default 2; 1 for weak GPUs) |
 | `PS2X_WIDESCREEN=1` | 16:9 (wider 3D view; 2D/HUD stretches; movies stay 4:3) |
 | `PS2X_RUMBLE=0` | No controller vibration |
-| `PS2X_DEINTERLACE=0` | Shows one field at a time instead of blending both (harsher image) |
+| `PS2X_DEINTERLACE=1` | Blends both fields (on by default on Windows; off by default on Linux, which eases the CPU) |
+| `PS2X_VSYNC=1` | Vertical sync: the image changes with the monitor (against stutter with the game at 60; also in the Graphics menu) |
 | `PS2X_UNCAPPED=1` | No real-time cap (throughput testing; the game speeds up) |
 | `PS2X_PERF=1` | Prints fps, GS and GPU load and where each frame's time goes, every 2 s |
-| `PS2X_PIN=0` | Don't pin the four busy threads to separate physical cores |
+| `PS2X_PIN=0` | Don't pin the four busy threads to separate physical cores (Linux and Windows) |
 | `PS2X_GS_GPU=0` | With `PS2X_GS_HW=0`: the old renderer on the CPU only |
 | `PS2X_GS_RASTER=0` | GPU compute tiles instead of the rasterizer |
 | `PS2X_VU1_THREAD=0` | VU1 on the game thread |

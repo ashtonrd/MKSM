@@ -1171,7 +1171,7 @@ index d0fc95d..d180aa9 100644
                      return fmt::format("// NOP operation, no action needed for VU0");
                  case VU0_S2_VRNEXT:
 diff --git a/ps2xRuntime/CMakeLists.txt b/ps2xRuntime/CMakeLists.txt
-index 589d768..4c34044 100644
+index 589d768..f327bea 100644
 --- a/ps2xRuntime/CMakeLists.txt
 +++ b/ps2xRuntime/CMakeLists.txt
 @@ -11,7 +11,7 @@ option(PS2X_ENABLE_RUNNER_PCH "Precompile the heavy runtime headers for ps2Entry
@@ -1325,6 +1325,33 @@ index 589d768..4c34044 100644
  target_link_libraries(ps2EntryRunner
      PRIVATE
      ps2_runtime
+@@ -591,6 +689,26 @@ if(PS2X_IS_ANDROID)
+     target_sources(ps2EntryRunner PRIVATE src/lib/ps2_android_runtime.cpp)
+ endif()
+ 
++# PGO do runtime e do IOP (PLANO_DESEMPENHO N22, B1), nunca no código gerado: PS2X_PGO=gerar compila com contadores e
++# o jogo grava o perfil em PS2X_PGO_DIR (PS2X_PGO_DUMP_AT=<s> grava e sai); PS2X_PGO=usar recompila com o perfil.
++# -fprofile-partial-training mantém otimizado o código que o treino não visitou; -fprofile-correction aceita os
++# contadores desencontrados por 1 ou 2 (o perfil é gravado com as outras threads rodando); -Wno-coverage-mismatch
++# ignora o perfil só onde o código mudou (o PS2X_PGO_DUMP_AT da initialize só existe no treino). Vazio = build normal.
++set(PS2X_PGO "" CACHE STRING "PGO do runtime: vazio, gerar ou usar")
++set(PS2X_PGO_DIR "${CMAKE_BINARY_DIR}/pgo" CACHE PATH "Pasta do perfil do PGO")
++if(PS2X_PGO STREQUAL "gerar" AND NOT MSVC)
++    foreach(pgo_target ps2_runtime ps2_iop)
++        target_compile_options(${pgo_target} PRIVATE -fprofile-generate=${PS2X_PGO_DIR} -fprofile-update=prefer-atomic)
++    endforeach()
++    target_link_options(ps2_runtime INTERFACE -fprofile-generate=${PS2X_PGO_DIR})
++    target_compile_definitions(ps2_runtime PRIVATE PS2X_PGO_GEN=1)
++elseif(PS2X_PGO STREQUAL "usar" AND NOT MSVC)
++    foreach(pgo_target ps2_runtime ps2_iop)
++        target_compile_options(${pgo_target} PRIVATE -fprofile-use=${PS2X_PGO_DIR} -fprofile-partial-training -fprofile-correction
++                               -Wno-missing-profile -Wno-coverage-mismatch)
++    endforeach()
++endif()
++
+ install(TARGETS ps2_runtime ps2EntryRunner
+     RUNTIME DESTINATION bin
+     LIBRARY DESTINATION lib
 diff --git a/ps2xRuntime/include/ps2_runtime.h b/ps2xRuntime/include/ps2_runtime.h
 index 4b9242c..68f2668 100644
 --- a/ps2xRuntime/include/ps2_runtime.h
@@ -6356,7 +6383,7 @@ index 8590f14..9b3156f 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..b80d131 100644
+index 45cb9d2..d25f5bf 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -6400,7 +6427,7 @@ index 45cb9d2..b80d131 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -373,10 +387,872 @@ namespace
+@@ -373,10 +387,906 @@ namespace
      }
  }
  
@@ -6420,6 +6447,9 @@ index 45cb9d2..b80d131 100644
 +
 +// Graphics menu ("Gráfico"): R3 opens it out of gameplay (menus, pause, map), F1 anywhere. The
 +// options apply at once, except the renderer and its thread (next start), and go to MKSM_INI.
++#if defined(PS2X_PGO_GEN)
++extern "C" void __gcov_dump(void); // libgcov: grava o perfil do PGO (PS2X_PGO_DUMP_AT)
++#endif
 +extern std::atomic<bool> g_moviePlaying; // Kernel/Stubs/MPEG.cpp
 +uint64_t gsGameFrameSerial();            // gs/gs_frontend.cpp: game frames drawn so far
 +extern std::atomic<bool> g_gsEffects;    // gs/gs_frontend.cpp: the game's full glow (off: no blur, same light)
@@ -6435,13 +6465,22 @@ index 45cb9d2..b80d131 100644
 +        return v ? v[0] != '0' : fallback;
 +    }
 +
++    // Padrões recomendados por sistema. No Linux, sem FXAA e sem mistura de campos: o usuário mediu (17/11) e os quadros
++    // ficaram perfeitos (a mistura gasta CPU da thread da janela; o FXAA, uma passada da GPU). No Windows, como antes.
++#if defined(_WIN32)
++    constexpr bool kRecFxaa = true, kRecBlend = true;
++#else
++    constexpr bool kRecFxaa = false, kRecBlend = false;
++#endif
++
 +    struct GfxSettings
 +    {
-+        bool fxaa = envOn("PS2X_FXAA", true);
++        bool fxaa = envOn("PS2X_FXAA", kRecFxaa);
 +        bool bicubic = envOn("PS2X_UPSCALE", true);
-+        bool blend = envOn("PS2X_DEINTERLACE", true);
++        bool blend = envOn("PS2X_DEINTERLACE", kRecBlend);
 +        bool widescreen = envOn("PS2X_WIDESCREEN", false);
 +        bool effects = envOn("PS2X_EFFECTS", true);
++        bool vsync = envOn("PS2X_VSYNC", false); // troca de imagem junto com o monitor (N22, A3)
 +        uint32_t scale = std::getenv("PS2X_SCALE") ? static_cast<uint32_t>(std::clamp(std::atoi(std::getenv("PS2X_SCALE")), 1, 4)) : 1u;
 +        bool newRenderer = envOn("PS2X_GS_HW", false);
 +        bool thread = envOn("PS2X_GS_HW_THREAD", false);
@@ -6464,7 +6503,8 @@ index 45cb9d2..b80d131 100644
 +            {"PS2X_SCALE", std::to_string(g.scale)},       {"PS2X_FXAA", g.fxaa ? "1" : "0"},
 +            {"PS2X_UPSCALE", g.bicubic ? "1" : "0"},       {"PS2X_DEINTERLACE", g.blend ? "1" : "0"},
 +            {"PS2X_GS_HW", g.newRenderer ? "1" : "0"},     {"PS2X_GS_HW_THREAD", g.thread ? "1" : "0"},
-+            {"PS2X_WIDESCREEN", g.widescreen ? "1" : "0"}, {"PS2X_EFFECTS", g.effects ? "1" : "0"}};
++            {"PS2X_WIDESCREEN", g.widescreen ? "1" : "0"}, {"PS2X_EFFECTS", g.effects ? "1" : "0"},
++            {"PS2X_VSYNC", g.vsync ? "1" : "0"}};
 +        std::vector<std::string> lines;
 +        {
 +            std::ifstream in(path);
@@ -6497,7 +6537,7 @@ index 45cb9d2..b80d131 100644
 +        return static_cast<bool>(out);
 +    }
 +
-+    enum GfxRow { RowPreset, RowScale, RowWide, RowFxaa, RowFilter, RowBlend, RowEffects, RowRenderer, RowThread, RowReset, RowClose, RowCount };
++    enum GfxRow { RowPreset, RowScale, RowWide, RowFxaa, RowFilter, RowBlend, RowVsync, RowEffects, RowRenderer, RowThread, RowReset, RowClose, RowCount };
 +    enum CtlRow { CtlReset = kPadBindingCount, CtlClose, CtlRowCount }; // "Controles" tab: one row per PS2 button, then these
 +    enum RpgRow { RpgReset = mksm_rpg::AttrCount, RpgClose, RpgRowCount }; // "RPG" tab: one row per attribute, then these
 +    enum { TabGfx, TabCtl, TabRpg, TabCount };
@@ -6643,7 +6683,7 @@ index 45cb9d2..b80d131 100644
 +        m.saved = saveGfx();
 +    }
 +
-+    bool presetHigh(const GfxSettings &g) { return g.newRenderer && g.scale == 2u && g.fxaa && g.bicubic && g.effects; }
++    bool presetHigh(const GfxSettings &g) { return g.newRenderer && g.scale == 2u && g.fxaa == kRecFxaa && g.bicubic && g.effects; }
 +    bool presetLow(const GfxSettings &g) { return g.newRenderer && g.scale == 1u && !g.fxaa && !g.bicubic && g.effects; }
 +    // For weak video cards: also simple glow (~12-16% less GS time at 1x) and no field blending.
 +    bool presetMin(const GfxSettings &g) { return g.newRenderer && g.scale == 1u && !g.fxaa && !g.bicubic && !g.effects && !g.blend; }
@@ -6657,6 +6697,17 @@ index 45cb9d2..b80d131 100644
 +            gfx().scale = scale; // the old renderer runs: kept for the new one
 +    }
 +
++    // Sincronia vertical: a troca do buffer espera o monitor (o raylib chama glfwSwapInterval). Sem ela, a janela anda pelo
++    // próprio relógio de 60 Hz, que se desencontra do monitor aos poucos (um quadro repete, o seguinte some). Com ela, o
++    // teto de 240/s só evita girar à toa se o driver ignorar o pedido; a fila em ordem mostra cada quadro do jogo uma vez.
++    void applyVsync(bool on)
++    {
++        if (on)
++            SetWindowState(FLAG_VSYNC_HINT), SetTargetFPS(240);
++        else
++            ClearWindowState(FLAG_VSYNC_HINT), SetTargetFPS(60);
++    }
++
 +    void changeGfxRow(int row, int dir)
 +    {
 +        GfxSettings &g = gfx();
@@ -6666,8 +6717,10 @@ index 45cb9d2..b80d131 100644
 +        {
 +            const int now = presetIndex(g), next = now < 0 ? (dir < 0 ? 2 : 0) : (now + (dir < 0 ? 2 : 1)) % 3;
 +            applyScale(next == 0 ? 2u : 1u);
-+            g.fxaa = g.bicubic = next == 0;
-+            g.effects = g.blend = next != 2;
++            g.fxaa = next == 0 && kRecFxaa;
++            g.bicubic = next == 0;
++            g.effects = next != 2;
++            g.blend = next != 2 && kRecBlend;
 +            g.newRenderer = true;
 +            break;
 +        }
@@ -6676,12 +6729,19 @@ index 45cb9d2..b80d131 100644
 +        case RowFxaa: g.fxaa = !g.fxaa; break;
 +        case RowFilter: g.bicubic = !g.bicubic; break;
 +        case RowBlend: g.blend = !g.blend; break;
++        case RowVsync:
++            g.vsync = !g.vsync;
++            applyVsync(g.vsync);
++            break;
 +        case RowEffects: g.effects = !g.effects; break;
 +        case RowRenderer: g.newRenderer = !g.newRenderer; break;
 +        case RowThread: g.thread = !g.thread; break;
 +        case RowReset: // what a fresh install runs with (main.cpp defaults and GfxSettings)
 +            applyScale(2u);
-+            g.fxaa = g.bicubic = g.blend = g.newRenderer = g.effects = true;
++            g.bicubic = g.newRenderer = g.effects = true;
++            g.fxaa = kRecFxaa, g.blend = kRecBlend;
++            if (g.vsync)
++                g.vsync = false, applyVsync(false);
 +            g.widescreen = false;
 +            g.thread = std::thread::hardware_concurrency() >= 4u;
 +            break;
@@ -7004,6 +7064,7 @@ index 45cb9d2..b80d131 100644
 +                {"Suavização (FXAA)", onOff(g.fxaa)},
 +                {"Filtro de ampliação", g.bicubic ? "Bicúbico" : "Bilinear"},
 +                {"Mistura de campos", onOff(g.blend)},
++                {"Sincronia vertical", onOff(g.vsync)},
 +                {"Efeitos de luz", g.effects ? "Completos" : "Simples"},
 +                {"Renderizador", g.newRenderer != g.runningNew ? (g.newRenderer ? "Novo *" : "Antigo *") : (g.newRenderer ? "Novo" : "Antigo")},
 +                {"Thread de desenho", g.thread != g.runningThread ? (g.thread ? "Ligada *" : "Desligada *") : onOff(g.thread)},
@@ -7275,7 +7336,7 @@ index 45cb9d2..b80d131 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,21 +1263,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +1297,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -7300,7 +7361,7 @@ index 45cb9d2..b80d131 100644
      uint32_t width = 0u;
      uint32_t height = 0u;
      uint32_t displayFbp = 0u;
-@@ -414,14 +1279,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -414,14 +1313,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
                                                     &sourceFbp,
                                                     &usedPreferredDisplaySource))
      {
@@ -7328,7 +7389,7 @@ index 45cb9d2..b80d131 100644
          return;
      }
  
-@@ -450,13 +1320,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -450,13 +1354,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
@@ -7365,7 +7426,7 @@ index 45cb9d2..b80d131 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +1358,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +1392,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -7401,7 +7462,7 @@ index 45cb9d2..b80d131 100644
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +1397,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +1431,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -7410,7 +7471,7 @@ index 45cb9d2..b80d131 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +1445,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +1479,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -7420,7 +7481,7 @@ index 45cb9d2..b80d131 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +1585,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +1619,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -7516,10 +7577,12 @@ index 45cb9d2..b80d131 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -732,9 +1671,49 @@ bool PS2Runtime::initialize(const char *title)
+@@ -731,12 +1704,64 @@ bool PS2Runtime::initialize(const char *title)
+ #if defined(PLATFORM_VITA)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
-         SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+-        SetConfigFlags(FLAG_WINDOW_RESIZABLE);
++        SetConfigFlags(FLAG_WINDOW_RESIZABLE | (gfx().vsync ? FLAG_VSYNC_HINT : 0));
 +        // PRIME laptops: the GS already runs on the NVIDIA card (Vulkan), but the window opened on
 +        // the integrated GPU unless started with prime-run. Ask for the NVIDIA GLX vendor before
 +        // GLFW loads libGL. PS2X_GPU_AUTO=0 leaves the system default. (Windows: NvOptimusEnablement in main.cpp.)
@@ -7538,6 +7601,19 @@ index 45cb9d2..b80d131 100644
          InitAudioDevice();
          m_audioBackend.setAudioReady(IsAudioDeviceReady());
 +        startSpu2Stream();
++#if defined(PS2X_PGO_GEN)
++        // Build de PGO (PS2X_PGO=gerar): PS2X_PGO_DUMP_AT=<s> grava o perfil e sai nesse segundo (o roteiro de treino fecha
++        // o jogo com timeout, que não roda o atexit do gcov).
++        if (const char *pgoAt = std::getenv("PS2X_PGO_DUMP_AT"))
++            std::thread([at = std::atoi(pgoAt)]
++            {
++                std::this_thread::sleep_for(std::chrono::seconds(at));
++                __gcov_dump();
++                std::fprintf(stderr, "[pgo] perfil gravado aos %d s\n", at);
++                std::_Exit(0);
++            }).detach();
+ #endif
+-        SetTargetFPS(60);
 +        // Test harness: PS2X_DUMP_RAM_AT="70,74" writes ram_<s>.bin (32 MB) and vu1_<s>.bin at those seconds.
 +        if (const char *dumpAt = std::getenv("PS2X_DUMP_RAM_AT"))
 +        {
@@ -7563,10 +7639,12 @@ index 45cb9d2..b80d131 100644
 +                }
 +            }).detach();
 +        }
- #endif
-         SetTargetFPS(60);
++#endif
++        SetTargetFPS(gfx().vsync ? 240 : 60); // com vsync quem segura o ritmo é a troca do buffer (applyVsync)
          if (m_debugUiInitCallback)
-@@ -2214,6 +3193,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+         {
+             m_debugUiInitCallback(*this, m_debugUiUserData);
+@@ -2214,6 +3239,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -7578,7 +7656,7 @@ index 45cb9d2..b80d131 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +3344,16 @@ void PS2Runtime::run()
+@@ -2360,13 +3390,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -7595,7 +7673,7 @@ index 45cb9d2..b80d131 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +3375,63 @@ void PS2Runtime::run()
+@@ -2388,9 +3421,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -7660,7 +7738,7 @@ index 45cb9d2..b80d131 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +3442,240 @@ void PS2Runtime::run()
+@@ -2401,25 +3488,240 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -7915,7 +7993,7 @@ index 45cb9d2..b80d131 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3686,197 @@ void PS2Runtime::run()
+@@ -2430,21 +3732,197 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());

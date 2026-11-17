@@ -6,9 +6,10 @@
 #   PS2X_VOL_MUSIC=100    volume da música e das falas
 #   PS2X_VOL_SFX=100      volume dos efeitos
 #   PS2X_VIF_AHEAD=0      ordem antiga VIF/VU1 (chão quadriculado; só para comparar)
-#   PS2X_DEINTERLACE=0    não mistura os campos
+#   PS2X_DEINTERLACE=1    mistura os campos (padrão: ligado no Windows, desligado no Linux)
+#   PS2X_VSYNC=1          sincronia vertical: a imagem troca junto com o monitor (contra engasgo)
 #   PS2X_EFFECTS=0        efeitos de luz simples: o brilho sem o desfoque (mais leve para placas de vídeo fracas)
-#   PS2X_FXAA=0           sem suavização de bordas (o padrão suaviza os degraus, na resolução do PS2)
+#   PS2X_FXAA=1           suavização de bordas na resolução do PS2 (padrão: ligada no Windows, desligada no Linux)
 #   PS2X_UPSCALE=0        amplia a imagem com filtro bilinear (o padrão é bicúbico, mais nítido)
 #   PS2X_GPU_AUTO=0       não força a placa NVIDIA na janela
 #   PS2X_RUMBLE=0         sem vibração no controle

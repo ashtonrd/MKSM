@@ -749,6 +749,30 @@ Referências do original em `RAIZ/referencias_original/`: `goro_1_kunglao_luta.w
   - **Ideia:** dois executores da VU1 em lotes independentes (um `MSCAL` que só lê o que os próprios UNPACKs escreveram e as constantes), com a saída do GIF na ordem original.
   - **Risco:** ganho potencial grande; complexidade alta (detectar a dependência entre lotes).
 - **Ordem:** A1, A2, A3 e A4 (Windows; A1 depende do usuário), B1, medir, B2 e B3, B4, B5, B6, B7.
+- **17/11, feito (A1–A4, e o padrão do Linux pedido pelo usuário):**
+  - **Padrão do Linux:** o usuário trocou na pasta portátil o FXAA e a mistura de campos para desligados e disse que os quadros "ficaram perfeitos". Agora é o padrão no Linux (`kRecFxaa`/`kRecBlend` no `ps2_runtime.cpp`, também no "Restaurar recomendado" e na predefinição "Alto"); no Windows, como antes.
+  - **A1:** `Jogar-medindo.bat` (Windows) e `jogar-medindo.sh` (Linux) nas pastas portáteis, gravando `medida.txt`.
+  - **A2:** `pinHeavyThread` no Windows (`GetLogicalProcessorInformationEx`, núcleos de desempenho primeiro, `SetThreadAffinityMask`; `PS2X_PIN=0` desliga). Compilado com MinGW; o efeito só se mede no Windows do usuário.
+  - **A3:** "Sincronia vertical" no menu Gráfico (`PS2X_VSYNC`, desligada por padrão): `FLAG_VSYNC_HINT` e teto de 240/s na janela.
+  - **A4:** o LEIA-ME do Windows recomenda o plano "Alto desempenho" e o carregador ligado.
+  - **Medida (R5 longa, uma rodada cada, Linux, i7-7700HQ + GTX 1050):**
+
+    | configuração | cutscene: jogo méd (mín) | imagens novas | pior intervalo | trechos de 2 s com intervalo > 20 ms | gameplay: jogo méd (mín) |
+    |---|---|---|---|---|---|
+    | padrão antigo (FXAA e mistura ligados) | 56,0 (36) | 55,3 | 61 ms | 44/45 | 58,7 (50,5) |
+    | padrão novo do Linux | 57,4 (41) | 57,0 | 62 ms | 35/45 | 59,4 (56) |
+    | novo + sincronia vertical | 58,0 (40) | 57,9 | 33 ms | 16/45 | 59,2 (53) |
+
+  - **B1 (PGO) feito:** `scripts/pgo_runtime.sh` (opção `PS2X_PGO` no CMake do runtime): compila `ps2_runtime` e `ps2_iop` com contadores, treina com a cutscene inteira mais uma luta depois da esfera (cópia do jogo com o memory card copiado) e recompila com o perfil. Precisou de `-fprofile-correction` (o perfil é gravado com as outras threads rodando, e alguns contadores ficam desencontrados por 1–2) e `-Wno-coverage-mismatch` (o gatilho `PS2X_PGO_DUMP_AT` só existe no build de treino). R4b: os 16 hashes iguais; testes 460/3. Medida (padrão novo do Linux, sem vsync):
+
+    | | cutscene: jogo méd (mín) | VU1 ms/quadro | GSHwWorker | pior intervalo | trechos > 20 ms | gameplay: jogo (mín) | VU1 | GSHwWorker |
+    |---|---|---|---|---|---|---|---|---|
+    | sem PGO | 57,4 (41) | 12,9 | 12,0 | 62 ms | 35/45 | 59,4 (56) | 11,6 | 10,5 |
+    | PGO, 1ª | 58,0 (45) | 11,5 | 10,7 | 32 ms | 19/45 | 59,5 (57) | 10,4 | 9,6 |
+    | PGO, 2ª | 57,6 (42) | 11,7 | 10,8 | 32 ms | 21/45 | 59,1 (55) | 10,6 | 9,6 |
+
+    VU1 e `GSHwWorker` ~10% mais leves, com a mesma imagem. O `out/build` fica em `PS2X_PGO=usar`; depois de mudanças grandes no runtime, rodar o script de novo (funções que mudaram compilam sem perfil). **Falta:** PGO no build do Windows (o perfil precisa sair do MinGW; dá para treinar no Wine).
+  - **Leitura:** o padrão novo ganha 1–1,5 quadro/s e sobe o mínimo; a sincronia vertical quase divide por dois o pior intervalo e os trechos com engasgo. Causa provável: sem vsync, o `SetTargetFPS(60)` do raylib espera a parte final de cada quadro girando (`SUPPORT_PARTIALBUSY_WAIT_LOOP`), e esse giro tira um núcleo das threads pesadas; com vsync a janela dorme na troca do buffer. **Próximo:** se a medida do Windows confirmar, ligar a sincronia vertical por padrão (ou trocar a espera da janela por sono sem giro).
 - **Pronto quando:**
   - Windows do usuário sem engasgo com o jogo a 60.
   - R5 com a cutscene sem trecho de 2 s abaixo de 58.

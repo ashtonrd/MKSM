@@ -39,6 +39,15 @@ cd "$d/jogo" # o runtime cria mc0/ na pasta atual antes de saber onde está o EL
 exec "$d/lib/ld-linux-x86-64.so.2" --library-path "$d/lib" "$d/bin/ps2EntryRunner" "$d/jogo/SLUS_210.87" "$@"
 EOF
 chmod +x "$OUT/jogar.sh"
+# Igual ao jogar.sh, com a medição ligada (N22, A1): a cada 2 s, quadros do jogo, imagens novas e o pior intervalo.
+cat > "$OUT/jogar-medindo.sh" <<'EOF'
+#!/usr/bin/env bash
+# Igual ao jogar.sh, mas grava a medida de desempenho em medida.txt (nesta pasta). Jogue onde engasga e feche o jogo.
+d="$(cd "$(dirname "$0")" && pwd)"
+echo "Medindo. Jogue onde engasga e feche o jogo; a medida fica em $d/medida.txt"
+PS2X_PERF=1 "$d/jogar.sh" "$@" > "$d/medida.txt" 2>&1
+EOF
+chmod +x "$OUT/jogar-medindo.sh"
 
 if [[ ! -f "$OUT/mksm.ini" ]]; then  # o jogo regrava as chaves gráficas e mantém o resto
   { echo "# Configuração do jogo: tire o # da frente de uma linha VAR=valor para usar."

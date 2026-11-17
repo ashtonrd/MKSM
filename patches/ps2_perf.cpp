@@ -11,6 +11,15 @@
 #if defined(__linux__)
 #include <pthread.h>
 #include <sched.h>
+#elif defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <algorithm>
 #endif
 
 namespace ps2_perf
@@ -102,6 +111,51 @@ namespace ps2_perf
         CPU_ZERO(&set);
         CPU_SET(cores[static_cast<unsigned>(role) % cores.size()], &set);
         pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
+#elif defined(_WIN32)
+        // Mesma regra do Linux: um processador lógico por núcleo físico (o menor bit da máscara do núcleo), só com 4+
+        // núcleos. Em processador híbrido, os núcleos de desempenho (EfficiencyClass maior) vêm primeiro.
+        static const std::vector<DWORD_PTR> cores = []
+        {
+            std::vector<DWORD_PTR> firstMasks;
+            const char *setting = std::getenv("PS2X_PIN");
+            if (setting && setting[0] == '0')
+                return firstMasks;
+            DWORD length = 0;
+            GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &length);
+            if (length == 0)
+                return firstMasks;
+            std::vector<unsigned char> buffer(length);
+            if (!GetLogicalProcessorInformationEx(RelationProcessorCore,
+                                                  reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *>(buffer.data()), &length))
+                return firstMasks;
+            DWORD_PTR processMask = 0, systemMask = 0;
+            if (!GetProcessAffinityMask(GetCurrentProcess(), &processMask, &systemMask))
+                return firstMasks;
+            std::vector<std::pair<int, DWORD_PTR>> found; // (classe de eficiência, máscara de um processador lógico)
+            for (DWORD offset = 0; offset < length;)
+            {
+                const auto *entry = reinterpret_cast<const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *>(buffer.data() + offset);
+                if (entry->Size == 0)
+                    break;
+                if (entry->Relationship == RelationProcessorCore && entry->Processor.GroupCount >= 1 &&
+                    entry->Processor.GroupMask[0].Group == 0)
+                {
+                    const DWORD_PTR mask = static_cast<DWORD_PTR>(entry->Processor.GroupMask[0].Mask) & processMask;
+                    if (mask)
+                        found.emplace_back(entry->Processor.EfficiencyClass, mask & (~mask + 1));
+                }
+                offset += entry->Size;
+            }
+            std::stable_sort(found.begin(), found.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+            for (const auto &item : found)
+                firstMasks.push_back(item.second);
+            if (firstMasks.size() < 4u)
+                firstMasks.clear();
+            return firstMasks;
+        }();
+        if (cores.empty())
+            return;
+        SetThreadAffinityMask(GetCurrentThread(), cores[static_cast<unsigned>(role) % cores.size()]);
 #else
         (void)role;
 #endif

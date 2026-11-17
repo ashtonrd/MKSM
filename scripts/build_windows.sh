@@ -53,6 +53,24 @@ rem O runtime cria mc0\ na pasta atual antes de saber onde esta o ELF.
 cd /d "%D%jogo"
 start "" "%D%bin\MKSM.exe" "%D%jogo\SLUS_210.87"
 EOF
+# Igual ao Jogar.bat, com a medição ligada: a cada 2 s, quadros do jogo, imagens novas e o pior intervalo vão para
+# medida.txt (o usuário manda o arquivo; N22, A1).
+crlf > "$OUT/Jogar-medindo.bat" <<'EOF'
+@echo off
+rem Igual ao Jogar.bat, mas grava a medida de desempenho em medida.txt (nesta pasta). Jogue onde engasga e feche o jogo.
+setlocal
+set "D=%~dp0"
+if exist "%D%mksm.ini" for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%D%mksm.ini") do set "%%a=%%b"
+if not defined PS2X_CAPTURE_DIR set "PS2X_CAPTURE_DIR=%D%capturas"
+if not defined PS2X_GS_RECORD_DIR set "PS2X_GS_RECORD_DIR=%D%gsrec"
+set "MKSM_INI=%D%mksm.ini"
+set "PS2X_PERF=1"
+if not exist "%PS2X_CAPTURE_DIR%" mkdir "%PS2X_CAPTURE_DIR%"
+if not exist "%PS2X_GS_RECORD_DIR%" mkdir "%PS2X_GS_RECORD_DIR%"
+echo Medindo. Jogue onde engasga e feche o jogo; a medida fica em medida.txt nesta pasta.
+cd /d "%D%jogo"
+"%D%bin\MKSM.exe" "%D%jogo\SLUS_210.87" > "%D%medida.txt" 2>&1
+EOF
 
 if [[ ! -f "$OUT/mksm.ini" ]]; then  # o jogo regrava as chaves gráficas e mantém o resto
   { echo "# Configuração do jogo: tire o # da frente de uma linha VAR=valor para usar."
@@ -66,6 +84,9 @@ ShaolinMonks RPG: Mortal Kombat: Shaolin Monks recompilado para PC, versão Wind
 
 COMO JOGAR
   Dê dois cliques em Jogar.bat. Não precisa instalar nada.
+  Engasgando? Use o Jogar-medindo.bat: ele grava a medida de desempenho em medida.txt (mande esse arquivo).
+  Num notebook, use o plano de energia "Alto desempenho" e o carregador ligado: no "Equilibrado" o Windows
+  baixa o clock do processador e o jogo perde quadros.
   Se o Windows mostrar "O Windows protegeu o computador", clique em "Mais informações" e
   "Executar assim mesmo" (o programa não tem assinatura digital).
 

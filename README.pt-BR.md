@@ -73,6 +73,8 @@ scripts/instalar.sh "caminho/da/sua.iso"
 
 Use `JOBS=1` se faltar memória. Se parar no meio, rode de novo: as etapas prontas são puladas.
 
+Opcional, no Linux: `scripts/pgo_runtime.sh` treina o runtime com o seu jogo (~15 min, abre a janela sozinho) e recompila com o perfil. A imagem fica idêntica, e a VU1 e o desenho ficam ~10% mais leves.
+
 Para jogar:
 
 ```bash
@@ -94,15 +96,16 @@ Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 | `MKSM_SKIP_INTRO=1` | Pula os vídeos de abertura |
 | `PS2X_VOL_MASTER`, `PS2X_VOL_MUSIC`, `PS2X_VOL_SFX` | Volumes, de 0 a 100 |
 | `PS2X_REVERB=22` | Eco nos efeitos sonoros (0 desliga) |
-| `PS2X_FXAA=0` | Sem suavização de bordas (ligada por padrão) |
+| `PS2X_FXAA=1` | Suavização de bordas (ligada por padrão no Windows; no Linux vem desligada, que rende mais quadros) |
 | `PS2X_GS_HW=0` | Renderizador antigo (resolução do PS2, exato) no lugar do novo |
 | `PS2X_SCALE=1` | Resolução interna do renderizador novo, 1 a 4 (padrão 2; 1 para placa fraca) |
 | `PS2X_WIDESCREEN=1` | Tela 16:9 (3D mais largo; o 2D/HUD estica; filmes ficam 4:3) |
 | `PS2X_RUMBLE=0` | Sem vibração no controle |
-| `PS2X_DEINTERLACE=0` | Mostra um campo por vez, sem misturar os dois (imagem mais dura) |
+| `PS2X_DEINTERLACE=1` | Mistura os dois campos (ligada por padrão no Windows; no Linux vem desligada, que alivia o processador) |
+| `PS2X_VSYNC=1` | Sincronia vertical: a imagem troca junto com o monitor (contra engasgo com o jogo a 60; também no menu Gráfico) |
 | `PS2X_UNCAPPED=1` | Sem trava de tempo real (medir vazão; o jogo acelera) |
 | `PS2X_PERF=1` | Mostra fps, carga do GS e da GPU e para onde vai o tempo de cada quadro, a cada 2 s |
-| `PS2X_PIN=0` | Não fixa as quatro threads pesadas em núcleos físicos separados |
+| `PS2X_PIN=0` | Não fixa as quatro threads pesadas em núcleos físicos separados (Linux e Windows) |
 | `PS2X_GS_GPU=0` | Com `PS2X_GS_HW=0`: o renderizador antigo só na CPU |
 | `PS2X_GS_RASTER=0` | Tiles em compute na GPU em vez do rasterizador |
 | `PS2X_VU1_THREAD=0` | VU1 na thread do jogo |
