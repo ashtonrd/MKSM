@@ -1171,7 +1171,7 @@ index d0fc95d..d180aa9 100644
                      return fmt::format("// NOP operation, no action needed for VU0");
                  case VU0_S2_VRNEXT:
 diff --git a/ps2xRuntime/CMakeLists.txt b/ps2xRuntime/CMakeLists.txt
-index 589d768..a2ff5af 100644
+index 589d768..a834249 100644
 --- a/ps2xRuntime/CMakeLists.txt
 +++ b/ps2xRuntime/CMakeLists.txt
 @@ -11,7 +11,7 @@ option(PS2X_ENABLE_RUNNER_PCH "Precompile the heavy runtime headers for ps2Entry
@@ -1352,7 +1352,7 @@ index 589d768..a2ff5af 100644
  target_link_libraries(ps2EntryRunner
      PRIVATE
      ps2_runtime
-@@ -591,6 +701,29 @@ if(PS2X_IS_ANDROID)
+@@ -591,6 +701,35 @@ if(PS2X_IS_ANDROID)
      target_sources(ps2EntryRunner PRIVATE src/lib/ps2_android_runtime.cpp)
  endif()
  
@@ -1363,9 +1363,15 @@ index 589d768..a2ff5af 100644
 +# ignora o perfil só onde o código mudou (o PS2X_PGO_DUMP_AT da initialize só existe no treino). Vazio = build normal.
 +set(PS2X_PGO "" CACHE STRING "PGO do runtime: vazio, gerar ou usar")
 +set(PS2X_PGO_DIR "${CMAKE_BINARY_DIR}/pgo" CACHE PATH "Pasta do perfil do PGO")
++# A libgcov do MinGW só traz a contagem de caminhos (__gcov_merge_add): no Windows o PGO fica sem o perfil de valores
++# e o de tempo, iguais no gerar e no usar para os contadores baterem.
++set(PS2X_PGO_EXTRA "")
++if(MINGW)
++    set(PS2X_PGO_EXTRA -fno-profile-values -fno-profile-reorder-functions)
++endif()
 +if(PS2X_PGO STREQUAL "gerar" AND NOT MSVC)
 +    foreach(pgo_target ps2_runtime ps2_iop)
-+        target_compile_options(${pgo_target} PRIVATE -fprofile-generate=${PS2X_PGO_DIR} -fprofile-update=prefer-atomic)
++        target_compile_options(${pgo_target} PRIVATE -fprofile-generate=${PS2X_PGO_DIR} -fprofile-update=prefer-atomic ${PS2X_PGO_EXTRA})
 +    endforeach()
 +    target_link_options(ps2_runtime INTERFACE -fprofile-generate=${PS2X_PGO_DIR})
 +    # MinGW estático: a libgcov tem que vir depois das duas bibliotecas (senão falta __gcov_exit no IOP).
@@ -1374,7 +1380,7 @@ index 589d768..a2ff5af 100644
 +    target_compile_definitions(ps2_runtime PRIVATE PS2X_PGO_GEN=1)
 +elseif(PS2X_PGO STREQUAL "usar" AND NOT MSVC)
 +    foreach(pgo_target ps2_runtime ps2_iop)
-+        target_compile_options(${pgo_target} PRIVATE -fprofile-use=${PS2X_PGO_DIR} -fprofile-partial-training -fprofile-correction
++        target_compile_options(${pgo_target} PRIVATE -fprofile-use=${PS2X_PGO_DIR} -fprofile-partial-training -fprofile-correction ${PS2X_PGO_EXTRA}
 +                               -Wno-missing-profile -Wno-coverage-mismatch)
 +    endforeach()
 +endif()
