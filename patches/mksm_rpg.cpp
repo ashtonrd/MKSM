@@ -48,6 +48,7 @@ namespace mksm_rpg
             int pointsPerLevel = std::clamp(static_cast<int>(envNumber("RPG_PONTOS_POR_NIVEL", 1)), 1, 100);
             int cap = std::max(0, static_cast<int>(envNumber("RPG_TETO_ATRIBUTO", 20))); // 0 = sem teto
             int capWisdom = std::max(0, static_cast<int>(envNumber("RPG_TETO_SABEDORIA", 5))); // a Sabedoria acelera os níveis: teto próprio
+            bool loseXpOnDeath = envNumber("RPG_PERDE_XP_AO_MORRER", 1) != 0; // morreu e continuou: perde o XP desde o checkpoint
             // Acréscimo por degrau (usuário, 17/11): +100 até o nível 10, +200 do 10 ao 29, +300 do 30 em diante.
             double xpExtra[3] = {envNumber("RPG_XP_EXTRA_1", 100), envNumber("RPG_XP_EXTRA_2", 200), envNumber("RPG_XP_EXTRA_3", 300)};
             double perPoint[AttrCount] = {envNumber("RPG_FORCA_POR_PONTO", 5),  envNumber("RPG_DEFESA_POR_PONTO", 3),
@@ -68,6 +69,14 @@ namespace mksm_rpg
             const double extra = k < 10 ? c.xpExtra[0] : k < 30 ? c.xpExtra[1] : c.xpExtra[2];
             const double cost = c.xpFirst + c.xpStep * (k - 1) + c.xpAccel * (k - 1.0) * (k - 2.0) / 2.0 + extra;
             return std::max<int64_t>(1, std::llround(cost));
+        }
+        // XP ganho em que o nível começa (o 1 começa em 0).
+        int64_t levelStartXp(const Config &c, int level)
+        {
+            int64_t base = 0;
+            for (int k = 1; k < level && k < c.maxLevel; ++k)
+                base += stepCost(c, k);
+            return base;
         }
         // Teto de pontos de um atributo (0 = sem teto).
         int capFor(const Config &c, int attr)
@@ -252,7 +261,10 @@ namespace mksm_rpg
 
         // XP ganho: a subida do saldo de cada jogador desde o último quadro, com a Sabedoria. O saldo do jogo não muda
         // (regra 6). Medido no quadro porque o crédito do combate (func_1744A0) grava o saldo direto, sem func_174C30.
-        // shortcut: XP perdido ao morrer e ganho de novo conta duas vezes; corrigir se o usuário reclamar.
+        // Queda do saldo: com o menu de pausa aberto (Select, 0x6BEE2C; menu do jogo, 0x4C49E8) é compra de golpe, que não
+        // tira nível; fora dele é o jogo voltando ao checkpoint (morreu e continuou: medido, o saldo volta ao do checkpoint).
+        // Aí o RPG perde o mesmo XP (com a Sabedoria), sem cair abaixo do começo do nível atual: o XP desde o checkpoint
+        // não conta duas vezes e os pontos já gastos continuam valendo.
         void creditXpLocked(const uint8_t *rdram, uint32_t save, int players)
         {
             for (int j = 0; j < players; ++j)
@@ -261,8 +273,20 @@ namespace mksm_rpg
                 const int64_t now = static_cast<int32_t>(rd32(rdram, save + 0x4BA4u + j * 0x60u));
                 const int64_t before = p.lastXp;
                 p.lastXp = now;
-                if (before < 0 || now <= before) // primeiro quadro, compra de golpe ou save recarregado
+                if (before < 0 || now == before) // primeiro quadro (ou save recém-carregado) ou nada mudou
                     continue;
+                if (now < before)
+                {
+                    const bool menu = rd32(rdram, 0x6BEE2Cu) == 1u || rd32(rdram, 0x4C49E8u) == 1u;
+                    if (!menu && cfg().loseXpOnDeath)
+                    {
+                        const double scale = 1.0 + effect(cfg(), Sabedoria, p.points[Sabedoria]);
+                        const int64_t lost = std::llround(static_cast<double>(before - now) * scale);
+                        p.xpGained = std::max(levelStartXp(cfg(), levelLocked(p)), p.xpGained - lost);
+                        p.xpCarry = 0.0;
+                    }
+                    continue;
+                }
                 const double gain = (now - before) * (1.0 + effect(cfg(), Sabedoria, p.points[Sabedoria])) + p.xpCarry;
                 const int64_t whole = static_cast<int64_t>(gain);
                 p.xpCarry = gain - whole;
@@ -658,6 +682,8 @@ namespace mksm_rpg
             stepCost(e, 29) != 22200 || stepCost(e, 30) != 23800 || levelFor(e, 399) != 1 || levelFor(e, 400) != 2)
             return false;
         if (capFor(c, Sabedoria) != 5 || capFor(c, Forca) != 20)
+            return false;
+        if (levelStartXp(c, 1) != 0 || levelStartXp(c, 3) != 700 || levelStartXp(e, 3) != 900)
             return false;
         const auto near = [](double a, double b) { return std::fabs(a - b) < 1e-9; };
         return near(effect(c, Forca, 20), 1.0) && near(effect(c, Defesa, 20), 0.6) && near(effect(c, Defesa, 40), 0.9) &&

@@ -221,6 +221,7 @@ O RPG é uma **variante do Hard**, escolhida em cima dele (pedido do usuário):
 | `RPG_SABEDORIA_POR_PONTO` | 3 | % de XP a mais para o nível |
 | `RPG_TETO_ATRIBUTO` | 20 | Pontos por atributo; 0 = sem teto |
 | `RPG_TETO_SABEDORIA` | 5 | Pontos na Sabedoria (usuário, 17/11: mais que isso fica roubado); 0 = usa o teto geral. Save antigo com mais: o excesso volta como ponto livre |
+| `RPG_PERDE_XP_AO_MORRER` | 1 | Morreu e continuou: perde o XP ganho desde o checkpoint (o mesmo que o jogo tira do saldo), nunca abaixo do começo do nível atual; compra de golpe (menu de pausa aberto) não conta (usuário, 17/11) |
 | `RPG_PONTOS_POR_NIVEL` | 1 | Pontos ganhos a cada nível (usuário, 15/11) |
 | `RPG_INIMIGO_DANO` | 30 | % de dano a mais que os inimigos causam (3.11) |
 | `RPG_INIMIGO_VIDA` | 30 | % de vida a mais dos inimigos (3.11) |
@@ -395,7 +396,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
     - Testes `ps2x_tests` iguais.
   - **Pronto quando:** módulo compilando no Linux e no Windows (`scripts/build_windows.sh`), com as asserções passando.
 
-- [x] **B2 XP ganho ao vivo** (feito, com Sabedoria; `shortcut:` XP perdido ao morrer e ganho de novo conta duas vezes)
+- [x] **B2 XP ganho ao vivo** (feito, com Sabedoria; 17/11: ao morrer e continuar, o jogo volta o saldo ao do checkpoint e o RPG perde o mesmo XP, sem cair de nível, `RPG_PERDE_XP_AO_MORRER`; ganhar de novo dos mesmos inimigos continua valendo, pedido do usuário)
   - **Faça:** o caminho escolhido na A1:
     - caminho 1: ler o acumulado;
     - caminho 2: wrapper da A2 somando a quantia num save RPG;

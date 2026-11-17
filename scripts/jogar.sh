@@ -27,6 +27,7 @@
 #   RPG_XP_EXTRA_1=100    a mais por degrau até o nível 10   RPG_XP_EXTRA_2=200   do 10 ao 29   RPG_XP_EXTRA_3=300   do 30 em diante
 #   RPG_PONTOS_POR_NIVEL=1   pontos a cada nível       RPG_TETO_ATRIBUTO=20 pontos por atributo (0 = sem teto)
 #   RPG_TETO_SABEDORIA=5     pontos na Sabedoria (0 = usa o teto geral)
+#   RPG_PERDE_XP_AO_MORRER=1 morreu e continuou: perde o XP desde o checkpoint, sem cair de nível (0 desliga)
 #   RPG_FORCA_POR_PONTO=5    % de dano causado         RPG_DEFESA_POR_PONTO=3   % de dano recebido a menos
 #   RPG_VIDA_POR_PONTO=5     % de vida máxima          RPG_ROUBO_POR_PONTO=1    % do dano causado que vira vida
 #   RPG_REGEN_POR_PONTO=0,1  % da vida por segundo     RPG_SABEDORIA_POR_PONTO=3 % de XP a mais para o nível
