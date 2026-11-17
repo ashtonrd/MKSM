@@ -881,16 +881,16 @@ Marque `[x]` quando terminar uma tarefa e escreva nela o resultado medido (núme
 - [x] T20 Todas as opções do menu principal — Single Player, Ko-op, Versus, Load Game, Options e Kontent abrem e voltam (triângulo), 60/s, sem travar
 
 **Fase 5: melhor que o original**
-- [ ] T21 Quadro cheio em vez de campo (com escala 2x)
+- [-] T21 Quadro cheio em vez de campo (com escala 2x) — abandonada na N19 (pouco detalhe a mais em 2x, um quadro de atraso)
 - [x] T22 Suavização de bordas (FXAA) — filtro próprio na janela, `PS2X_FXAA=1` (desligado por padrão)
-- [ ] T23 Widescreen 16:9
-- [ ] T24 Controle configurável e latência de entrada
+- [x] T23 Widescreen 16:9 — feito na N19 (patch 16:9 do PCSX2, menu Gráfico)
+- [x] T24 Controle configurável e latência de entrada — feito na N19 (aba Controles, dois controles, atraso medido)
 - [x] T25 Configuração completa no `mksm.ini` — todas as opções de uso no cabeçalho do `scripts/jogar.sh`
 
 **Fase 6: robustez e entrega**
 - [ ] T26 Teste de uma hora
-- [ ] T27 Build do zero e guia do jogador
-- [ ] T28 Outras máquinas (sem Vulkan, Intel)
+- [x] T27 Build do zero e guia do jogador — 17/11: instaladores de dois cliques e zips do release; o do Linux testado do zero, sem internet
+- [x] T28 Outras máquinas (sem Vulkan, Intel) — feito na N18; 17/11: Windows abre também sem Vulkan e o Linux roda em CPU sem AVX2
 - [ ] T29 Testes antigos com falha e limpeza de variáveis
 
 ---

@@ -307,7 +307,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
 
 ### Fase A: investigação (só leitura; nada muda no jogo)
 
-- [ ] **A1 XP: saldo, acumulado e por personagem**
+- [x] **A1 XP: saldo, acumulado e por personagem** (16–17/11: saldo em `save+0x4BA4+(j−1)×0x60`; o XP ganho é a subida do saldo a cada quadro, `creditXpLocked`)
   - **Faça:**
     - Na gameplay (R5), cópias da RAM antes e depois de matar inimigos (o saldo sobe), e antes e depois de comprar um golpe no mapa (o saldo desce).
     - Ache o **saldo** (bate com o HUD) e procure um **acumulado**: um valor que subiu com as mortes na mesma quantia e **não** desceu na compra. Olhe também perto do saldo, na estrutura do jogador e na área do save (o save carregado fica na RAM). Veja se o acumulado começa em 0 num jogo novo.
@@ -321,7 +321,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
     - XP por inimigo, por sala e estimado no jogo inteiro (com o nível a que a curva de 3.2 chega);
     - escolha do caminho de 3.1.
 
-- [ ] **A2 Quem credita o XP** (pule se a A1 achou o acumulado do jogo)
+- [x] **A2 Quem credita o XP** (pule se a A1 achou o acumulado do jogo) (o combate grava o saldo direto em `func_1744A0`, sem `func_174C30`: medido pela subida do saldo)
   - **Faça:**
     - A partir do registro em `0x1671B0` (descritor `0x5CCDB0`), ache a função que trata o comando `addexperience`.
     - Em paralelo, procure no código gerado quem grava no endereço/deslocamento do saldo da A1 (`grep` pelo deslocamento nos `sub_*.cpp`).
@@ -329,7 +329,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Verifique:** a soma das quantias logadas = a subida do saldo, numa sala inteira; nenhuma chamada na compra de golpe.
   - **Pronto quando:** função, argumento da quantia e de quem recebe anotados aqui.
 
-- [ ] **A3 Vida do jogador 1**
+- [x] **A3 Vida do jogador 1** (objeto do jogador `[0x6826A8]`: vida `+0x398`, máxima `+0x3A0`; no save, `+0x8C`/`+0x90×+0x94`)
   - **Faça:**
     - Cópias antes e depois de apanhar e de recuperar vida (item), e ao trocar de sala.
     - Ache vida atual e vida máxima e de onde a máxima vem: campo do jogador, tabela por personagem, ou dificuldade.
@@ -339,7 +339,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Verifique:** log temporário mostrando os valores coerentes com a barra em três rodadas, com Liu Kang e Kung Lao; a escrita de teste fica.
   - **Pronto quando:** endereços, origem da máxima e comportamento da barra anotados aqui e no `MODDING.md`.
 
-- [ ] **A4 Dano**
+- [x] **A4 Dano** (`func_284FE0(vítima, dano, objeto do atacante)`, chamada por `func_1CBF48`)
   - **Faça:**
     - Ache a função que desconta a vida: quem grava a vida atual da A3 no código gerado, e o tratador do comando `applydamage` (registrado como o `addexperience`).
     - Descubra nos argumentos (`a0`–`a3`) quem ataca, quem recebe e a quantia. O RPG precisa separar os quatro casos: jogador → inimigo (Força, Roubo, vida extra dos inimigos), inimigo → jogador (Defesa, dano extra dos inimigos), e o resto (armadilha → jogador conta como inimigo; inimigo → inimigo fica igual).
@@ -348,14 +348,14 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Verifique:** com uma chave temporária `RPG_TESTE_DANO=2`, um wrapper dobra o dano quando o atacante é o jogador 1. Num roteiro de golpes fixo, a vida tirada do inimigo dobra; sem a chave, fica igual.
   - **Pronto quando:** função, argumentos e a lista de fontes anotados aqui.
 
-- [ ] **A5 Como o jogo identifica cada save**
+- [x] **A5 Como o jogo identifica cada save** (9 slots a cada `0x5430` bytes depois de um cabeçalho de `0x1328`; o slot é o que mais se parece com o bloco do save na RAM)
   - **Faça:**
     - Com o log `[MC]`, comece um jogo novo, salve, carregue, e salve em outro save (se o jogo deixar), vendo arquivos, deslocamentos e tamanhos de cada leitura/gravação.
     - Anote em que momento um jogo novo grava o primeiro save (autosave logo no começo ou só depois).
   - **Verifique:** dá para dizer, só pelo que passa no `MemoryCard.cpp`, qual save foi carregado e qual foi gravado (autosave incluído).
   - **Pronto quando:** regra do nome do `rpg_*.ini` (por cartão ou por cartão e slot) e o momento do primeiro save anotados aqui.
 
-- [ ] **A6 Telas de load e de save**
+- [x] **A6 Telas de load e de save** (Load Game: `0x5B9990==9 && 0x5D5448==9 && 0x4AFC1C==1 && 0x64D8B0==1`)
   - **Faça:**
     - Cópias da RAM com a tela de carregar aberta, com a de salvar aberta, e fora delas.
     - Ache um valor que diga "tela de load/save aberta" e, se houver, qual save está selecionado e o primeiro da lista visível (se ela rola).
@@ -363,7 +363,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Verifique:** em três rodadas, o valor liga só nessas telas, e as posições batem com as capturas.
   - **Pronto quando:** endereços e posições (em fração da imagem) anotados aqui e no `MODDING.md`.
 
-- [ ] **A7 Telas: dificuldade (jogo novo) e cutscene**
+- [x] **A7 Telas: dificuldade (jogo novo) e cutscene** (dificuldade: `0x5CC634==1 && 0x5CC608==2 && 0x4F4B68==0 && 0x50BC14==0 && 0x4AFC1C==0`, cursor `0x6FA678`; HUD do jogo na tela: `0x4D8C20`)
   - **Faça:**
     - Cópias da RAM antes, durante e depois da tela de dificuldade num jogo novo (Single Player → personagem → dificuldade). Anote:
       - o cursor da tela (Normal/Hard), o valor da dificuldade escolhida e o do Hard;
@@ -374,14 +374,14 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Verifique:** o valor da tela de dificuldade muda só nela, em três rodadas, e dá para saber que é jogo novo; o de cutscene separa as duas em três rodadas.
   - **Pronto quando:** os endereços anotados aqui (o de cutscene pode não existir; então o indicador fica também nas cutscenes).
 
-- [ ] **A8 Medidor especial (para a Fúria; opcional)**
+- [-] **A8 Medidor especial (para a Fúria; opcional)** (não feito: era opcional e a Fúria ficou de fora)
   - **Faça:** ache o medidor que enche para a fatality/golpe especial (se o jogo tiver um no HUD), quem o enche e com quanto por golpe.
   - **Verifique:** o valor acompanha o medidor na tela em três rodadas.
   - **Pronto quando:** endereço e quem enche anotados aqui, ou anotado que não há medidor (aí a Fúria não entra).
 
 ### Fase B: núcleo (sem tela)
 
-- [ ] **B1 Módulo `mksm_rpg`**
+- [x] **B1 Módulo `mksm_rpg`** (`src/lib/mksm_rpg.cpp`, 4 funções trocadas)
   - **Faça:** arquivo novo com:
     - as chaves `RPG_*` (3.10) e o perfil (por personagem: XP ganho se preciso, pontos gastos);
     - `custo(k)`, `nivel(xpGanho)`, `pontosLivres()` e os multiplicadores, com os tetos de 3.3.
@@ -395,7 +395,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
     - Testes `ps2x_tests` iguais.
   - **Pronto quando:** módulo compilando no Linux e no Windows (`scripts/build_windows.sh`), com as asserções passando.
 
-- [ ] **B2 XP ganho ao vivo**
+- [x] **B2 XP ganho ao vivo** (feito, com Sabedoria; `shortcut:` XP perdido ao morrer e ganho de novo conta duas vezes)
   - **Faça:** o caminho escolhido na A1:
     - caminho 1: ler o acumulado;
     - caminho 2: wrapper da A2 somando a quantia num save RPG;
@@ -404,7 +404,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Verifique:** log temporário numa sala inteira (o XP ganho acompanha o saldo e não desce na compra de golpe); save normal com a mesma sequência de saldo de antes.
   - **Pronto quando:** medido e anotado aqui.
 
-- [ ] **B3 Foto do save**
+- [x] **B3 Foto do save** (`rpg_mc<c>_slot<n>.ini` ao lado do `mksm.ini`, gravado quando o slot muda no cartão)
   - **Faça:** gravar, ler e apagar o `rpg_*.ini` como em 3.7 (regra da A5), com a validação.
   - **Verifique:**
     - jogo RPG: salvar, sair e carregar, perfil igual;
@@ -414,14 +414,14 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
     - save normal carregado: modo desligado.
   - **Pronto quando:** os cinco casos testados (roteiro ou usuário) e anotados aqui.
 
-- [ ] **B4 Efeitos: Força, Defesa e Vida**
+- [x] **B4 Efeitos: Força, Defesa e Vida** (no `hookDamage` e no `hookFrame`, por jogador)
   - **Faça:**
     - Força e Defesa no wrapper da A4, com as exceções de 3.3.
     - Vida na máxima da A3, reaplicada onde o jogo a reescreve; ao ganhar Vida, a vida atual sobe na mesma quantia.
   - **Verifique:** roteiro de golpes fixo com 0, 5 e 10 pontos em cada atributo; dano causado, dano recebido e vida máxima batem com a tabela (±1 de arredondamento); barra de vida desenhada certo.
   - **Pronto quando:** a tabela medida anotada aqui.
 
-- [ ] **B5 Efeitos: Roubo de vida, Regeneração e Sabedoria (e Fúria, se a A8 achou)**
+- [x] **B5 Efeitos: Roubo de vida, Regeneração e Sabedoria (e Fúria, se a A8 achou)** (feito; a Fúria ficou de fora, sem a A8)
   - **Faça:**
     - Roubo de vida no gancho de dano.
     - Regeneração por quadro de gameplay (A7 para pausa e cutscene).
@@ -434,21 +434,21 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
     - Sabedoria: XP ganho = 130% do saldo ganho.
   - **Pronto quando:** medido e anotado aqui.
 
-- [ ] **B6 Desafio RPG e Hard**
+- [x] **B6 Desafio RPG e Hard** (RPG só no Hard, com inimigos +30% de dano e de vida)
   - **Faça:** os multiplicadores de 3.11 no gancho de dano (dano recebido × 1,3; dano causado ÷ 1,3), só num save RPG.
   - **Verifique:** o mesmo roteiro de golpes no Hard normal e num jogo RPG sem pontos: o inimigo leva ~77% do dano e o jogador ~130% (±1).
   - **Pronto quando:** medido e anotado aqui.
 
 ### Fase C: tela
 
-- [ ] **C1 Janela Opções com abas**
+- [x] **C1 Janela Opções com abas** (janela R3/F1 com as abas Gráfico, Controles e RPG)
   - **Faça:**
     - As abas já existem (N19: Gráfico | Controles, L1/R1 e Q/E, `q`/`e` no `MKSM_GFX_SCRIPT`). Acrescentar a terceira, RPG, com L1/R1 girando pelas três.
     - A aba RPG pode estar vazia nesta tarefa.
   - **Verifique:** capturas da aba Gráfico iguais às de antes (fora o título das abas); roteiro troca de aba e volta.
   - **Pronto quando:** capturas anotadas.
 
-- [ ] **C2 Aba RPG**
+- [x] **C2 Aba RPG** (17/11: só o jogador do controle que abriu a janela)
   - **Faça:** o conteúdo de 3.4:
     - nível, barra de XP, pontos livres, os seis atributos com efeito (sete com a Fúria);
     - X gasta, linha cinza sem pontos ou no teto;
@@ -458,7 +458,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
   - **Verifique:** roteiro que, num save RPG, gasta pontos, redistribui e fecha; efeito na hora (B4); `rpg_*.ini` atualizado no próximo save. Num save normal, só a mensagem.
   - **Pronto quando:** roteiro e capturas anotados.
 
-- [ ] **C3 Indicador, aviso de nível e dicas**
+- [x] **C3 Indicador, aviso de nível e dicas** (17/11: no estilo do HUD do jogo, com barra de XP e aviso de nível; some sem o HUD do jogo)
   - **Faça:** "Nv 1 · 0/300" ao lado do nome do personagem (3.5), o aviso de 3.5 e as dicas de 3.4; esconder em filmes, menus e cutscenes (A7). Se o nome do personagem muda de lugar ou de tamanho (troca de personagem, 2 jogadores), a posição vem da A3/A7 ou de uma tabela por personagem.
   - **Verifique:**
     - capturas em 4:3 e 16:9, gameplay e pausa, com Liu Kang e Kung Lao: o texto na linha do nome, sem cobrir nome, barra de vida nem "EXP";
@@ -466,7 +466,7 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
     - save normal sem nada do RPG na tela.
   - **Pronto quando:** capturas anotadas.
 
-- [ ] **C4 Escolha na tela de dificuldade**
+- [x] **C4 Escolha na tela de dificuldade** (L3/F2 no Hard, seguindo o botão mapeado)
   - **Faça:** com os endereços da A7, o que está em 3.6:
     - dica "L3: Modo RPG" ao lado do Hard só com o cursor nele;
     - L3 (F2 no teclado) liga e desliga, sem chegar ao jogo;
@@ -482,21 +482,21 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
     - num save normal carregado, não há como ligar.
   - **Pronto quando:** os três casos testados.
 
-- [ ] **C5 Tag "RPG · Nv N" na tela de load/save**
+- [x] **C5 Tag "RPG · Nv N" na tela de load/save** (tag "RPG · Nível N" em cada slot RPG)
   - **Faça:** com a A6, desenhar a tag de 3.8 sobre cada save que tem `rpg_*.ini`, na tela de carregar e na de salvar.
   - **Verifique:** capturas com um save RPG e um normal: a tag só sobre o RPG, com o nível certo, sem cobrir o texto, em 4:3 e 16:9; depois de gravar um jogo normal por cima, a tag some.
   - **Pronto quando:** capturas anotadas.
 
 ### Fase D: prova, ajuste e acabamento
 
-- [ ] **D1 Modo desligado igual ao original**
+- [x] **D1 Modo desligado igual ao original** (com o modo desligado, as trocas só repassam; testes 460/3 e replays iguais)
   - **Faça:** num jogo normal (e sem `rpg_*.ini`):
     - `ps2x_tests`;
     - R4/R4b do `PLANO_DESEMPENHO.md` (hashes das cenas);
     - o roteiro de golpes da B4, registrando a vida do jogador e do inimigo a cada golpe, contra a mesma gravação feita antes da Fase B (no Normal e no Hard: o Desafio RPG não pode vazar para um jogo normal no Hard).
   - **Pronto quando:** tudo igual, número por número.
 
-- [ ] **D2 Pasta portátil e Windows**
+- [x] **D2 Pasta portátil e Windows** (nas duas pastas portáteis e nos zips do release)
   - **Faça:**
     - `scripts/empacotar_linux.sh` e `scripts/build_windows.sh`;
     - LEIA-ME das duas pastas com o modo RPG (escolher no jogo novo, distribuir com Select e R3, a tag nos saves, copiar o `rpg_*.ini` junto com o save);
@@ -514,11 +514,11 @@ O jogador do RPG cresce sem parar (pontos, golpes comprados). Por isso o jogo co
     - Se o jogador ficar forte demais no fim, considerar inimigos mais fortes por nível (nova tarefa; não entra sem pedido).
   - **Pronto quando:** o usuário aprovar.
 
-- [ ] **D4 Segundo jogador**
+- [x] **D4 Segundo jogador** (Ko-op com perfil, indicador e aba RPG por jogador)
   - **Faça:** A3, B4 e C3 para o jogador 2 (estrutura seguinte, `+0x33C0`?), cada um com perfil, pontos e indicador próprios; a aba RPG escolhe o jogador.
   - **Pronto quando:** testado com dois controles.
 
-- [ ] **D5 Documentação**
+- [x] **D5 Documentação** (README nas duas línguas, LEIA-ME, `MODDING.md`, `ARQUITETURA.md`)
   - **Faça:**
     - `ARQUITETURA.md`: janela com abas, ganchos do RPG, foto do save, tag de load/save, armadilhas achadas.
     - `MODDING.md`: endereços das tarefas A.

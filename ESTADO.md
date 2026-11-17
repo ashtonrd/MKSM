@@ -11,6 +11,9 @@ Escrito em 03/11/2026 (run101), com resumo atualizado em 15/11 logo abaixo. Docu
 - **Ko-op:** o controle 2 tem botões próprios (R3 nele abre a aba Controles dele) e defesa contínua no direcional para cima; a aba RPG mostra só o jogador que abriu a janela.
 - **Visual:** escolha de lutador e HUD do RPG no estilo do jogo (fonte serifada do sistema em versalete, quadro azul com moldura, barra de XP, aviso de nível novo). O indicador some junto com o HUD do jogo (`0x4D8C20`) e não pisca mais em PC lento.
 - **Testes do jogo:** um por vez (dois abertos travam no carregamento ~1 em 4); roteiro até a luta no `ARQUITETURA.md` §6.
+- **Distribuição:** release v1.1 no GitHub com `ShaolinMonksRPG-Windows.zip` (kit WinLibs; compila no próprio Windows, sem instalar nada e sem internet) e `ShaolinMonksRPG-Linux.zip` (compila sem internet); instaladores de dois cliques (`Instalar.bat`, `Instalar.sh`). O do Linux foi testado do zero e sem rede; o do Windows, no Wine até o runtime (o recompilador nativo gera o mesmo C++ do Linux).
+- **Compatibilidade:** o Windows abre sem Vulkan ou com Vulkan 1.0 e desenha pela CPU; a pasta do Linux roda em CPU sem AVX2 (i7-3770 testado pelo usuário). Todas as telas do runtime seguem os botões e teclas mapeados.
+- **Pendências principais:** jogar do começo ao fim (N14/N15), testar o instalador num Windows de verdade, portões de Brutality/Multality com lutadores fora dos 4 clássicos, desempenho dos trechos pesados (N22). A animação parada do Goro fica como está (decisão do usuário).
 
 ## Resumo em 16/11/2026
 

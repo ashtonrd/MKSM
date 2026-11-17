@@ -146,13 +146,13 @@ O usuário escolhe, para a história (Single Player ou Ko-op), um dos lutadores 
 
 - [ ] **C1 Goro's Lair inteiro com cada lutador:** golpes, armas, objetos, chefe, cutscenes, loja de golpes. Anote por lutador o que falha.
 - [ ] **C2 Correções:** para cada falha da C1, a correção no runtime ou um aviso ("este lutador não tem X"). Golpe faltando pode usar um do monge.
-- [ ] **C4 Golpes emprestados:** achar a tabela de golpes e animações por personagem (a que `func_2F6BA0` monta a partir do número) e dar ao Ermac (e aos outros sem golpes) os de um personagem de corpo parecido. O mesmo caminho conserta a animação parada do Goro (47/57), que fica de braços abertos (o usuário pediu, 17/11).
+- [ ] **C4 Golpes emprestados:** achar a tabela de golpes e animações por personagem (a que `func_2F6BA0` monta a partir do número) e dar ao Ermac (e aos outros sem golpes) os de um personagem de corpo parecido. A animação parada do Goro (47/57, de braços abertos) fica como está: decisão do usuário, 17/11.
 - [ ] **C3 Demais fases:** depende de saves do usuário mais adiante (`portatil/backup_save_mc0_15nov` e o atual).
 
 ### Fase D: acabamento
 
-- [ ] **D1 Sem a opção = original:** testes e replays (R3/R4 do `PLANO_DESEMPENHO.md`) iguais.
-- [ ] **D2 Documentação e pastas portáteis:** README (os dois), LEIA-ME, `MODDING.md`, `ARQUITETURA.md`.
+- [x] **D1 Sem a opção = original:** (17/11: testes 460/3 e os 16 hashes dos replays iguais; sem escolha, o jogo usa o lutador da seleção) testes e replays (R3/R4 do `PLANO_DESEMPENHO.md`) iguais.
+- [x] **D2 Documentação e pastas portáteis:** (17/11: README nas duas línguas, LEIA-ME e TESTAR, `MODDING.md`, `ARQUITETURA.md`, pastas e zips do release) README (os dois), LEIA-ME, `MODDING.md`, `ARQUITETURA.md`.
 
 ## 6. Decisões
 
