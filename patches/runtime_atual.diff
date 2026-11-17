@@ -1171,7 +1171,7 @@ index d0fc95d..d180aa9 100644
                      return fmt::format("// NOP operation, no action needed for VU0");
                  case VU0_S2_VRNEXT:
 diff --git a/ps2xRuntime/CMakeLists.txt b/ps2xRuntime/CMakeLists.txt
-index 589d768..a834249 100644
+index 589d768..c7b876e 100644
 --- a/ps2xRuntime/CMakeLists.txt
 +++ b/ps2xRuntime/CMakeLists.txt
 @@ -11,7 +11,7 @@ option(PS2X_ENABLE_RUNNER_PCH "Precompile the heavy runtime headers for ps2Entry
@@ -1363,24 +1363,24 @@ index 589d768..a834249 100644
 +# ignora o perfil só onde o código mudou (o PS2X_PGO_DUMP_AT da initialize só existe no treino). Vazio = build normal.
 +set(PS2X_PGO "" CACHE STRING "PGO do runtime: vazio, gerar ou usar")
 +set(PS2X_PGO_DIR "${CMAKE_BINARY_DIR}/pgo" CACHE PATH "Pasta do perfil do PGO")
-+# A libgcov do MinGW só traz a contagem de caminhos (__gcov_merge_add): no Windows o PGO fica sem o perfil de valores
-+# e o de tempo, iguais no gerar e no usar para os contadores baterem.
-+set(PS2X_PGO_EXTRA "")
-+if(MINGW)
-+    set(PS2X_PGO_EXTRA -fno-profile-values -fno-profile-reorder-functions)
-+endif()
++# MinGW: a libgcov do sistema pode vir reduzida (sem gravar arquivo; a do mingw-w64-gcc do Arch é assim). Com
++# PS2X_PGO_GCOV_LIB apontando para uma completa (a do WinLibs, mesmo GCC), o treino liga ela e a winpthread no lugar.
++set(PS2X_PGO_GCOV_LIB "" CACHE FILEPATH "libgcov.a completa para o treino do PGO no MinGW (vazio = a do sistema)")
 +if(PS2X_PGO STREQUAL "gerar" AND NOT MSVC)
 +    foreach(pgo_target ps2_runtime ps2_iop)
-+        target_compile_options(${pgo_target} PRIVATE -fprofile-generate=${PS2X_PGO_DIR} -fprofile-update=prefer-atomic ${PS2X_PGO_EXTRA})
++        target_compile_options(${pgo_target} PRIVATE -fprofile-generate=${PS2X_PGO_DIR} -fprofile-update=prefer-atomic)
 +    endforeach()
-+    target_link_options(ps2_runtime INTERFACE -fprofile-generate=${PS2X_PGO_DIR})
-+    # MinGW estático: a libgcov tem que vir depois das duas bibliotecas (senão falta __gcov_exit no IOP).
-+    target_link_libraries(ps2_iop INTERFACE gcov)
-+    target_link_libraries(ps2_runtime INTERFACE gcov)
++    if(MINGW AND PS2X_PGO_GCOV_LIB)
++        # sem -fprofile-generate na ligação: o compilador não acrescenta a libgcov do sistema; vem depois das duas bibliotecas
++        target_link_libraries(ps2_iop INTERFACE ${PS2X_PGO_GCOV_LIB} pthread)
++        target_link_libraries(ps2_runtime INTERFACE ${PS2X_PGO_GCOV_LIB} pthread)
++    else()
++        target_link_options(ps2_runtime INTERFACE -fprofile-generate=${PS2X_PGO_DIR})
++    endif()
 +    target_compile_definitions(ps2_runtime PRIVATE PS2X_PGO_GEN=1)
 +elseif(PS2X_PGO STREQUAL "usar" AND NOT MSVC)
 +    foreach(pgo_target ps2_runtime ps2_iop)
-+        target_compile_options(${pgo_target} PRIVATE -fprofile-use=${PS2X_PGO_DIR} -fprofile-partial-training -fprofile-correction ${PS2X_PGO_EXTRA}
++        target_compile_options(${pgo_target} PRIVATE -fprofile-use=${PS2X_PGO_DIR} -fprofile-partial-training -fprofile-correction
 +                               -Wno-missing-profile -Wno-coverage-mismatch)
 +    endforeach()
 +endif()
@@ -6419,7 +6419,7 @@ index 8590f14..9b3156f 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..fa67af5 100644
+index 45cb9d2..b4c15ae 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -6463,7 +6463,7 @@ index 45cb9d2..fa67af5 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -373,10 +387,944 @@ namespace
+@@ -373,10 +387,939 @@ namespace
      }
  }
  
@@ -6485,11 +6485,6 @@ index 45cb9d2..fa67af5 100644
 +// options apply at once, except the renderer and its thread (next start), and go to MKSM_INI.
 +#if defined(PS2X_PGO_GEN)
 +extern "C" void __gcov_dump(void); // libgcov: grava o perfil do PGO (PS2X_PGO_DUMP_AT)
-+#endif
-+#if defined(PS2X_PGO_GEN) && defined(_WIN32)
-+// A libgcov do MinGW não traz o __gcov_exit que o compilador chama no fim do programa. O treino grava o perfil pelo
-+// __gcov_dump e sai por _Exit, então ele nunca precisa fazer nada.
-+extern "C" void __gcov_exit(void) {}
 +#endif
 +extern std::atomic<bool> g_moviePlaying; // Kernel/Stubs/MPEG.cpp
 +uint64_t gsGameFrameSerial();            // gs/gs_frontend.cpp: game frames drawn so far
@@ -7410,7 +7405,7 @@ index 45cb9d2..fa67af5 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,21 +1335,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +1330,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -7435,7 +7430,7 @@ index 45cb9d2..fa67af5 100644
      uint32_t width = 0u;
      uint32_t height = 0u;
      uint32_t displayFbp = 0u;
-@@ -414,14 +1351,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -414,14 +1346,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
                                                     &sourceFbp,
                                                     &usedPreferredDisplaySource))
      {
@@ -7463,7 +7458,7 @@ index 45cb9d2..fa67af5 100644
          return;
      }
  
-@@ -450,13 +1392,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -450,13 +1387,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
@@ -7500,7 +7495,7 @@ index 45cb9d2..fa67af5 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +1430,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +1425,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -7536,7 +7531,7 @@ index 45cb9d2..fa67af5 100644
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +1469,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +1464,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -7545,7 +7540,7 @@ index 45cb9d2..fa67af5 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +1517,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +1512,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -7555,7 +7550,7 @@ index 45cb9d2..fa67af5 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +1657,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +1652,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -7651,7 +7646,7 @@ index 45cb9d2..fa67af5 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -731,12 +1742,64 @@ bool PS2Runtime::initialize(const char *title)
+@@ -731,12 +1737,64 @@ bool PS2Runtime::initialize(const char *title)
  #if defined(PLATFORM_VITA)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
@@ -7718,7 +7713,7 @@ index 45cb9d2..fa67af5 100644
          if (m_debugUiInitCallback)
          {
              m_debugUiInitCallback(*this, m_debugUiUserData);
-@@ -2214,6 +3277,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +3272,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -7730,7 +7725,7 @@ index 45cb9d2..fa67af5 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +3428,16 @@ void PS2Runtime::run()
+@@ -2360,13 +3423,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -7747,7 +7742,7 @@ index 45cb9d2..fa67af5 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +3459,63 @@ void PS2Runtime::run()
+@@ -2388,9 +3454,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -7812,7 +7807,7 @@ index 45cb9d2..fa67af5 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +3526,240 @@ void PS2Runtime::run()
+@@ -2401,25 +3521,240 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -8067,7 +8062,7 @@ index 45cb9d2..fa67af5 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3770,197 @@ void PS2Runtime::run()
+@@ -2430,21 +3765,197 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());
