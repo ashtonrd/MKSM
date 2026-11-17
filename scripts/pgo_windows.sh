@@ -14,7 +14,7 @@ command -v wine >/dev/null || { echo "Falta o wine" >&2; exit 1; }
 echo "== 1/3: compilando com contadores"
 mkdir -p "$PERFIL"
 find "$PERFIL" -name '*.gcda' -delete
-cmake -B "$B" -DPS2X_PGO=gerar -DPS2X_PGO_DIR="$PERFIL" > /dev/null
+cmake -S "$RAIZ/PS2Recomp" -B "$B" -DPS2X_PGO=gerar -DPS2X_PGO_DIR="$PERFIL" > /dev/null
 ninja -C "$B" -j "${JOBS:-$(nproc)}" ps2EntryRunner
 
 echo "== 2/3: treinando no Wine (dois roteiros; não mexa no controle)"
@@ -45,6 +45,6 @@ grep -h "\[pgo\]" "$treino/treino1.txt" "$treino/treino2.txt" || { echo "o trein
 echo "perfil: $(find "$PERFIL" -name '*.gcda' | wc -l) arquivos"
 
 echo "== 3/3: recompilando com o perfil"
-cmake -B "$B" -DPS2X_PGO=usar -DPS2X_PGO_DIR="$PERFIL" > /dev/null
+cmake -S "$RAIZ/PS2Recomp" -B "$B" -DPS2X_PGO=usar -DPS2X_PGO_DIR="$PERFIL" > /dev/null
 ninja -C "$B" -j "${JOBS:-$(nproc)}" ps2EntryRunner
 echo "Pronto. Agora: scripts/build_windows.sh $RAIZ  (monta a pasta com o .exe otimizado)"
