@@ -20,6 +20,7 @@ mkdir -p "$P/vendor"
 rsync -a --exclude=.git --exclude=out "$OBRA/ps2recomp/" "$P/vendor/PS2Recomp/"
 
 echo "== Código das bibliotecas"
+mkdir -p "$P/vendor/deps"
 for n in elfio toml11 fmt libdwarf rabbitizer raylib imgui rlimgui vulkan_headers; do
     rsync -a --exclude=.git "$DEPS/$n-src/" "$P/vendor/deps/$n/"
 done
