@@ -2,7 +2,11 @@
 
 *Mortal Kombat: Shaolin Monks* (PS2) recompiled for PC, with an RPG mode and extra fighters.
 
+### [⬇️ Download now (Windows and Linux)](#download)
+
 **English** · [Português (Brasil)](README.pt-BR.md)
+
+<a id="download"></a>
 
 ## ⬇️ Download
 
