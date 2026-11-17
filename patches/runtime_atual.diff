@@ -6356,7 +6356,7 @@ index 8590f14..9b3156f 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..acd4581 100644
+index 45cb9d2..76a53cb 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -6400,7 +6400,7 @@ index 45cb9d2..acd4581 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -373,10 +387,691 @@ namespace
+@@ -373,10 +387,867 @@ namespace
      }
  }
  
@@ -6503,19 +6503,45 @@ index 45cb9d2..acd4581 100644
 +    enum { TabGfx, TabCtl, TabRpg, TabCount };
 +    // Lutador do jogo novo (tela de dificuldade, L1/R1): o jogo guarda o de cada jogador no save (save+0xCC e
 +    // save+0xD0) e o carrega ao montar a sala (func_1CEE00). Números achados carregando cada um no Goro's Lair.
-+    struct Fighter { int id; const char *name; };
-+    constexpr Fighter kFighters[] = {{0, "Liu Kang"}, {1, "Kung Lao"}, {88, "Sub-Zero"}, {82, "Scorpion"}, {83, "Baraka"},
-+                                     {84, "Reptile"}, {89, "Kitana"}, {90, "Johnny Cage"}, {81, "Kintaro (experimental)"},
-+                                     {27, "Shadow Priest (experimental)"}, {30, "Orochi (experimental)"},
-+                                     {85, "Ermac (sem golpes)"}, {5, "Armor Lion, cortado (sem golpes)"},
-+                                     {6, "Homem de terno, cortado (sem golpes)"}, {23, "Shiva, cortada (sem golpes)"}};
-+    // Ermac e os cortados (nomes "NULL (...)" no HUD) carregam e andam, mas não têm golpes de jogador; 92+ trava.
-+    const char *fighterName(int id)
++    struct Fighter { int id; const char *name; const char *tag; }; // tag: aviso pequeno embaixo do nome, ou nullptr
++    // Ordem pedida pelo usuário (17/11): monges, Sub-Zero e Scorpion, o resto do Versus (os únicos com fatality nos
++    // dados do jogo), quem tem especial, quem só tem golpe normal (Mileena, Jade, Jax e as versões de história do Versus
++    // primeiro, depois mais golpes primeiro), golpe com animação bugada e, por último, quem só anda. Testados um a um pelo usuário; os que quebram a câmera ou não ficam de pé ficaram de
++    // fora (PLANO_PERSONAGENS.md). Números = tabela de nomes do jogo (0x80 bytes cada).
++    constexpr Fighter kFighters[] = {
++        {0, "Liu Kang", nullptr}, {1, "Kung Lao", nullptr}, {88, "Sub-Zero", nullptr}, {82, "Scorpion", nullptr},
++        {89, "Kitana", nullptr}, {90, "Johnny Cage", nullptr}, {83, "Baraka", nullptr}, {84, "Reptile", nullptr},
++        {64, "Shao Kahn", "golpes e especiais"}, {47, "Goro", "golpes e especiais · parado de braços abertos"},
++        {57, "Goro (outro)", "golpes e especiais · parado de braços abertos"}, {54, "Kano", "golpes e especiais"},
++        {62, "Shang Tsung", "golpes e especiais · se sumir, não volta"}, {55, "Inferno Scorpion", "golpes e especiais"},
++        {68, "Ermac", "golpes e especial"}, {81, "Kintaro", "golpes e especiais"}, {58, "Kintaro (outro)", "golpes e especiais"},
++        {66, "Mileena", "só golpes"}, {67, "Jade", "só golpes"}, {74, "Jax", "só golpes"},
++        {52, "Scorpion Boss", "versão de história"}, {56, "Baraka Boss", "versão de história"}, {59, "Reptile Boss", "versão de história"},
++        {65, "Kitana Boss", "versão de história"}, {69, "Sub-Zero Boss", "versão de história"}, {71, "Johnny Cage Boss", "versão de história"},
++        {27, "Shadow Priest", "só golpes"},
++        {30, "Orochi Hellbeast", "só golpes"},
++        {16, "Red Dragon Merc", "só golpes"}, {26, "Mask Guard", "só golpes"}, {9, "Black Dragon Merc", "só golpes"},
++        {31, "Shokan", "cortado · só golpes"}, {36, "Oni Warlord", "só golpes"}, {10, "Demon Captain", "só golpes"},
++        {11, "Demon General", "só golpes"}, {12, "Demon Archer", "só golpes"}, {13, "Demon Handler", "só golpes"},
++        {14, "Tarkata", "só golpes"}, {86, "Stone Johnny Cage", "só golpes"}, {8, "Bloody Skeleton", "só golpes"},
++        {18, "Putrid Corpse", "só golpes · explode e some"}, {29, "Undead Corpse", "só golpes · explode e some"},
++        {19, "Elemental Knight", "só golpes · desmancha, espere"}, {17, "Brother of Shadow", "só golpes · não pula"},
++        {28, "Green Tarkata", "cortado · só golpes"}, {43, "Living Tree Arms", "só golpes"}, {2, "Banshee", "cortada · só golpes"},
++        {42, "Living Tree Mouth", "só golpes"},
++        {15, "Oni", "golpes · bate e corre com falha"}, {7, "Female Ninja", "cortada · golpes, bugada"},
++        {20, "Ninja Wraith", "cortado · golpes, bugado"}, {24, "Chan Chan", "cortado · golpes, bugado"},
++        {34, "Nagiri Swamp", "cortado · golpes, anda bugado"}, {33, "Oni de Fogo", "cortado · golpes, bugado"},
++        {37, "Oni de Chifre", "cortado · golpes, muito bugado"},
++        {53, "Noob Saibot", "sem golpes"}, {70, "Smoke", "sem golpes"}, {72, "Raiden", "sem golpes"}, {73, "Kabal", "sem golpes"},
++        {75, "Sonya", "sem golpes"}, {63, "Shang Tsung (outro)", "sem golpes"}, {85, "Ermac (Versus)", "sem golpes"},
++        {76, "Burning Monk", "sem golpes · meio bugado"}, {77, "Order of Light Monk", "sem golpes · meio bugado"},
++        {5, "Armor Lion", "cortado · sem golpes"}, {6, "Homem de terno", "cortado · sem golpes"}, {23, "Shiva", "cortada · sem golpes"}};
++    const Fighter *findFighter(int id)
 +    {
 +        for (const Fighter &f : kFighters)
 +            if (f.id == id)
-+                return f.name;
-+        return id < 0 ? "o da seleção" : "outro";
++                return &f;
++        return nullptr;
 +    }
 +    struct GfxMenu
 +    {
@@ -6772,6 +6798,105 @@ index 45cb9d2..acd4581 100644
 +        g_gfxBlockInput.store(m.waitRelease, std::memory_order_relaxed);
 +    }
 +
++    // Fonte serifada do sistema para o que desenhamos nas telas do jogo, que usa letras serifadas em versalete;
++    // sem nenhuma destas, fica a fonte do raylib. Carrega no primeiro uso (precisa do contexto GL).
++    const Font &overlayFont()
++    {
++        static const Font font = [] {
++            const char *paths[] = {"C:/Windows/Fonts/palab.ttf", "C:/Windows/Fonts/georgiab.ttf", "C:/Windows/Fonts/timesbd.ttf",
++                                   "/usr/share/fonts/noto/NotoSerifDisplay-Bold.ttf", "/usr/share/fonts/noto/NotoSerif-Bold.ttf",
++                                   "/usr/share/fonts/truetype/noto/NotoSerif-Bold.ttf", "/usr/share/fonts/liberation/LiberationSerif-Bold.ttf",
++                                   "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf", "/usr/share/fonts/TTF/DejaVuSerif-Bold.ttf",
++                                   "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"};
++            int codepoints[191];
++            for (int i = 0; i < 191; ++i)
++                codepoints[i] = i < 95 ? 32 + i : 160 + (i - 95); // ASCII e Latin-1 (acentos)
++            for (const char *path : paths)
++                if (FileExists(path))
++                    if (Font f = LoadFontEx(path, 64, codepoints, 191); f.texture.id != 0)
++                    {
++                        GenTextureMipmaps(&f.texture);
++                        SetTextureFilter(f.texture, TEXTURE_FILTER_TRILINEAR);
++                        return f;
++                    }
++            return GetFontDefault();
++        }();
++        return font;
++    }
++
++    // Versalete como o "Select Difficulty" do jogo: a inicial de cada palavra grande, o resto em maiúsculas menores.
++    // Devolve a largura; com draw=false só mede.
++    float smallCaps(const char *text, float x, float y, float size, Color color, bool draw = true, bool shadow = true)
++    {
++        const Font &f = overlayFont();
++        const float small = size * 0.78f, spacing = size * 0.04f, start = x, drop = std::max(1.0f, size / 14.0f);
++        bool wordStart = true;
++        for (const char *c = text; *c;)
++        {
++            int bytes = 1;
++            int cp = GetCodepointNext(c, &bytes);
++            c += bytes;
++            const bool big = wordStart;
++            wordStart = cp == ' ';
++            if ((cp >= 'a' && cp <= 'z') || (cp >= 0xE0 && cp <= 0xFE && cp != 0xF7))
++                cp -= 32;
++            const float s = big ? size : small, top = y + (size - s) * 0.8f; // mesma linha de base
++            if (draw && cp != ' ')
++            {
++                if (shadow)
++                    DrawTextCodepoint(f, cp, Vector2{x + drop, top + drop}, s, Color{0, 0, 0, static_cast<unsigned char>(color.a * 0.8f)});
++                DrawTextCodepoint(f, cp, Vector2{x, top}, s, color);
++            }
++            const GlyphInfo g = GetGlyphInfo(f, cp);
++            x += (g.advanceX != 0 ? g.advanceX : GetGlyphAtlasRec(f, cp).width) * s / f.baseSize + spacing;
++        }
++        return x - start;
++    }
++
++    void smallCapsCentered(const char *text, float cx, float y, float size, Color color)
++    {
++        smallCaps(text, cx - smallCaps(text, 0, 0, size, color, false) / 2, y, size, color);
++    }
++
++    // Quadro no estilo do diálogo do jogo: azul-escuro translúcido com moldura dupla clara.
++    void drawGamePanel(Rectangle r, float alpha = 1.0f)
++    {
++        const float t = std::max(1.0f, r.height / 70.0f);
++        const auto a = [alpha](int v) { return static_cast<unsigned char>(v * alpha); };
++        DrawRectangleRec(r, Color{12, 22, 56, a(185)});
++        DrawRectangleLinesEx(r, 1.5f * t, Color{186, 186, 196, a(225)});
++        DrawRectangleLinesEx(Rectangle{r.x + 4 * t, r.y + 4 * t, r.width - 8 * t, r.height - 8 * t}, t, Color{186, 186, 196, a(90)});
++    }
++
++    // Texto do HUD do jogo: versalete com contorno escuro, como o "EXP:" e os nomes em cima das barras.
++    float hudText(const char *text, float x, float y, float size, Color color, bool draw = true)
++    {
++        if (draw)
++        {
++            const float o = std::max(1.0f, size / 13.0f);
++            const Color edge{18, 12, 4, color.a};
++            for (int dx = -1; dx <= 1; ++dx)
++                for (int dy = -1; dy <= 1; ++dy)
++                    if (dx != 0 || dy != 0)
++                        smallCaps(text, x + dx * o, y + dy * o, size, edge, true, false);
++        }
++        return smallCaps(text, x, y, size, color, draw, false);
++    }
++
++    // Barra fina no estilo das do HUD: fundo escuro, moldura metálica, enchimento com brilho em cima.
++    void hudBar(Rectangle r, float frac, Color fill)
++    {
++        frac = std::clamp(frac, 0.0f, 1.0f);
++        const float e = std::max(1.0f, r.height / 6.0f);
++        DrawRectangleRec(Rectangle{r.x - 2 * e, r.y - 2 * e, r.width + 4 * e, r.height + 4 * e}, Color{18, 12, 4, 220});
++        DrawRectangleLinesEx(Rectangle{r.x - e, r.y - e, r.width + 2 * e, r.height + 2 * e}, e, Color{176, 170, 160, 230});
++        DrawRectangleRec(r, Color{30, 26, 40, 230});
++        DrawRectangleRec(Rectangle{r.x, r.y, r.width * frac, r.height}, fill);
++        DrawRectangleRec(Rectangle{r.x, r.y, r.width * frac, r.height * 0.35f},
++                         Color{static_cast<unsigned char>(std::min(255, fill.r + 50)), static_cast<unsigned char>(std::min(255, fill.g + 50)),
++                               static_cast<unsigned char>(std::min(255, fill.b + 60)), fill.a});
++    }
++
 +    void drawGfxMenu(const Rectangle &area, bool hint)
 +    {
 +        const GfxSettings &g = gfx();
@@ -6787,10 +6912,8 @@ index 45cb9d2..acd4581 100644
 +                char rpgLabel[32];
 +                std::snprintf(rpgLabel, sizeof(rpgLabel), "R3: RPG +%d", freeAll);
 +                const char *label = !rpg.active ? "R3: Gráfico" : freeAll > 0 ? rpgLabel : "R3: Gráfico · RPG";
-+                const int x = static_cast<int>(area.x + area.width) - MeasureText(label, font) - font,
-+                          y = static_cast<int>(area.y + area.height) - font * 2;
-+                DrawText(label, x + 2, y + 2, font, Color{0, 0, 0, 200});
-+                DrawText(label, x, y, font, gold);
++                const float size = font * 1.1f;
++                smallCaps(label, area.x + area.width - smallCaps(label, 0, 0, size, gold, false) - font, area.y + area.height - font * 2.2f, size, gold);
 +            }
 +            return;
 +        }
@@ -6946,7 +7069,9 @@ index 45cb9d2..acd4581 100644
 +    {
 +        if (bool hard = false; mksm_rpg::difficultyScreen(rdram, hard))
 +            g_diff.seen = GetTime(), g_diff.hard = hard;
-+        g_diff.open = GetTime() - g_diff.seen < 0.5;
++        uint32_t loaded = 0; // 0x50BC14 = 1: a partida começou a carregar; o painel some na hora, sem esperar a folga
++        std::memcpy(&loaded, rdram + 0x50BC14u, 4u);
++        g_diff.open = GetTime() - g_diff.seen < 0.5 && loaded == 0u;
 +        const bool open = g_diff.open, hard = g_diff.hard;
 +        static bool wasOpen = false;
 +        if (open && !wasOpen) // cada jogo novo começa sem RPG e com os lutadores da seleção
@@ -6970,11 +7095,19 @@ index 45cb9d2..acd4581 100644
 +        }
 +        // Lutador do jogo novo: L2/R2 no controle de cada jogador (Shift esq./dir. no teclado, jogador 1; L1/R1 trocam
 +        // as abas da janela R3). -1 = o escolhido na seleção.
++        static int heldDir[2] = {};
++        static double nextStep[2] = {};
 +        for (int j = 0; j < 2; ++j)
 +        {
 +            const bool pad = IsGamepadAvailable(j);
-+            const int dir = (pad && IsGamepadButtonPressed(j, GAMEPAD_BUTTON_RIGHT_TRIGGER_2)) || (j == 0 && IsKeyPressed(KEY_RIGHT_SHIFT)) ? 1
-+                          : (pad && IsGamepadButtonPressed(j, GAMEPAD_BUTTON_LEFT_TRIGGER_2)) || (j == 0 && IsKeyPressed(KEY_LEFT_SHIFT)) ? -1 : 0;
++            const int want = (pad && IsGamepadButtonDown(j, GAMEPAD_BUTTON_RIGHT_TRIGGER_2)) || (j == 0 && IsKeyDown(KEY_RIGHT_SHIFT)) ? 1
++                           : (pad && IsGamepadButtonDown(j, GAMEPAD_BUTTON_LEFT_TRIGGER_2)) || (j == 0 && IsKeyDown(KEY_LEFT_SHIFT)) ? -1 : 0;
++            // um passo ao apertar; segurado, passa sozinho depois de 0,4 s (a lista tem ~60 nomes)
++            int dir = 0;
++            if (want != heldDir[j])
++                dir = want, heldDir[j] = want, nextStep[j] = GetTime() + 0.4;
++            else if (want != 0 && GetTime() >= nextStep[j])
++                dir = want, nextStep[j] = GetTime() + 0.09;
 +            if (dir == 0)
 +                continue;
 +            constexpr int n = static_cast<int>(std::size(kFighters)) + 1; // posição 0 = o escolhido no jogo
@@ -6988,24 +7121,18 @@ index 45cb9d2..acd4581 100644
 +        }
 +    }
 +
-+    void drawShadowText(const char *text, int x, int y, int size, Color color)
-+    {
-+        DrawText(text, x + 2, y + 2, size, Color{0, 0, 0, 200});
-+        DrawText(text, x, y, size, color);
-+    }
-+
 +    // Por cima da imagem do jogo (posições em fração dela, certas em 4:3 e 16:9): marca na tela de
 +    // dificuldade, nível ao lado do nome do personagem e o aviso de nível novo.
-+    void drawRpgOverlay(const Rectangle &area, const uint8_t *rdram, bool inPlay, bool inGameMenu, bool gameDrawing)
++    void drawRpgOverlay(const Rectangle &area, const uint8_t *rdram, bool inPlay, bool inGameMenu, bool gameDrawing, bool gameAlive)
 +    {
 +        if (g_gfxMenu.open) // a janela R3 fica por cima de tudo
 +            return;
 +        if (inPlay && !inGameMenu && g_p2BlockLatch.load(std::memory_order_relaxed))
 +        {
-+            const int size = std::max(10, static_cast<int>(area.height / 40.0f));
++            const float size = std::max(10.0f, area.height / 36.0f);
 +            const char *note = "J2 defendendo (cima no controle 2 desliga)";
-+            drawShadowText(note, static_cast<int>(area.x + area.width) - MeasureText(note, size) - size, static_cast<int>(area.y + area.height * 0.93f),
-+                           size, Color{214, 170, 84, 255});
++            const Color c{236, 224, 44, 255};
++            hudText(note, area.x + area.width - hudText(note, 0, 0, size, c, false) - size, area.y + area.height * 0.93f, size, c);
 +        }
 +        const Color gold{214, 170, 84, 255}, dim{190, 160, 110, 255};
 +        const int font = static_cast<int>(std::max(12.0f, area.height / 30.0f));
@@ -7016,37 +7143,55 @@ index 45cb9d2..acd4581 100644
 +                if (int level = 0; mksm_rpg::slotIsRpg(0, k, level))
 +                {
 +                    char tag[32];
-+                    std::snprintf(tag, sizeof(tag), "RPG · Nv %d", level);
-+                    const int size = std::max(10, font * 3 / 5);
++                    std::snprintf(tag, sizeof(tag), "RPG · Nível %d", level);
++                    const float size = std::max(10.0f, font * 0.62f);
 +                    const Vector2 p = at(0.168f, 0.330f + 0.058f * k - 0.031f); // logo acima do nome do slot
-+                    drawShadowText(tag, static_cast<int>(p.x), static_cast<int>(p.y) - size / 2, size, gold);
++                    hudText(tag, p.x, p.y - size / 2, size, gold);
 +                }
 +            return;
 +        }
 +        if (g_diff.open)
 +        {
++            const Color yellow{236, 214, 52, 255}, cream{236, 230, 214, 255}, muted{150, 140, 120, 255};
 +            if (g_diff.hard) // à direita da palavra HARD
 +            {
 +                const Vector2 p = at(0.565f, 0.488f);
 +                if (mksm_rpg::armed())
-+                    drawShadowText("RPG", static_cast<int>(p.x), static_cast<int>(p.y - font * 0.2f), font + font / 2, gold);
++                    smallCaps("RPG", p.x, p.y - font * 0.35f, font * 1.5f, yellow);
 +                else
-+                    drawShadowText("L3 (F2): Modo RPG", static_cast<int>(p.x), static_cast<int>(p.y), font * 3 / 4, dim);
++                    smallCaps(IsGamepadAvailable(0) ? "L3: Modo RPG" : "F2: Modo RPG", p.x, p.y, font * 0.8f, muted);
 +            }
-+            // Embaixo do quadro: o lutador de cada jogador (L2/R2 no controle dele).
-+            for (int j = 0; j < 2; ++j)
++            // Embaixo do quadro do jogo: o lutador de cada jogador (L2/R2 no controle dele; o 2 só com dois controles).
++            const bool second = IsGamepadAvailable(1) || mksm_rpg::fighterPick(1) >= 0;
++            const float rowH = font * 1.9f, title = font * 0.85f;
++            const Rectangle panel{area.x + area.width * 0.27f, area.y + area.height * 0.712f, area.width * 0.46f,
++                                  title + font * 0.9f + rowH * (second ? 2.0f : 1.0f)};
++            drawGamePanel(panel);
++            const float cx = panel.x + panel.width / 2;
++            smallCapsCentered(second ? "Lutadores" : "Lutador", cx, panel.y + font * 0.45f, title, yellow);
++            for (int j = 0; j < (second ? 2 : 1); ++j)
 +            {
 +                const int id = mksm_rpg::fighterPick(j);
-+                char line[96];
-+                std::snprintf(line, sizeof(line), j == 0 ? "L2/R2: lutador  %s" : "Ko-op, controle 2  L2/R2: %s", fighterName(id));
-+                const int size = font * 3 / 4;
-+                const Vector2 q = at(0.5f, 0.74f + 0.045f * j);
-+                drawShadowText(line, static_cast<int>(q.x) - MeasureText(line, size) / 2, static_cast<int>(q.y), size, id >= 0 ? gold : dim);
++                const Fighter *f = findFighter(id);
++                const float y = panel.y + font * 0.6f + title + rowH * j, size = font * 1.05f;
++                smallCapsCentered(f ? f->name : "Da seleção", cx, y, size, f ? cream : muted);
++                if (f && f->tag)
++                    smallCapsCentered(f->tag, cx, y + size * 1.0f, font * 0.62f, Color{214, 140, 84, 255});
++                if (second)
++                    smallCaps(j == 0 ? "J1" : "J2", panel.x + font * 0.7f, y + size * 0.15f, font * 0.7f, muted);
++                // setas com o botão, dos dois lados do nome
++                const bool pad = IsGamepadAvailable(j);
++                const float ay = y + size * 0.5f, ax = panel.width * 0.30f, tri = font * 0.38f, hint = font * 0.72f;
++                DrawTriangle(Vector2{cx - ax - tri, ay}, Vector2{cx - ax, ay + tri}, Vector2{cx - ax, ay - tri}, yellow);
++                DrawTriangle(Vector2{cx + ax + tri, ay}, Vector2{cx + ax, ay - tri}, Vector2{cx + ax, ay + tri}, yellow);
++                const char *left = pad ? "L2" : "Shift", *right = pad ? "R2" : "Shift";
++                smallCaps(left, cx - ax - tri * 1.6f - smallCaps(left, 0, 0, hint, muted, false), ay - hint * 0.5f, hint, muted);
++                smallCaps(right, cx + ax + tri * 1.6f, ay - hint * 0.5f, hint, muted);
 +            }
 +            return;
 +        }
 +        static double bannerUntil = 0.0;
-+        static char banner[96] = "";
++        static char banner[64] = "", bannerSub[96] = "";
 +        const mksm_rpg::Snapshot p1 = mksm_rpg::snapshot(0);
 +        for (int j = 0; j < 2; ++j)
 +        {
@@ -7054,35 +7199,66 @@ index 45cb9d2..acd4581 100644
 +            if (const int ups = mksm_rpg::takeLevelUps(j, newLevel); ups > 0 && (j == 0 || p1.coop))
 +            {
 +                const int pts = ups * p1.pointsPerLevel;
-+                std::snprintf(banner, sizeof(banner), "%sNÍVEL %d!  +%d ponto%s  ·  Select e R3 para distribuir",
-+                              p1.coop ? (j == 0 ? "J1  " : "J2  ") : "", newLevel, pts, pts == 1 ? "" : "s");
++                std::snprintf(banner, sizeof(banner), "%sNível %d!", p1.coop ? (j == 0 ? "Jogador 1 · " : "Jogador 2 · ") : "", newLevel);
++                std::snprintf(bannerSub, sizeof(bannerSub), "+%d ponto%s · Select e R3 para distribuir", pts, pts == 1 ? "" : "s");
 +                bannerUntil = GetTime() + 3.0;
 +            }
 +        }
-+        if (!p1.active || !inPlay || inGameMenu || !gameDrawing || g_gfxMenu.open || g_moviePlaying.load(std::memory_order_relaxed))
++        // inPlay e gameAlive caem por um quadro ou outro num engasgo; o indicador só some depois de meio segundo assim (piscava).
++        // 0x4D8C20 = 1 só com o HUD do jogo na tela (0 nas cenas, no Game Over e no carregamento): some junto com ele.
++        static double playSeen = -10.0;
++        if (inPlay && gameAlive)
++            playSeen = GetTime();
++        uint32_t hudOn = 0;
++        std::memcpy(&hudOn, rdram + 0x4D8C20u, 4u);
++        if (!p1.active || hudOn != 1u || GetTime() - playSeen > 0.5 || inGameMenu || g_gfxMenu.open ||
++            g_moviePlaying.load(std::memory_order_relaxed))
 +            return;
-+        // Acima do "EXP" de cada jogador (o do jogador 2, no co-op, fica do lado direito da tela).
++        // Acima do "EXP" de cada jogador (o do jogador 2, no co-op, à direita): "Nível N", barra do XP até o próximo,
++        // o XP em números e "+N" piscando quando há pontos para distribuir.
++        const Color hudYellow{236, 224, 44, 255}, cream{236, 230, 214, 255};
 +        for (int j = 0; j < (p1.coop ? 2 : 1); ++j)
 +        {
 +            const mksm_rpg::Snapshot rpg = j == 0 ? p1 : mksm_rpg::snapshot(1);
-+            char text[64];
-+            const long long in = rpg.xpInLevel, step = rpg.xpStep;
-+            if (step > 0 && rpg.freePoints > 0)
-+                std::snprintf(text, sizeof(text), "Nv %d+%d · %lld/%lld", rpg.level, rpg.freePoints, in, step);
-+            else if (step > 0)
-+                std::snprintf(text, sizeof(text), "Nv %d · %lld/%lld", rpg.level, in, step);
++            char level[24], nums[40], plus[12] = "";
++            std::snprintf(level, sizeof(level), "Nível %d", rpg.level);
++            if (rpg.xpStep > 0)
++                std::snprintf(nums, sizeof(nums), "%lld/%lld", static_cast<long long>(rpg.xpInLevel), static_cast<long long>(rpg.xpStep));
 +            else
-+                std::snprintf(text, sizeof(text), "Nv %d · MÁX", rpg.level);
-+            const int size = font * 4 / 5;
-+            const Vector2 pos = j == 0 ? at(0.147f, 0.022f) : at(0.85f, 0.022f);
-+            const int x = j == 0 ? static_cast<int>(pos.x) : static_cast<int>(pos.x) - MeasureText(text, size);
-+            drawShadowText(text, x, static_cast<int>(pos.y), size, gold);
++                std::snprintf(nums, sizeof(nums), "Máx");
++            if (rpg.freePoints > 0)
++                std::snprintf(plus, sizeof(plus), "+%d", rpg.freePoints);
++            const float size = font * 0.92f, small = size * 0.8f, gap = font * 0.35f, barW = area.width * 0.075f, barH = size * 0.34f;
++            const float wLevel = hudText(level, 0, 0, size, hudYellow, false), wNums = smallCaps(nums, 0, 0, small, cream, false),
++                        wPlus = plus[0] ? hudText(plus, 0, 0, size, hudYellow, false) + gap : 0.0f;
++            const float total = wLevel + gap + barW + gap + wNums + wPlus;
++            const Vector2 pos = j == 0 ? at(0.147f, 0.016f) : at(0.85f, 0.016f);
++            float x = j == 0 ? pos.x : pos.x - total;
++            hudText(level, x, pos.y, size, hudYellow);
++            x += wLevel + gap;
++            const float frac = rpg.xpStep > 0 ? static_cast<float>(rpg.xpInLevel) / static_cast<float>(rpg.xpStep) : 1.0f;
++            hudBar(Rectangle{x, pos.y + size * 0.36f, barW, barH}, frac, Color{226, 178, 36, 255});
++            x += barW + gap;
++            smallCaps(nums, x, pos.y + (size - small) * 0.8f, small, cream);
++            x += wNums + gap;
++            if (plus[0]) // pisca devagar para chamar a atenção sem incomodar
++            {
++                const float pulse = 0.6f + 0.4f * std::sin(static_cast<float>(GetTime()) * 4.0f);
++                hudText(plus, x, pos.y, size, Color{120, 230, 90, static_cast<unsigned char>(255 * pulse)});
++            }
 +        }
-+        if (GetTime() < bannerUntil)
++        if (const double left = bannerUntil - GetTime(); left > 0.0)
 +        {
-+            const int size = font + font / 3;
-+            const Vector2 p = at(0.5f, 0.17f);
-+            drawShadowText(banner, static_cast<int>(p.x) - MeasureText(banner, size) / 2, static_cast<int>(p.y), size, gold);
++            // entra em 0,25 s e some no último meio segundo
++            const float alpha = static_cast<float>(std::min(1.0, std::min((3.0 - left) / 0.25, left / 0.5)));
++            const float big = font * 1.55f, sub = font * 0.72f;
++            const float w = std::max(hudText(banner, 0, 0, big, hudYellow, false), smallCaps(bannerSub, 0, 0, sub, cream, false)) + font * 2.4f;
++            const Rectangle r{area.x + (area.width - w) / 2, area.y + area.height * 0.15f, w, big + sub + font * 1.3f};
++            drawGamePanel(r, alpha);
++            const unsigned char a = static_cast<unsigned char>(255 * alpha);
++            const float cx = r.x + r.width / 2;
++            hudText(banner, cx - hudText(banner, 0, 0, big, hudYellow, false) / 2, r.y + font * 0.45f, big, Color{236, 224, 44, a});
++            smallCapsCentered(bannerSub, cx, r.y + font * 0.75f + big, sub, Color{236, 230, 214, a});
 +        }
 +    }
 +}
@@ -7094,7 +7270,7 @@ index 45cb9d2..acd4581 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,21 +1082,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +1258,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -7119,7 +7295,7 @@ index 45cb9d2..acd4581 100644
      uint32_t width = 0u;
      uint32_t height = 0u;
      uint32_t displayFbp = 0u;
-@@ -414,14 +1098,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -414,14 +1274,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
                                                     &sourceFbp,
                                                     &usedPreferredDisplaySource))
      {
@@ -7147,7 +7323,7 @@ index 45cb9d2..acd4581 100644
          return;
      }
  
-@@ -450,13 +1139,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -450,13 +1315,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
@@ -7184,7 +7360,7 @@ index 45cb9d2..acd4581 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +1177,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +1353,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -7220,7 +7396,7 @@ index 45cb9d2..acd4581 100644
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +1216,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +1392,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -7229,7 +7405,7 @@ index 45cb9d2..acd4581 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +1264,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +1440,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -7239,7 +7415,7 @@ index 45cb9d2..acd4581 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +1404,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +1580,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -7335,7 +7511,7 @@ index 45cb9d2..acd4581 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -732,9 +1490,49 @@ bool PS2Runtime::initialize(const char *title)
+@@ -732,9 +1666,49 @@ bool PS2Runtime::initialize(const char *title)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
          SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -7385,7 +7561,7 @@ index 45cb9d2..acd4581 100644
  #endif
          SetTargetFPS(60);
          if (m_debugUiInitCallback)
-@@ -2214,6 +3012,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +3188,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -7397,7 +7573,7 @@ index 45cb9d2..acd4581 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +3163,16 @@ void PS2Runtime::run()
+@@ -2360,13 +3339,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -7414,7 +7590,7 @@ index 45cb9d2..acd4581 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +3194,63 @@ void PS2Runtime::run()
+@@ -2388,9 +3370,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -7479,7 +7655,7 @@ index 45cb9d2..acd4581 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +3261,239 @@ void PS2Runtime::run()
+@@ -2401,25 +3437,240 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -7719,12 +7895,13 @@ index 45cb9d2..acd4581 100644
 +        // (32+ frames/s; loads and stalls draw almost nothing). Never over a movie.
 +        static double drawRateAt = 0.0, menuSince = 0.0;
 +        static uint64_t drawRateFrames = 0;
-+        static bool gameDrawing = false;
++        static bool gameDrawing = false, gameAlive = false;
 +        const double hintNow = GetTime();
 +        if (hintNow - drawRateAt >= 0.25)
 +        {
 +            const uint64_t frames = gsGameFrameSerial();
 +            gameDrawing = frames - drawRateFrames >= 8u;
++            gameAlive = frames - drawRateFrames >= 2u; // na fase: não travado (PC lento desenha menos de 32/s)
 +            drawRateAt = hintNow, drawRateFrames = frames;
 +        }
 +        if (!(inPlay == 0u && inGameMenu == 0u && gameDrawing))
@@ -7733,7 +7910,7 @@ index 45cb9d2..acd4581 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3504,197 @@ void PS2Runtime::run()
+@@ -2430,21 +3681,197 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());
@@ -7899,7 +8076,7 @@ index 45cb9d2..acd4581 100644
 +        if (bicubicOn && bicubic.id != 0)
 +            EndShaderMode();
 +        drawGfxMenu(dstRect, gfxHint);
-+        drawRpgOverlay(dstRect, m_memory.getRDRAM(), inPlay == 1u, inGameMenu == 1u, gameDrawing);
++        drawRpgOverlay(dstRect, m_memory.getRDRAM(), inPlay == 1u, inGameMenu == 1u, gameDrawing, gameAlive);
          if (m_debugUiInitialized && m_debugUiDrawCallback)
          {
              m_debugUiDrawCallback(*this, m_debugUiUserData);

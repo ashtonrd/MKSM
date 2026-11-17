@@ -31,7 +31,7 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |
 | RPG mode (levels and attribute points) | 🟡 Implemented, Single Player and Ko-op (see [RPG mode](#rpg-mode-optional)); balance still being tested |
-| Fighters | ✅ All 8 unlocked in Versus, and Sub-Zero and Scorpion in the story character select (`MKSM_VERSUS_TODOS=0` restores the original unlocks); any of them (plus Kintaro, the Shadow Priest and Orochi, experimental, and Ermac and three cut characters that walk but have no attacks) can be picked for a new story or Ko-op game with **L2/R2** on the difficulty screen; story compatibility still being tested ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
+| Fighters | ✅ All 8 unlocked in Versus, and Sub-Zero and Scorpion in the story character select (`MKSM_VERSUS_TODOS=0` restores the original unlocks); 67 fighters (Versus, bosses such as Shao Kahn, Goro and Shang Tsung, enemies and cut characters) can be picked for a new story or Ko-op game with **L2/R2** on the difficulty screen; story compatibility still being tested ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
 | Fullscreen | ✅ F11 |
 | Higher internal resolution | ✅ New batching renderer at 2x by default, as fast as the old one; `PS2X_GS_HW=0` goes back to the old one, `PS2X_SCALE=1..4` picks the scale |
 | Graphics menu for weaker PCs | ✅ R3 in menus/pause (or F1): internal resolution, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini` |
@@ -96,17 +96,20 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) �
 ## Other fighters
 
 - **Unlocked:** all 8 Versus fighters (Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage), and Sub-Zero and Scorpion in the story character select (the game normally unlocks them after finishing the story with each monk). `MKSM_VERSUS_TODOS=0` in `mksm.ini` restores the original unlocks.
-- **Story and Ko-op with another fighter:** on a **new game**, on the *Select Difficulty* screen, each player presses **L2/R2** on their own controller (**left/right Shift** on the keyboard for player 1) to pick any fighter from the list below. The choice is saved with the game and can't be changed afterwards, so bought moves never mix between characters. In the story, specials are **R1 + a button**.
+- **Story and Ko-op with another fighter:** on a **new game**, on the *Select Difficulty* screen, each player presses **L2/R2** on their own controller (**left/right Shift** on the keyboard for player 1) (held, it keeps scrolling) to pick one of 67 fighters, in the order of the table below. The choice is saved with the game and can't be changed afterwards, so bought moves never mix between characters. In the story, specials are **R1 + a button**.
 
-| Fighter | Attacks | Specials | Status |
-|---|---|---|---|
-| Liu Kang, Kung Lao, Sub-Zero, Scorpion | yes | yes | Confirmed by playing |
-| Johnny Cage | yes | yes (green fireball, shadow kick) | The in-game move list shows generic names |
-| Reptile, Baraka, Kitana | yes | not tested one by one | Expected to behave like Johnny Cage |
-| Kintaro, Shadow Priest, Orochi | yes (their own) | — | Experimental: big, odd camera and collision; no real block (holding L2 cuts damage to 20%, but the game does not count it as a block, so parts that require blocking do not advance) |
-| Ermac, and the cut characters Armor Lion, the man in a suit and Shiva | **no** | — | Just to look at: they load and walk, but have no player moves (the man in a suit and Shiva have no animation) |
+| Group (in list order) | Fighters | Status |
+|---|---|---|
+| Monks and Versus | Liu Kang, Kung Lao, Sub-Zero, Scorpion, Kitana, Johnny Cage, Baraka, Reptile | Attacks, specials and fatalities (the only ones with fatality animations in the game data) |
+| With specials | Shao Kahn, Goro (two), Kano, Shang Tsung, Inferno Scorpion, Ermac (the boss), Kintaro (two) | Their own attacks and specials; Goro stands with his arms spread when idle; Shang Tsung doesn't come back if he vanishes |
+| Normal attacks only | Mileena, Jade, Jax, the story versions of the Versus fighters (Scorpion Boss, Baraka Boss, Reptile Boss, Kitana Boss, Sub-Zero Boss, Johnny Cage Boss), Shadow Priest, Orochi Hellbeast, the story enemies (Mercs, Mask Guard, Oni Warlord, Demons, Tarkata, Corpses, Elemental Knight, Living Trees...) and some cut characters (Shokan, Green Tarkata, Banshee) | They attack, no specials; Mileena and Jade move perfectly; the Corpses explode and vanish |
+| Attacks, but buggy | Oni (glitches when attacking on the run), Female Ninja, Ninja Wraith, Chan Chan, Nagiri Swamp, Fire Oni, Horned Oni | They attack, with broken animation |
+| No attacks | Noob Saibot, Smoke, Raiden, Kabal, Sonya, the other Shang Tsung, Ermac (Versus), Burning Monk, Order of Light Monk, Armor Lion, the man in a suit, Shiva | They only walk |
 
-- **Not perfect yet:** Versus fighters were made for 1-on-1 fights. The move shop, story fatalities and cutscenes (which still show the monks) may not fit. Giving Ermac and the cut characters another fighter's moves would mean mixing two characters' data packs, which hasn't been figured out yet. Status, character IDs and the game's damage formula: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
+- **Everyone outside the Versus and the monks** lacks the player block: holding L2 cuts damage to 20%, but the game does not count it as a block (parts that require blocking do not advance).
+- **Left out of the list:** characters that break the camera, can't stand or freeze the game (creatures, trees, giant bosses and some cut characters). They're listed in [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
+
+- **Not perfect yet:** Versus fighters were made for 1-on-1 fights. The move shop, story fatalities and cutscenes (which still show the monks) may not fit. Giving moves to those without them (and fixing Goro's idle animation) would mean mixing two characters' data packs, which hasn't been figured out yet. Status, character IDs and the game's damage formula: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
 - **Testing:** the Windows portable folder includes `TESTAR.txt`, a step-by-step checklist (RPG, fighters, Ko-op, Versus, saves).
 
 ## RPG mode (optional)
@@ -114,10 +117,10 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) �
 An optional mode, chosen only when starting a new game, where experience gives **levels** and each level gives an **attribute point**. The game's own economy does not change: enemies give the same XP and moves cost the same.
 
 - **Turn it on:** Single Player or Ko-op → character → on *Select Difficulty*, put the cursor on **Hard** and press **L3** (**F2** on the keyboard). A gold "RPG" appears next to Hard. RPG games are always Hard, with tougher enemies at the start (+30% damage and +30% health), so the early game is harder than Hard and gets easier as you grow.
-- **Levels:** the level comes from all the XP earned (buying moves doesn't lower it). Level 1→2 costs 300 XP, then 400, 550, 750... up to level 100. The level and progress (`Nv 3 · 120/550`) show above the "EXP" counter; in Ko-op each player has their own.
+- **Levels:** the level comes from all the XP earned (buying moves doesn't lower it). Level 1→2 costs 300 XP, then 400, 550, 750... up to level 100. The level, a bar of the XP to the next one and the number (`120/550`) show above the "EXP" counter, in the game's HUD style; a green "+N" blinks when there are points to spend. In Ko-op each player has their own.
 - **Attributes** (1 point per level, up to 20 each for now): Strength (+5% damage dealt), Defense (−3% damage taken), Health (+5% max health), Life steal (heals 1% of the damage dealt), Regeneration (0.1% of max health per second), Wisdom (+3% XP toward levels). Movement speed is never touched, so moves, combos and hit boxes stay the original.
 - **Spend points:** Select pause → **R3** (or **F1**) → **RPG** tab (L1/R1 switch tabs). X spends a point; "Redistribuir pontos" (X twice) gives them all back. In Ko-op, each player sees only their own levels and points: player 2 opens the window with R3 on the second controller.
-- **Saves:** a save made in RPG mode stays RPG. The *Load Game* screen tags it "RPG · Nv N". The RPG data lives next to `mksm.ini` in `rpg_mc0_slot<n>.ini` (one per save slot); the memory card save itself is untouched and still opens without the mode. Copy those files along with `mc0/` when you back up.
+- **Saves:** a save made in RPG mode stays RPG. The *Load Game* screen tags it "RPG · Nível N". The RPG data lives next to `mksm.ini` in `rpg_mc0_slot<n>.ini` (one per save slot); the memory card save itself is untouched and still opens without the mode. Copy those files along with `mc0/` when you back up.
 - **Tuning:** every number (XP curve, effect per point, caps, enemy boost) is a `RPG_*` key in `mksm.ini` (listed at the top of [`scripts/jogar.sh`](scripts/jogar.sh)). With the mode off, the game runs exactly as the original.
 - Design, addresses and test status: [`PLANO_RPG.md`](PLANO_RPG.md).
 

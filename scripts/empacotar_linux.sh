@@ -82,14 +82,16 @@ MODO RPG (opcional, só em jogo novo)
   Matar inimigos dá XP: o nível aparece acima do "EXP" (no Ko-op, um para cada jogador).
   Subiu de nível: pausa (Select) e R3 (ou F1), aba RPG, X gasta o ponto. No Ko-op, cada jogador
   abre a janela com o R3 do próprio controle e vê só o próprio RPG. "Redistribuir pontos" (X duas vezes) devolve todos.
-  Na tela Load Game, os saves RPG mostram "RPG · Nv N". Um save RPG continua RPG; gravar um jogo normal
+  Na tela Load Game, os saves RPG mostram "RPG · Nível N". Um save RPG continua RPG; gravar um jogo normal
   por cima tira o RPG daquele slot. Os números (XP por nível, força dos atributos) estão no mksm.ini.
 
-  Lutadores: no Versus todos vêm liberados, e Sub-Zero e Scorpion na seleção da história. Para jogar a história ou o Ko-op com outro lutador
-  (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): num jogo novo, na escolha de dificuldade,
-  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Kintaro, Shadow Priest e Orochi são experimentais
-  (sem defesa de verdade: com L2 levam 20% do dano, mas trechos que pedem defender não avançam);
-  Ermac e os personagens cortados (Armor Lion, homem de terno, Shiva) andam, mas não têm golpes.
+  Lutadores: no Versus todos vêm liberados, e Sub-Zero e Scorpion na seleção da história. Para jogar a história ou o Ko-op com outro
+  lutador: num jogo novo, na escolha de dificuldade, L2/R2 no controle de cada jogador (Shift esq./dir. no teclado; segurado, passa
+  sozinho). Fica no save. São 67, nesta ordem: monges e Versus (os únicos com fatality); com especiais (Shao Kahn, Goro, Kano,
+  Shang Tsung, Inferno Scorpion, Ermac chefe, Kintaro); só golpes normais (Mileena, Jade, Jax, as versões
+  de história do Versus como "Scorpion Boss", Shadow Priest, Orochi, inimigos...);
+  golpes com animação bugada; e os que só andam (Noob Saibot, Smoke, Raiden, Kabal, Sonya...). Embaixo do nome aparece a situação.
+  Fora dos monges e do Versus não há defesa de verdade: com L2 levam 20% do dano, mas trechos que pedem defender não avançam.
 
 SAVES
   Ficam em jogo/mc0 (memory card 1) e jogo/mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.

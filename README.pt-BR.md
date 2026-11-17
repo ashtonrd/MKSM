@@ -30,7 +30,7 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
 | Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
 | Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos, nos dois renderizadores (limite do EE/VU1, N20) |
-| Lutadores | ✅ Os 8 liberados no Versus, e Sub-Zero e Scorpion na seleção da história (`MKSM_VERSUS_TODOS=0` volta às liberações originais); qualquer um deles (mais Kintaro, Shadow Priest e Orochi, experimentais, e Ermac e três personagens cortados, que andam mas não têm golpes) pode ser escolhido para um jogo novo de história ou Ko-op com **L2/R2** na tela de dificuldade; a compatibilidade na história ainda está em teste ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
+| Lutadores | ✅ Os 8 liberados no Versus, e Sub-Zero e Scorpion na seleção da história (`MKSM_VERSUS_TODOS=0` volta às liberações originais); 67 lutadores (Versus, chefes como Shao Kahn, Goro e Shang Tsung, inimigos e personagens cortados) podem ser escolhidos para um jogo novo de história ou Ko-op com **L2/R2** na tela de dificuldade; a compatibilidade na história ainda está em teste ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
 | Tela cheia | ✅ F11 |
 | Resolução interna maior | ✅ Renderizador novo em 2x por padrão, tão rápido quanto o antigo; `PS2X_GS_HW=0` volta ao antigo, `PS2X_SCALE=1..4` escolhe a escala |
 | Menu de gráfico para PC fraco | ✅ R3 nos menus/pausa (ou F1): resolução interna, 16:9, FXAA, filtro, mistura de campos, renderizador; grava no `mksm.ini` |
@@ -96,17 +96,20 @@ Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 ## Outros lutadores
 
 - **Liberados:** os 8 lutadores do Versus (Liu Kang, Kung Lao, Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage), e Sub-Zero e Scorpion na seleção da história (o jogo normalmente os libera depois de zerar com cada monge). `MKSM_VERSUS_TODOS=0` no `mksm.ini` volta às liberações originais.
-- **História e Ko-op com outro lutador:** num **jogo novo**, na tela *Select Difficulty*, cada jogador aperta **L2/R2** no próprio controle (**Shift esquerdo/direito** no teclado, jogador 1) para escolher qualquer lutador da lista abaixo. A escolha fica no save e não muda depois, para os golpes comprados nunca se misturarem entre personagens. Na história, os especiais são **R1 + um botão**.
+- **História e Ko-op com outro lutador:** num **jogo novo**, na tela *Select Difficulty*, cada jogador aperta **L2/R2** no próprio controle (**Shift esquerdo/direito** no teclado, jogador 1; segurado, passa sozinho) para escolher um dos 67 lutadores, na ordem da tabela abaixo. A escolha fica no save e não muda depois, para os golpes comprados nunca se misturarem entre personagens. Na história, os especiais são **R1 + um botão**.
 
-| Lutador | Golpes | Especiais | Situação |
-|---|---|---|---|
-| Liu Kang, Kung Lao, Sub-Zero, Scorpion | sim | sim | Confirmados jogando |
-| Johnny Cage | sim | sim (bola verde, chute de sombra) | A lista de golpes do jogo mostra nomes genéricos |
-| Reptile, Baraka, Kitana | sim | não testados um a um | Devem se comportar como o Johnny Cage |
-| Kintaro, Shadow Priest, Orochi | sim (próprios) | — | Experimentais: grandes, câmera e colisão estranhas; sem defesa de verdade (com L2 levam 20% do dano, mas o jogo não conta como defesa: trechos que pedem defender não avançam) |
-| Ermac e os personagens cortados Armor Lion, homem de terno e Shiva | **não** | — | Só para ver: carregam e andam, mas não têm golpes de jogador (homem de terno e Shiva sem animação) |
+| Grupo (na ordem da lista) | Lutadores | Situação |
+|---|---|---|
+| Monges e Versus | Liu Kang, Kung Lao, Sub-Zero, Scorpion, Kitana, Johnny Cage, Baraka, Reptile | Golpes, especiais e fatalities (são os únicos com animação de fatality nos dados do jogo) |
+| Com especiais | Shao Kahn, Goro (dois), Kano, Shang Tsung, Inferno Scorpion, Ermac (o chefe), Kintaro (dois) | Golpes e especiais próprios; o Goro fica de braços abertos quando parado; o Shang Tsung não volta se sumir |
+| Só golpes normais | Mileena, Jade, Jax, as versões de história do Versus (Scorpion Boss, Baraka Boss, Reptile Boss, Kitana Boss, Sub-Zero Boss, Johnny Cage Boss), Shadow Priest, Orochi Hellbeast, os inimigos da história (Mercs, Mask Guard, Oni Warlord, Demons, Tarkata, Corpses, Elemental Knight, Living Trees...) e alguns cortados (Shokan, Green Tarkata, Banshee) | Atacam, sem especial; Mileena e Jade se movem perfeitamente; os Corpses explodem e somem |
+| Golpes, mas bugados | Oni (falha ao bater e correr), Female Ninja, Ninja Wraith, Chan Chan, Nagiri Swamp, Oni de Fogo, Oni de Chifre | Atacam, com animação quebrada |
+| Sem golpes | Noob Saibot, Smoke, Raiden, Kabal, Sonya, o outro Shang Tsung, Ermac (do Versus), Burning Monk, Order of Light Monk, Armor Lion, homem de terno, Shiva | Só andam |
 
-- **Ainda não é perfeito:** os lutadores do Versus foram feitos para luta 1 contra 1. A loja de golpes, as fatalities da história e as cutscenes (que continuam mostrando os monges) podem não casar. Dar ao Ermac e aos cortados os golpes de outro lutador exige misturar os pacotes de dados de dois personagens, o que ainda não foi descoberto. Situação, números dos personagens e a fórmula de dano do jogo: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
+- **Todos fora do Versus e dos monges** não têm a defesa de jogador: com L2 segurado levam 20% do dano, mas o jogo não conta como defesa (trechos que pedem defender não avançam).
+- **Fora da lista:** quem quebra a câmera, não fica de pé ou trava (bichos, árvores, chefes gigantes e alguns cortados). Ficam anotados no [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
+
+- **Ainda não é perfeito:** os lutadores do Versus foram feitos para luta 1 contra 1. A loja de golpes, as fatalities da história e as cutscenes (que continuam mostrando os monges) podem não casar. Dar golpes a quem não tem (e consertar a animação parada do Goro) exige misturar os pacotes de dados de dois personagens, o que ainda não foi descoberto. Situação, números dos personagens e a fórmula de dano do jogo: [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
 - **Teste:** a pasta portátil do Windows traz o `TESTAR.txt`, um roteiro passo a passo (RPG, lutadores, Ko-op, Versus, saves).
 
 ## Modo RPG (opcional)
@@ -114,10 +117,10 @@ Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 Um modo opcional, escolhido só ao começar um jogo novo, em que a experiência dá **níveis** e cada nível dá um **ponto de atributo**. A economia do jogo não muda: os inimigos dão o mesmo XP e os golpes custam o mesmo.
 
 - **Ligar:** Single Player ou Ko-op → personagem → na *Select Difficulty*, cursor no **Hard** e aperte **L3** (**F2** no teclado). Aparece "RPG" dourado ao lado do Hard. O RPG é sempre no Hard, com inimigos mais fortes no começo (+30% de dano e +30% de vida): o começo é mais duro que o Hard e vai ficando mais fácil conforme você evolui.
-- **Níveis:** o nível sai de todo o XP ganho (comprar golpe não tira nível). Do 1 para o 2 custa 300 de XP, depois 400, 550, 750... até o nível 100. O nível e o progresso (`Nv 3 · 120/550`) aparecem acima do "EXP"; no Ko-op, um para cada jogador.
+- **Níveis:** o nível sai de todo o XP ganho (comprar golpe não tira nível). Do 1 para o 2 custa 300 de XP, depois 400, 550, 750... até o nível 100. O nível, uma barra do XP até o próximo e o número (`120/550`) aparecem acima do "EXP", no estilo do HUD do jogo; um "+N" verde pisca quando há pontos para distribuir. No Ko-op, um para cada jogador.
 - **Atributos** (1 ponto por nível, até 20 em cada por enquanto): Força (+5% de dano causado), Defesa (−3% de dano recebido), Vida (+5% de vida máxima), Roubo de vida (cura 1% do dano causado), Regeneração (0,1% da vida máxima por segundo), Sabedoria (+3% de XP para o nível). A velocidade nunca muda: golpes, combos e colisões ficam os originais.
 - **Distribuir:** pausa (Select) → **R3** (ou **F1**) → aba **RPG** (L1/R1 trocam de aba). X gasta um ponto; "Redistribuir pontos" (X duas vezes) devolve todos. No Ko-op, cada jogador vê só o próprio nível e pontos: o jogador 2 abre a janela com o R3 do segundo controle.
-- **Saves:** um save feito no modo RPG continua RPG. Na tela *Load Game* ele aparece com a tag "RPG · Nv N". Os dados do RPG ficam ao lado do `mksm.ini`, em `rpg_mc0_slot<n>.ini` (um por slot); o save do memory card não muda e abre sem o modo. No backup, copie esses arquivos junto com o `mc0/`.
+- **Saves:** um save feito no modo RPG continua RPG. Na tela *Load Game* ele aparece com a tag "RPG · Nível N". Os dados do RPG ficam ao lado do `mksm.ini`, em `rpg_mc0_slot<n>.ini` (um por slot); o save do memory card não muda e abre sem o modo. No backup, copie esses arquivos junto com o `mc0/`.
 - **Ajustes:** todos os números (curva de XP, efeito por ponto, tetos, força dos inimigos) são chaves `RPG_*` do `mksm.ini` (lista no começo do [`scripts/jogar.sh`](scripts/jogar.sh)). Com o modo desligado, o jogo roda igual ao original.
 - Desenho, endereços e o que já foi testado: [`PLANO_RPG.md`](PLANO_RPG.md).
 

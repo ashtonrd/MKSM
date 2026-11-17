@@ -97,14 +97,16 @@ MODO RPG (opcional, só em jogo novo)
   Matar inimigos dá XP: o nível aparece acima do "EXP" (no Ko-op, um para cada jogador).
   Subiu de nível: pausa (Select) e R3 (ou F1), aba RPG, X gasta o ponto. No Ko-op, cada jogador
   abre a janela com o R3 do próprio controle e vê só o próprio RPG. "Redistribuir pontos" (X duas vezes) devolve todos.
-  Na tela Load Game, os saves RPG mostram "RPG · Nv N". Um save RPG continua RPG; gravar um jogo normal
+  Na tela Load Game, os saves RPG mostram "RPG · Nível N". Um save RPG continua RPG; gravar um jogo normal
   por cima tira o RPG daquele slot. Os números (XP por nível, força dos atributos) estão no mksm.ini.
 
-  Lutadores: no Versus todos vêm liberados, e Sub-Zero e Scorpion na seleção da história. Para jogar a história ou o Ko-op com outro lutador
-  (Sub-Zero, Scorpion, Baraka, Reptile, Kitana, Johnny Cage...): num jogo novo, na escolha de dificuldade,
-  L2/R2 no controle de cada jogador (Shift esq./dir. no teclado). Fica no save. Kintaro, Shadow Priest e Orochi são experimentais
-  (sem defesa de verdade: com L2 levam 20% do dano, mas trechos que pedem defender não avançam);
-  Ermac e os personagens cortados (Armor Lion, homem de terno, Shiva) andam, mas não têm golpes.
+  Lutadores: no Versus todos vêm liberados, e Sub-Zero e Scorpion na seleção da história. Para jogar a história ou o Ko-op com outro
+  lutador: num jogo novo, na escolha de dificuldade, L2/R2 no controle de cada jogador (Shift esq./dir. no teclado; segurado, passa
+  sozinho). Fica no save. São 67, nesta ordem: monges e Versus (os únicos com fatality); com especiais (Shao Kahn, Goro, Kano,
+  Shang Tsung, Inferno Scorpion, Ermac chefe, Kintaro); só golpes normais (Mileena, Jade, Jax, as versões
+  de história do Versus como "Scorpion Boss", Shadow Priest, Orochi, inimigos...);
+  golpes com animação bugada; e os que só andam (Noob Saibot, Smoke, Raiden, Kabal, Sonya...). Embaixo do nome aparece a situação.
+  Fora dos monges e do Versus não há defesa de verdade: com L2 levam 20% do dano, mas trechos que pedem defender não avançam.
 
 SAVES
   Ficam em jogo\mc0 (memory card 1) e jogo\mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.
@@ -116,17 +118,16 @@ Roteiro de teste no Windows (marque o que funcionou e conte o que não funcionou
 2. Controle: o gamepad mexe no menu. F11 tela cheia. F1 abre o menu Gráfico.
 3. Desempenho: menu Gráfico > Predefinição. "Alto" num PC bom, "Leve" ou "Mínimo" num fraco.
 4. Modo RPG: Single Player > personagem > dificuldade: cursor no Hard, L3 (F2) mostra "RPG".
-   Matar inimigos sobe o "Nv" acima do EXP. Subiu: Select, R3, aba RPG, gastar ponto.
+   Matar inimigos enche a barra de XP acima do EXP. Subiu de nível: aviso no meio da tela; Select, R3, aba RPG, gastar ponto.
 5. Lutador novo: Sub-Zero e Scorpion já aparecem na seleção. Na tela de dificuldade, L2/R2 escolhe
-   qualquer outro (Johnny Cage, Kitana, Baraka...).
+   qualquer um dos 67 (segure para passar rápido; a situação aparece embaixo do nome).
    Na fase: golpes (quadrado, triângulo, bola), especiais (R1 + botão), lista em Start > Moves.
    Tente uma fatality quando a barra azul encher (veja os comandos em Start > Moves > Fatalities).
-   Experimentais: Kintaro, Shadow Priest, Orochi. Sem golpes: Ermac, Armor Lion, homem de terno, Shiva
-   (só para ver; andam mas não atacam).
+   Fatality só existe para os monges e os do Versus. Os outros: golpes (e especiais em alguns), sem defesa de verdade.
 6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L2/R2 no próprio controle.
    Controle 2 com botões trocados: R3 nele abre a aba Controles dele. Cima no controle 2: defesa contínua.
 7. Versus: todos os 8 lutadores liberados.
-8. Save: salvar num slot, fechar, abrir, Load Game. O slot RPG mostra "RPG · Nv N".
+8. Save: salvar num slot, fechar, abrir, Load Game. O slot RPG mostra "RPG · Nível N".
 
 Se der erro ou fechar sozinho: mande print e diga em que passo foi.
 EOF

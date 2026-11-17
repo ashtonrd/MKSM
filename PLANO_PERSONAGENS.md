@@ -75,6 +75,22 @@
 - **A seleção da história continua com 4 lugares**, e Sub-Zero e Scorpion seguem bloqueados nela: não abrem com nenhum bit do Konten (bits 0–511 testados). A aba Personagens resolve sem isso.
 - **Falta (Fase C):** jogar cada lutador numa fase inteira (golpes, armas, loja de golpes, chefe, cutscenes). Só o andar e o modelo foram vistos.
 
+## 2c. Todos os números, testados (17/11)
+
+- **Nomes:** o jogo tem uma tabela de nomes por número, 0x80 bytes cada (só o texto), em `0xC6E500` na RAM durante a fase (cópia da RAM `fe3`, Goro's Lair; carregada com a fase, então o endereço pode mudar). O 64 é **Shao Kahn**, 47 e 57 **Goro**, 54 Kano, 66 Mileena, 67 Jade, 74 Jax, 15 Oni, 36 Oni Warlord, 53 Noob Saibot, 70 Smoke, 72 Raiden, 73 Kabal, 75 Sonya, 62/63 Shang Tsung, 55 Inferno Scorpion, 58/81 Kintaro, 68 Ermac (chefe). Entre 52 e 77 estão as versões de história dos lutadores do Versus (52 Scorpion, 56 Baraka, 59 Reptile, 65 Kitana, 69 Sub-Zero, 71 Johnny Cage): iguais aos 82–90 no teste do usuário; entram na lista como "Scorpion Boss" etc., depois do Jax. 91 em diante trava.
+- **Fatality:** só existem animações para Liu Kang (`liu1_fat`, `liu2_fat`), Kung Lao (`kun1..5_fat`), Sub-Zero (`sub1..3`), Scorpion (`sco1..2`), Reptile (`rep1..3`), Kitana (`kit1..2`), Johnny Cage (`cag1..3`) e Baraka (`bar1..2`), nos `GAMEDATA.WA?`. Os chefes só têm as cenas em que matam os monges (`s_ermac_boss_fatality_lk/kl`, `_baraka_boss_fatality`). O comando de roteiro `setfatalitylevel` (registrado em `func_1280B8`, tratado em `func_128308`) soma ao nível de fatality de cada jogador: inteiro em `save+0x4BE0+(j−1)×0x60` (`func_1D9EA0`/`func_1D9EE8`) e um float em `save+0x4BB8+(j−1)×0x60` (`func_1D9E08`/`func_1D9E50`).
+- **Teste:** primeiro um roteiro que repete uma gravação do usuário (pega a esfera azul à direita do começo do Goro's Lair, Start pula a cena e a luta começa) e conta os acertos do jogador no `func_284FE0`; depois o próprio usuário, um por um, contando golpes normais e especiais. Com dois jogos abertos ao mesmo tempo, ~1 em 4 travou no carregamento (`guest-branch:missing-target` com o EE pulando para dados, `0x1DFAF80`/`0x1DAD60C`); com um jogo só, quase nunca.
+
+| Grupo | Lutadores (número: golpes + especiais) |
+|---|---|
+| Com especiais | Shao Kahn 64 (3+3), Goro 47 e 57 (3+3; parado de braços abertos: o pacote não tem animação parada de jogador), Kano 54 (3+3), Shang Tsung 62 (3+4; se some no teleporte, não volta), Inferno Scorpion 55 (3+3), Ermac chefe 68 (3+1), Kintaro 81 (4+3) e 58 (2+2) |
+| Só golpes | Mileena 66 (4, movimentação perfeita), Jade 67 (4, idem), Jax 74 (3), Shadow Priest 27 (4), Orochi Hellbeast 30 (4), Oni Warlord 36 (3), Banshee 2 (2, cortada), Red Dragon Merc 16 (4), Mask Guard 26 (4), Black Dragon Merc 9 (4), Shokan 31 (4, cortado), Demon Captain/General/Archer/Handler 10–13 (3), Tarkata 14 (3), Stone Johnny Cage 86 (3), Bloody Skeleton 8 (3), Putrid Corpse 18 e Undead Corpse 29 (3, explodem e somem), Elemental Knight 19 (3, desmancha e demora a voltar), Brother of Shadow 17 (2, não pula), Green Tarkata 28 (2, cortado), Living Tree Arms 43 (2), Living Tree Mouth 42 (1) |
+| Golpes, bugados | Oni 15 (4, falha ao bater e correr), Female Ninja 7 (3, cortada), Ninja Wraith 20, Chan Chan 24, Nagiri Swamp 34 (anda torto), "Oni de fogo" 33, "Oni de chifre" 37 (cortados, 3 golpes cada) |
+| Sem golpes | Noob Saibot 53, Smoke 70, Raiden 72 (aparecem dois no mapa), Kabal 73, Sonya 75, Shang Tsung 63, Ermac 85, Burning Monk 76 e Order of Light Monk 77 (meio bugados), Armor Lion 5, homem de terno 6, Shiva 23 |
+| **Fora da lista** (bugados) | Cannon Demon 3, Clay Soldier 4 (tela preta), Plains Snake 21, Turban Guard 25, "Nagiri azul" 35, "Liu Kang prateado" 38, Spirit Mask 39, Snake Boss Rider 49 (não fica de pé), Ice Boss 60, Tarkata Grunt 87, o 32 (tela preta) e os bichos e objetos, que nem foram testados: Hanging Corpse 22, Giant Wings 40, Crow 41, Bat 44, Snake 45 (câmera colada), Skull 46, Tentacle 48, Acid Snake 50, Tiger Boss 51 e Wind Boss 61 (câmera colada), Tortured Person 78, Dismembered Body 79, Pterodactyl 80 |
+
+- **Na escolha (`kFighters`, 67 nomes)**, nessa ordem: monges e Versus, com especiais, só golpes (Mileena, Jade, Jax e as versões de história do Versus primeiro, depois mais golpes primeiro), bugados, sem golpes. Embaixo do nome, a situação. A defesa por software (L2 → 20% do dano) vale para todo lutador que não seja monge nem do Versus.
+
 ## 3. Como seria (o desenho)
 
 O usuário escolhe, para a história (Single Player ou Ko-op), um dos lutadores do Versus. O jogo carrega o modelo, os golpes e os sons dele, e ele joga o Goro's Lair e o resto como se fosse um dos monges.
@@ -128,7 +144,7 @@ O usuário escolhe, para a história (Single Player ou Ko-op), um dos lutadores 
 
 - [ ] **C1 Goro's Lair inteiro com cada lutador:** golpes, armas, objetos, chefe, cutscenes, loja de golpes. Anote por lutador o que falha.
 - [ ] **C2 Correções:** para cada falha da C1, a correção no runtime ou um aviso ("este lutador não tem X"). Golpe faltando pode usar um do monge.
-- [ ] **C4 Golpes emprestados:** achar a tabela de golpes e animações por personagem (a que `func_2F6BA0` monta a partir do número) e dar ao Ermac (e aos outros sem golpes) os de um personagem de corpo parecido.
+- [ ] **C4 Golpes emprestados:** achar a tabela de golpes e animações por personagem (a que `func_2F6BA0` monta a partir do número) e dar ao Ermac (e aos outros sem golpes) os de um personagem de corpo parecido. O mesmo caminho conserta a animação parada do Goro (47/57), que fica de braços abertos (o usuário pediu, 17/11).
 - [ ] **C3 Demais fases:** depende de saves do usuário mais adiante (`portatil/backup_save_mc0_15nov` e o atual).
 
 ### Fase D: acabamento

@@ -307,15 +307,15 @@ namespace mksm_rpg
                         scaled = dealtDamage(c, damage, forca, level);
                     }
                 }
-                // Defesa para os experimentais (chefes e cortados, sem a defesa de jogador nos dados de golpes): com L2
-                // segurado, 20% do dano, sem animação. shortcut: não olha a direção do golpe e o jogo não conta como
-                // defesa (trechos que pedem defender não avançam); a defesa de verdade exige o pacote de golpes deles.
+                // Defesa para quem não é monge nem do Versus (chefes, inimigos e cortados não têm a defesa de jogador nos
+                // dados de golpes): com L2 segurado, 20% do dano, sem animação. shortcut: não olha a direção do golpe e o
+                // jogo não conta como defesa (trechos que pedem defender não avançam); a de verdade exige o pacote deles.
                 for (int j = 0; normalHit && j < 2; ++j)
                     if (objs[j] && target == objs[j])
                     {
                         const int32_t fighter = static_cast<int32_t>(rd32(rdram, save + (j ? 0xD0u : 0xCCu)));
-                        const bool noBlock = fighter == 81 || fighter == 27 || fighter == 30 || fighter == 85 || fighter == 5 ||
-                                             fighter == 6 || fighter == 23; // Kintaro, Shadow Priest, demônio, Ermac, cortados
+                        const bool noBlock = fighter != 0 && fighter != 1 && fighter != 82 && fighter != 83 && fighter != 84 &&
+                                             fighter != 88 && fighter != 89 && fighter != 90; // monges e Versus defendem sozinhos
                         if (noBlock && (g_padButtons[j].load(std::memory_order_relaxed) & 0x0100u) == 0) // L2, ativo em 0
                             scaled = std::max<int32_t>(1, static_cast<int32_t>(std::lround(scaled * 0.2)));
                     }
