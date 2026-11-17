@@ -38,7 +38,7 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Som dos filmes | ✅ Tocado direto dos arquivos `.SFD` (sem chiado) |
 | Kung Lao como parceiro | ✅ Aparece (era invisível) |
 | Resto das fases testadas do início ao fim | ❌ Falta |
-| Build para Windows | 🟡 Compilado com MinGW-w64 a partir do Linux (`scripts/build_windows.sh`); já jogado num Windows de verdade, com pequenos engasgos (plano N22 no [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md)) |
+| Build para Windows | 🟡 Compila no próprio Windows com o kit do zip (`Instalar.bat`) ou a partir do Linux (`scripts/build_windows.sh`); já jogado num Windows de verdade, com pequenos engasgos (plano N22 no [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md)); abre também sem Vulkan (desenho pela CPU) |
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
 | Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
 | Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos, nos dois renderizadores (limite do EE/VU1, N20) |
@@ -56,10 +56,11 @@ Estado detalhado: [`ESTADO.md`](ESTADO.md). Plano de desempenho com medições: 
 ## O que você precisa
 
 - Sua própria cópia do jogo (PS2, USA, `SLUS-210.87`).
-- Linux (testado no Arch/CachyOS com GCC). O build para Windows é feito a partir do Linux com MinGW-w64 (`scripts/build_windows.sh`); compilar direto no Windows ainda não foi testado.
-- `git`, `cmake`, `ninja`, `7z`, `g++`, `glslc` (Vulkan SDK / shaderc), `libvulkan`.
-- GPU com Vulkan. Opcional, mas bem mais rápido: `VK_EXT_fragment_shader_interlock` (NVIDIA desde a Maxwell, AMD/Intel recentes). Sem Vulkan, o renderizador da CPU é usado.
-- ~5 GB de RAM por job de compilação e algumas horas na primeira compilação (o código gerado é enorme).
+- **Windows 10 ou 11 (64 bits):** nada a instalar. O zip do Windows traz o kit de compilação (GCC, CMake e Ninja).
+- **Linux 64 bits:** o compilador e as bibliotecas de desenvolvimento do sistema (`g++`, `cmake`, `ninja`, `7z`, `glslc`, Vulkan, FFmpeg, X11). O `Instalar.sh` instala o que faltar no Arch, Ubuntu/Debian ou Fedora, pedindo a senha uma vez.
+- **Processador:** x86-64 de 64 bits com SSE4.1 e 4 núcleos ou mais (com menos funciona, mas fica abaixo de 60 nas cenas pesadas). Não precisa de AVX/AVX2.
+- **Placa de vídeo com Vulkan 1.1:** NVIDIA desde a GTX 600, AMD desde a HD 7000, Intel HD 620 em diante (no Linux, a Intel HD 4000 tem um Vulkan incompleto que erra o desenho). Sem Vulkan, o jogo abre e desenha pela CPU, bem mais devagar.
+- **Para compilar:** 8 GB de RAM, ~20 GB livres no disco e algumas horas na primeira vez (o código gerado são 13 mil arquivos). Para jogar, ~1,5 GB de RAM bastam.
 
 > **Não há executável pronto para baixar, e não vai haver.** O executável contém o código do jogo traduzido, então distribuí-lo seria distribuir o jogo. Cada pessoa compila a partir da própria cópia com o script abaixo.
 
@@ -67,7 +68,7 @@ Estado detalhado: [`ESTADO.md`](ESTADO.md). Plano de desempenho com medições: 
 
 **Do jeito mais simples:**
 
-1. Baixe o zip do seu sistema na página de *Releases* (`ShaolinMonksRPG-Linux.zip` ou `ShaolinMonksRPG-Windows.zip`: trazem tudo para compilar sem internet) e descompacte. Dá também com o repositório (*Code → Download ZIP* ou `git clone`), mas aí o instalador baixa o que faltar.
+1. Baixe o zip do seu sistema na [página de **Releases**](https://github.com/lagando/MKSM/releases/latest) (`ShaolinMonksRPG-Linux.zip` ou `ShaolinMonksRPG-Windows.zip`: trazem tudo para compilar sem internet) e descompacte. No Linux, o repositório puro também serve (`git clone`; aí o instalador baixa o que faltar); no Windows, use o zip, que traz o kit de compilação.
 2. Ponha a ISO do seu jogo (PS2, USA, `SLUS-210.87`) na pasta `coloque_o_jogo_aqui`.
 3. Dê dois cliques no instalador:
    - **Linux:** `Instalar.sh`. Ele instala o que faltar (pede a senha uma vez), compila e monta `portatil/MKSM-linux`.

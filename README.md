@@ -38,7 +38,7 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Movie sound | ✅ Played straight from the `.SFD` files (no hiss) |
 | Kung Lao as partner | ✅ Visible (used to be invisible) |
 | Every other stage tested start to finish | ❌ To do |
-| Windows build | 🟡 Cross-built with MinGW-w64 from Linux (`scripts/build_windows.sh`); already played on real Windows, with small stutters (plan N22 in [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md)) |
+| Windows build | 🟡 Builds on Windows itself with the zip's kit (`Instalar.bat`) or from Linux (`scripts/build_windows.sh`); already played on real Windows, with small stutters (plan N22 in [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md)); also opens without Vulkan (CPU drawing) |
 | Floors, walls and light rays in Goro's Lair | ✅ As in the original (the VIF now runs ahead of VU1: the game sends each batch's colors right after starting it) |
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |
@@ -56,10 +56,11 @@ Detailed state: [`ESTADO.md`](ESTADO.md). Performance plan with measurements: [`
 ## Requirements
 
 - Your own copy of the game (PS2, USA, `SLUS-210.87`).
-- Linux (tested on Arch/CachyOS with GCC). A Windows build is cross-compiled from Linux with MinGW-w64 (`scripts/build_windows.sh`); building natively on Windows has not been tried.
-- `git`, `cmake`, `ninja`, `7z`, `g++`, `glslc` (Vulkan SDK / shaderc), `libvulkan`.
-- A Vulkan GPU. Optional but much faster: `VK_EXT_fragment_shader_interlock` (NVIDIA since Maxwell, recent AMD/Intel). Without Vulkan the CPU renderer is used.
-- ~5 GB of RAM per build job and a few hours for the first build (the generated code is huge).
+- **Windows 10 or 11 (64-bit):** nothing to install. The Windows zip carries the build kit (GCC, CMake and Ninja).
+- **64-bit Linux:** the system compiler and development libraries (`g++`, `cmake`, `ninja`, `7z`, `glslc`, Vulkan, FFmpeg, X11). `Instalar.sh` installs whatever is missing on Arch, Ubuntu/Debian or Fedora, asking for your password once.
+- **CPU:** 64-bit x86-64 with SSE4.1 and 4 or more cores (fewer works, but heavy scenes stay below 60). No AVX/AVX2 needed.
+- **GPU with Vulkan 1.1:** NVIDIA since the GTX 600, AMD since the HD 7000, Intel HD 620 and later (on Linux, the Intel HD 4000 has an incomplete Vulkan that draws wrong). Without Vulkan the game still opens and draws on the CPU, much slower.
+- **To build:** 8 GB of RAM, ~20 GB of free disk and a few hours the first time (the generated code is 13 thousand files). To play, ~1.5 GB of RAM is enough.
 
 > **There is no ready-made executable to download, and there won't be.** The executable contains the game's translated code, so shipping it would mean shipping the game. Everyone builds from their own copy with the script below.
 
@@ -67,7 +68,7 @@ Detailed state: [`ESTADO.md`](ESTADO.md). Performance plan with measurements: [`
 
 **The simplest way:**
 
-1. Download the zip for your system from the *Releases* page (`ShaolinMonksRPG-Linux.zip` or `ShaolinMonksRPG-Windows.zip`: they carry everything needed to build offline) and unpack it. The repository works too (*Code → Download ZIP* or `git clone`), but then the installer downloads what is missing.
+1. Download the zip for your system from the [**Releases** page](https://github.com/lagando/MKSM/releases/latest) (`ShaolinMonksRPG-Linux.zip` or `ShaolinMonksRPG-Windows.zip`: they carry everything needed to build offline) and unpack it. On Linux the plain repository also works (`git clone`; the installer then downloads what is missing); on Windows use the zip, which carries the build kit.
 2. Put your game's ISO (PS2, USA, `SLUS-210.87`) in the `coloque_o_jogo_aqui` folder.
 3. Double-click the installer:
    - **Linux:** `Instalar.sh`. It installs what is missing (asks for your password once), builds and assembles `portatil/MKSM-linux`.
