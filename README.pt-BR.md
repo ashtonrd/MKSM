@@ -120,6 +120,7 @@ Variáveis de ambiente úteis (todas no [`ARQUITETURA.md`](ARQUITETURA.md) §6):
 | Golpes, mas bugados | Oni (falha ao bater e correr), Female Ninja, Ninja Wraith, Chan Chan, Nagiri Swamp, Oni de Fogo, Oni de Chifre | Atacam, com animação quebrada |
 | Sem golpes | Noob Saibot, Smoke, Raiden, Kabal, Sonya, o outro Shang Tsung, Ermac (do Versus), Burning Monk, Order of Light Monk, Armor Lion, homem de terno, Shiva | Só andam |
 
+- **Ko-op: recomendado que um dos jogadores use um dos 4 clássicos** (Liu Kang, Kung Lao, Sub-Zero ou Scorpion). Alguns trechos da história pedem Brutality ou Multality, que só esses quatro fazem com certeza.
 - **Todos fora do Versus e dos monges** não têm a defesa de jogador: com L2 segurado levam 20% do dano, mas o jogo não conta como defesa (trechos que pedem defender não avançam).
 - **Fora da lista:** quem quebra a câmera, não fica de pé ou trava (bichos, árvores, chefes gigantes e alguns cortados). Ficam anotados no [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
 

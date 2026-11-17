@@ -107,6 +107,8 @@ MODO RPG (opcional, só em jogo novo)
   de história do Versus como "Scorpion Boss", Shadow Priest, Orochi, inimigos...);
   golpes com animação bugada; e os que só andam (Noob Saibot, Smoke, Raiden, Kabal, Sonya...). Embaixo do nome aparece a situação.
   Fora dos monges e do Versus não há defesa de verdade: com L2 levam 20% do dano, mas trechos que pedem defender não avançam.
+  No Ko-op, recomendado que um dos jogadores use um dos 4 clássicos (Liu Kang, Kung Lao, Sub-Zero ou Scorpion): alguns trechos
+  da história pedem Brutality ou Multality, que só esses quatro fazem com certeza.
 
 SAVES
   Ficam em jogo\mc0 (memory card 1) e jogo\mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.
@@ -124,7 +126,8 @@ Roteiro de teste no Windows (marque o que funcionou e conte o que não funcionou
    Na fase: golpes (quadrado, triângulo, bola), especiais (R1 + botão), lista em Start > Moves.
    Tente uma fatality quando a barra azul encher (veja os comandos em Start > Moves > Fatalities).
    Fatality só existe para os monges e os do Versus. Os outros: golpes (e especiais em alguns), sem defesa de verdade.
-6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L2/R2 no próprio controle.
+6. Ko-op: dois controles, Ko-op, cada um escolhe o lutador com L2/R2 no próprio controle (recomendado: um dos dois
+   com Liu Kang, Kung Lao, Sub-Zero ou Scorpion, por causa dos trechos de Brutality/Multality).
    Controle 2 com botões trocados: R3 nele abre a aba Controles dele. Cima no controle 2: defesa contínua.
 7. Versus: todos os 8 lutadores liberados.
 8. Save: salvar num slot, fechar, abrir, Load Game. O slot RPG mostra "RPG · Nível N".

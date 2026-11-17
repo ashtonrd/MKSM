@@ -92,6 +92,8 @@ MODO RPG (opcional, só em jogo novo)
   de história do Versus como "Scorpion Boss", Shadow Priest, Orochi, inimigos...);
   golpes com animação bugada; e os que só andam (Noob Saibot, Smoke, Raiden, Kabal, Sonya...). Embaixo do nome aparece a situação.
   Fora dos monges e do Versus não há defesa de verdade: com L2 levam 20% do dano, mas trechos que pedem defender não avançam.
+  No Ko-op, recomendado que um dos jogadores use um dos 4 clássicos (Liu Kang, Kung Lao, Sub-Zero ou Scorpion): alguns trechos
+  da história pedem Brutality ou Multality, que só esses quatro fazem com certeza.
 
 SAVES
   Ficam em jogo/mc0 (memory card 1) e jogo/mc1 (memory card 2). Copie essas pastas, e os arquivos rpg_mc0_slot*.ini se jogar no modo RPG, para fazer backup.

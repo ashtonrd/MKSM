@@ -120,6 +120,7 @@ Useful environment variables (all listed in [`ARQUITETURA.md`](ARQUITETURA.md) Â
 | Attacks, but buggy | Oni (glitches when attacking on the run), Female Ninja, Ninja Wraith, Chan Chan, Nagiri Swamp, Fire Oni, Horned Oni | They attack, with broken animation |
 | No attacks | Noob Saibot, Smoke, Raiden, Kabal, Sonya, the other Shang Tsung, Ermac (Versus), Burning Monk, Order of Light Monk, Armor Lion, the man in a suit, Shiva | They only walk |
 
+- **Ko-op: we recommend one player uses one of the 4 classics** (Liu Kang, Kung Lao, Sub-Zero or Scorpion). Some parts of the story ask for a Brutality or Multality, which only those four are sure to do.
 - **Everyone outside the Versus and the monks** lacks the player block: holding L2 cuts damage to 20%, but the game does not count it as a block (parts that require blocking do not advance).
 - **Left out of the list:** characters that break the camera, can't stand or freeze the game (creatures, trees, giant bosses and some cut characters). They're listed in [`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md).
 
