@@ -1,12 +1,24 @@
-# Mortal Kombat: Shaolin Monks — PS2 static recompilation
+# ShaolinMonks RPG
+
+*Mortal Kombat: Shaolin Monks* (PS2) recompiled for PC, with an RPG mode and extra fighters.
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
-A **static recompilation** of *Mortal Kombat: Shaolin Monks* for **PlayStation 2** (USA, `SLUS-210.87`) to native PC code, built on [**PS2Recomp**](https://github.com/ran-j/PS2Recomp).
+**ShaolinMonks RPG** is a **static recompilation** of *Mortal Kombat: Shaolin Monks* for **PlayStation 2** (USA, `SLUS-210.87`) to native PC code, built on [**PS2Recomp**](https://github.com/ran-j/PS2Recomp).
 
 This is **not an emulator** and **not a remaster**. The game's MIPS code (its ELF) is translated to C++ and compiled as a native program. The hardware that is not the CPU (GS, VU, DMA, IOP, SPU2) is still emulated by the PS2Recomp runtime, with our own changes on top.
 
 > **This repository contains no game data.** No ISO, ELF, generated code, recordings or assets, and it does not help you get them. You need your own copy of the game.
+
+## What ShaolinMonks RPG adds
+
+- **Optional RPG mode:** XP gives levels and each level gives an attribute point (Strength, Defense, Health, Life steal, Regeneration, Wisdom). In Ko-op each player has their own level. The level and an XP bar show on the HUD, in the game's style. [Details](#rpg-mode-optional).
+- **67 fighters in the story and Ko-op:** besides the monks and the Versus roster, Shao Kahn, Goro, Kano, Shang Tsung, Kintaro, Mileena, Jade, Jax, the Boss versions of the Versus fighters, story enemies and cut characters. Pick one with L2/R2 on the difficulty screen of a new game. [Details](#other-fighters).
+- **Every Versus fighter unlocked**, and Sub-Zero and Scorpion already in the story select.
+- **Ko-op with two controllers:** each player remaps their own buttons (R3 on their own controller), and up on controller 2's D-pad toggles a held block.
+- **PC graphics:** internal resolution up to 4x, 16:9, FXAA, fullscreen and a menu with presets for weak PCs.
+- **Its own window:** titled "Mortal Kombat Shaolin Monks RPG", with the dragon from the game's save icon.
+- **Linux and Windows**, with portable folders to take to another computer.
 
 ## Status
 
@@ -30,9 +42,11 @@ This is **not an emulator** and **not a remaster**. The game's MIPS code (its EL
 | Floors, walls and light rays in Goro's Lair | ✅ As in the original (the VIF now runs ahead of VU1: the game sends each batch's colors right after starting it) |
 | Liu Kang spinning while standing (an R5900 MMI instruction read the wrong register) | ✅ Fixed |
 | Heavy cutscene moments (Raiden arriving) | 🟡 Drop to ~35 frames/s for a few seconds, with both renderers (EE/VU1 limit, N20) |
-| RPG mode (levels and attribute points) | 🟡 Implemented, Single Player and Ko-op (see [RPG mode](#rpg-mode-optional)); balance still being tested |
+| RPG mode (levels and attribute points) | 🟡 Implemented, Single Player and Ko-op, with the level and an XP bar on the HUD in the game's style (see [RPG mode](#rpg-mode-optional)); balance still being tested |
 | Fighters | ✅ All 8 unlocked in Versus, and Sub-Zero and Scorpion in the story character select (`MKSM_VERSUS_TODOS=0` restores the original unlocks); 67 fighters (Versus, bosses such as Shao Kahn, Goro and Shang Tsung, enemies and cut characters) can be picked for a new story or Ko-op game with **L2/R2** on the difficulty screen; story compatibility still being tested ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
 | Fullscreen | ✅ F11 |
+| Window | ✅ Titled "Mortal Kombat Shaolin Monks RPG", with the dragon from the game's save icon |
+| Ko-op with two controllers | ✅ Each player remaps their own buttons (R3 on their own controller); held block on up on controller 2's D-pad |
 | Higher internal resolution | ✅ New batching renderer at 2x by default, as fast as the old one; `PS2X_GS_HW=0` goes back to the old one, `PS2X_SCALE=1..4` picks the scale |
 | Graphics menu for weaker PCs | ✅ R3 in menus/pause (or F1): internal resolution, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini` |
 | Widescreen | ✅ 16:9 in the Graphics menu or `PS2X_WIDESCREEN=1` (3D gets the wider view; 2D/HUD stretches, as in PCSX2; movies stay 4:3) |
@@ -65,7 +79,7 @@ Play:
 scripts/jogar.sh
 ```
 
-It reads optional settings from `mksm.ini` in the project root (one `VARIABLE=value` per line; the list is at the top of [`scripts/jogar.sh`](scripts/jogar.sh)). Keys: **F11** fullscreen, **F10** screenshot (`capturas/`), **F9** records the current scene for bug reports (`gsrec/`, game data: don't share it publicly). **Graphics menu:** **R3** on the controller in menus, the Select pause and the map, or **F1** anytime (internal resolution, 16:9, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini`). **F12** opens the debug panel.
+The window is titled "Mortal Kombat Shaolin Monks RPG" and uses the dragon from the game's save icon (`mc0/BASLUS-21087/game.icn`, created by the first save; without it, the default icon). It reads optional settings from `mksm.ini` in the project root (one `VARIABLE=value` per line; the list is at the top of [`scripts/jogar.sh`](scripts/jogar.sh)). Keys: **F11** fullscreen, **F10** screenshot (`capturas/`), **F9** records the current scene for bug reports (`gsrec/`, game data: don't share it publicly). **Graphics menu:** **R3** on the controller in menus, the Select pause and the map, or **F1** anytime (internal resolution, 16:9, FXAA, upscale filter, field blend, renderer; saved to `mksm.ini`). **F12** opens the debug panel.
 
 **Portable folders:** after building, `scripts/empacotar_linux.sh` makes `portatil/MKSM-linux` (runs on another Linux without installing anything) and `scripts/build_windows.sh` makes `portatil/MKSM-windows` (double-click `Jogar.bat`). They contain your game files: keep them for yourself.
 

@@ -1,6 +1,6 @@
 # Instruções para IAs neste projeto
 
-Recompilação estática do Mortal Kombat: Shaolin Monks (PS2, SLUS_210.87) com PS2Recomp.
+**ShaolinMonks RPG:** recompilação estática do Mortal Kombat: Shaolin Monks (PS2, SLUS_210.87) com PS2Recomp, com modo RPG e lutadores extras.
 
 ## Leia antes de mexer
 

@@ -1,12 +1,24 @@
-# Mortal Kombat: Shaolin Monks — recompilação estática do PS2
+# ShaolinMonks RPG
+
+*Mortal Kombat: Shaolin Monks* (PS2) recompilado para PC, com modo RPG e lutadores extras.
 
 [English](README.md) · **Português (Brasil)**
 
-**Recompilação estática** do *Mortal Kombat: Shaolin Monks* de **PlayStation 2** (USA, `SLUS-210.87`) para código nativo de PC, feita com o [**PS2Recomp**](https://github.com/ran-j/PS2Recomp).
+O **ShaolinMonks RPG** é uma **recompilação estática** do *Mortal Kombat: Shaolin Monks* de **PlayStation 2** (USA, `SLUS-210.87`) para código nativo de PC, feita com o [**PS2Recomp**](https://github.com/ran-j/PS2Recomp).
 
 Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (o ELF) é traduzido para C++ e compilado como programa nativo. O hardware que não é CPU (GS, VU, DMA, IOP, SPU2) continua emulado pelo runtime do PS2Recomp, com as nossas mudanças por cima.
 
 > **Este repositório não contém dados do jogo.** Nenhum ISO, ELF, código gerado, gravação ou arquivo do jogo, e ele não ajuda a obtê-los. Você precisa da sua própria cópia.
+
+## O que o ShaolinMonks RPG traz
+
+- **Modo RPG opcional:** o XP dá níveis e cada nível dá um ponto de atributo (Força, Defesa, Vida, Roubo de vida, Regeneração, Sabedoria). No Ko-op, cada jogador tem o próprio nível. O nível e a barra de XP aparecem no HUD, no estilo do jogo. [Detalhes](#modo-rpg-opcional).
+- **67 lutadores na história e no Ko-op:** além dos monges e do Versus, Shao Kahn, Goro, Kano, Shang Tsung, Kintaro, Mileena, Jade, Jax, as versões Boss do Versus, inimigos da história e personagens cortados. Escolha com L2/R2 na tela de dificuldade de um jogo novo. [Detalhes](#outros-lutadores).
+- **Todos os lutadores do Versus liberados**, e Sub-Zero e Scorpion já na seleção da história.
+- **Ko-op com dois controles:** cada jogador remapeia os próprios botões (R3 no próprio controle), e o direcional para cima do controle 2 liga a defesa contínua.
+- **Gráfico de PC:** resolução interna até 4x, tela 16:9, FXAA, tela cheia e um menu com predefinições para PC fraco.
+- **Janela própria:** título "Mortal Kombat Shaolin Monks RPG" e o dragão do ícone do save do jogo.
+- **Linux e Windows**, com pastas portáteis para levar a outro computador.
 
 ## Estado
 
@@ -32,10 +44,12 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Momentos pesados da cutscene (chegada do Raiden) | 🟡 Caem para ~35 quadros/s por alguns segundos, nos dois renderizadores (limite do EE/VU1, N20) |
 | Lutadores | ✅ Os 8 liberados no Versus, e Sub-Zero e Scorpion na seleção da história (`MKSM_VERSUS_TODOS=0` volta às liberações originais); 67 lutadores (Versus, chefes como Shao Kahn, Goro e Shang Tsung, inimigos e personagens cortados) podem ser escolhidos para um jogo novo de história ou Ko-op com **L2/R2** na tela de dificuldade; a compatibilidade na história ainda está em teste ([`PLANO_PERSONAGENS.md`](PLANO_PERSONAGENS.md)) |
 | Tela cheia | ✅ F11 |
+| Janela | ✅ Título "Mortal Kombat Shaolin Monks RPG" e o dragão do ícone do save do jogo como ícone |
+| Ko-op com dois controles | ✅ Cada jogador remapeia os próprios botões (R3 no próprio controle); defesa contínua no direcional para cima do controle 2 |
 | Resolução interna maior | ✅ Renderizador novo em 2x por padrão, tão rápido quanto o antigo; `PS2X_GS_HW=0` volta ao antigo, `PS2X_SCALE=1..4` escolhe a escala |
 | Menu de gráfico para PC fraco | ✅ R3 nos menus/pausa (ou F1): resolução interna, 16:9, FXAA, filtro, mistura de campos, renderizador; grava no `mksm.ini` |
 | Widescreen | ✅ 16:9 no menu Gráfico ou `PS2X_WIDESCREEN=1` (o 3D ganha campo nas laterais; o 2D/HUD estica, como no PCSX2; filmes ficam 4:3) |
-| Modo RPG (níveis e pontos de atributo) | 🟡 Implementado, Single Player e Ko-op (ver [Modo RPG](#modo-rpg-opcional)); equilíbrio ainda em teste |
+| Modo RPG (níveis e pontos de atributo) | 🟡 Implementado, Single Player e Ko-op, com nível e barra de XP no HUD no estilo do jogo (ver [Modo RPG](#modo-rpg-opcional)); equilíbrio ainda em teste |
 
 Estado detalhado: [`ESTADO.md`](ESTADO.md). Plano de desempenho com medições: [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md).
 
@@ -65,7 +79,7 @@ Para jogar:
 scripts/jogar.sh
 ```
 
-Ele lê configurações opcionais do `mksm.ini` na raiz do projeto (uma `VARIAVEL=valor` por linha; a lista está no começo do [`scripts/jogar.sh`](scripts/jogar.sh)). Teclas: **F11** tela cheia, **F10** captura de tela (`capturas/`), **F9** grava a cena atual para relatar defeito (`gsrec/`; são dados do jogo, não publique). **Menu Gráfico:** **R3** no controle nos menus, na pausa do Select e no mapa, ou **F1** a qualquer hora (resolução interna, 16:9, FXAA, filtro de ampliação, mistura de campos, renderizador; grava no `mksm.ini`). **F12** abre o painel de depuração.
+A janela se chama "Mortal Kombat Shaolin Monks RPG" e usa como ícone o dragão do ícone do save do jogo (`mc0/BASLUS-21087/game.icn`, criado no primeiro save; sem ele, fica o ícone padrão). Ele lê configurações opcionais do `mksm.ini` na raiz do projeto (uma `VARIAVEL=valor` por linha; a lista está no começo do [`scripts/jogar.sh`](scripts/jogar.sh)). Teclas: **F11** tela cheia, **F10** captura de tela (`capturas/`), **F9** grava a cena atual para relatar defeito (`gsrec/`; são dados do jogo, não publique). **Menu Gráfico:** **R3** no controle nos menus, na pausa do Select e no mapa, ou **F1** a qualquer hora (resolução interna, 16:9, FXAA, filtro de ampliação, mistura de campos, renderizador; grava no `mksm.ini`). **F12** abre o painel de depuração.
 
 **Pastas portáteis:** depois do build, `scripts/empacotar_linux.sh` monta `portatil/MKSM-linux` (roda em outro Linux sem instalar nada) e `scripts/build_windows.sh` monta `portatil/MKSM-windows` (dois cliques no `Jogar.bat`). Elas levam os arquivos do seu jogo: são só para você.
 

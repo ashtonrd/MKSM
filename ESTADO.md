@@ -1,8 +1,16 @@
 
 ```markdown
-# ShaolinMonks: recompilação estática de PS2 com PS2Recomp
+# ShaolinMonks RPG: recompilação estática de PS2 com PS2Recomp
 
 Escrito em 03/11/2026 (run101), com resumo atualizado em 15/11 logo abaixo. Documento feito para uma IA ou pessoa nova continuar sem contexto. Convenção: **[medido]** = visto em execução, **[lido]** = lido no código, **[memória]** = vem da memória da IA sobre o SDK do PS2, conferir antes de confiar. Este é o documento principal; `PLANO.md` tem o mesmo conteúdo com mais detalhes de investigação.
+
+## Resumo em 17/11/2026
+
+- **Nome do projeto: ShaolinMonks RPG.** A janela se chama "Mortal Kombat Shaolin Monks RPG" e usa o dragão do ícone do save (`mc0/BASLUS-21087/game.icn`) como ícone.
+- **67 lutadores** na escolha do jogo novo (L2/R2 na tela de dificuldade), testados um a um pelo usuário e em ordem de qualidade: monges e Versus (os únicos com fatality nos dados), com especiais (Shao Kahn, Goro, Kano, Shang Tsung, Inferno Scorpion, Ermac chefe, Kintaro), só golpes (Mileena, Jade, Jax, versões Boss do Versus, inimigos), bugados e sem golpes. Tabela e quem ficou de fora: `PLANO_PERSONAGENS.md` §2c.
+- **Ko-op:** o controle 2 tem botões próprios (R3 nele abre a aba Controles dele) e defesa contínua no direcional para cima; a aba RPG mostra só o jogador que abriu a janela.
+- **Visual:** escolha de lutador e HUD do RPG no estilo do jogo (fonte serifada do sistema em versalete, quadro azul com moldura, barra de XP, aviso de nível novo). O indicador some junto com o HUD do jogo (`0x4D8C20`) e não pisca mais em PC lento.
+- **Testes do jogo:** um por vez (dois abertos travam no carregamento ~1 em 4); roteiro até a luta no `ARQUITETURA.md` §6.
 
 ## Resumo em 16/11/2026
 

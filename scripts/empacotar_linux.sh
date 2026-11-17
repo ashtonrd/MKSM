@@ -48,7 +48,7 @@ grep -q 'RPG_' "$OUT/mksm.ini" || # pasta de antes do modo RPG: só acrescenta a
   sed -n '/^# Modo RPG/,/^# Cada slot RPG/p' "$AQUI/scripts/jogar.sh" >> "$OUT/mksm.ini"
 
 cat > "$OUT/LEIA-ME.txt" <<'EOF'
-Mortal Kombat: Shaolin Monks (recompilado para PC), versão Linux portátil
+ShaolinMonks RPG: Mortal Kombat: Shaolin Monks recompilado para PC, versão Linux portátil
 
 COMO JOGAR
   Abra um terminal nesta pasta e rode ./jogar.sh (ou dê dois cliques nele, se o gerenciador de arquivos

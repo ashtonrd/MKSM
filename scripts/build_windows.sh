@@ -62,7 +62,7 @@ grep -q 'RPG_' "$OUT/mksm.ini" || # pasta de antes do modo RPG: só acrescenta a
   sed -n '/^# Modo RPG/,/^# Cada slot RPG/p' "$AQUI/scripts/jogar.sh" | crlf >> "$OUT/mksm.ini"
 
 crlf > "$OUT/LEIA-ME.txt" <<'EOF'
-Mortal Kombat: Shaolin Monks (recompilado para PC), versão Windows portátil
+ShaolinMonks RPG: Mortal Kombat: Shaolin Monks recompilado para PC, versão Windows portátil
 
 COMO JOGAR
   Dê dois cliques em Jogar.bat. Não precisa instalar nada.
