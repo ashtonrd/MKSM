@@ -4,6 +4,17 @@
 
 [English](README.md) · **Português (Brasil)**
 
+## ⬇️ Baixar
+
+| Sistema | Download | Tamanho |
+|---|---|---|
+| **Windows 10/11** | [**ShaolinMonksRPG-Windows.zip**](https://github.com/lagando/MKSM/releases/latest/download/ShaolinMonksRPG-Windows.zip) | 334 MB (traz o kit de compilação) |
+| **Linux** | [**ShaolinMonksRPG-Linux.zip**](https://github.com/lagando/MKSM/releases/latest/download/ShaolinMonksRPG-Linux.zip) | 23 MB |
+
+**Descompacte → ponha a ISO do seu jogo em `coloque_o_jogo_aqui` → dois cliques em `Instalar.bat` (Windows) ou `Instalar.sh` (Linux).** A primeira vez compila por algumas horas; depois é só abrir `portatil/…/Jogar.bat` ou `jogar.sh`. Detalhes em [Compilar e rodar](#compilar-e-rodar); todas as versões na [página de Releases](https://github.com/lagando/MKSM/releases).
+
+> O zip não traz o jogo nem um executável pronto: ele compila o jogo no seu PC a partir da sua própria ISO.
+
 O **ShaolinMonks RPG** é uma **recompilação estática** do *Mortal Kombat: Shaolin Monks* de **PlayStation 2** (USA, `SLUS-210.87`) para código nativo de PC, feita com o [**PS2Recomp**](https://github.com/ran-j/PS2Recomp).
 
 Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (o ELF) é traduzido para C++ e compilado como programa nativo. O hardware que não é CPU (GS, VU, DMA, IOP, SPU2) continua emulado pelo runtime do PS2Recomp, com as nossas mudanças por cima.
