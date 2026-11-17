@@ -6383,7 +6383,7 @@ index 8590f14..9b3156f 100644
      data[3] = static_cast<uint8_t>(btns >> 8);
      return true;
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
-index 45cb9d2..d25f5bf 100644
+index 45cb9d2..b4c15ae 100644
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1,3 +1,8 @@
@@ -6427,7 +6427,7 @@ index 45cb9d2..d25f5bf 100644
  namespace ps2_stubs
  {
      void resetSifState();
-@@ -373,10 +387,906 @@ namespace
+@@ -373,10 +387,939 @@ namespace
      }
  }
  
@@ -6767,6 +6767,33 @@ index 45cb9d2..d25f5bf 100644
 +        return step;
 +    }
 +
++    // Botão do controle (e teclas, jogador 1) que o jogador mapeou para um botão do PS2 na aba Controles: as telas do
++    // runtime (R3 abre a janela, L3 arma o RPG, L2/R2 trocam o lutador) seguem o mesmo mapa que o jogo.
++    const PadBinding *boundTo(int pad, const char *ps2Name)
++    {
++        PadBinding *b = padBindings(pad);
++        for (int i = 0; i < kPadBindingCount; ++i)
++            if (std::strcmp(b[i].iniName, ps2Name) == 0)
++                return &b[i];
++        return nullptr;
++    }
++    bool boundPressed(int pad, const char *ps2Name)
++    {
++        const PadBinding *b = boundTo(pad, ps2Name);
++        if (!b)
++            return false;
++        return (b->gamepad && IsGamepadAvailable(pad) && IsGamepadButtonPressed(pad, b->gamepad)) ||
++               (pad == 0 && ((b->key && IsKeyPressed(b->key)) || (b->key2 && IsKeyPressed(b->key2))));
++    }
++    bool boundDown(int pad, const char *ps2Name)
++    {
++        const PadBinding *b = boundTo(pad, ps2Name);
++        if (!b)
++            return false;
++        return (b->gamepad && IsGamepadAvailable(pad) && IsGamepadButtonDown(pad, b->gamepad)) ||
++               (pad == 0 && ((b->key && IsKeyDown(b->key)) || (b->key2 && IsKeyDown(b->key2))));
++    }
++
 +    void updateGfxMenu(bool allowR3)
 +    {
 +        GfxMenu &m = g_gfxMenu;
@@ -6779,13 +6806,19 @@ index 45cb9d2..d25f5bf 100644
 +                            : button == GAMEPAD_BUTTON_LEFT_FACE_RIGHT ? 'r' : button == GAMEPAD_BUTTON_RIGHT_FACE_DOWN ? 'x'
 +                            : button == GAMEPAD_BUTTON_RIGHT_FACE_RIGHT ? 'c' : button == GAMEPAD_BUTTON_LEFT_TRIGGER_1 ? 'q'
 +                            : button == GAMEPAD_BUTTON_RIGHT_TRIGGER_1 ? 'e' : 0;
-+            return (step != 0 && step == want) || pressedOn(m.pad, button);
++            // o botão do PS2 que esse botão padrão representa, como o jogador mapeou (controle e teclado)
++            const char *ps2 = button == GAMEPAD_BUTTON_LEFT_FACE_UP ? "CIMA" : button == GAMEPAD_BUTTON_LEFT_FACE_DOWN ? "BAIXO"
++                            : button == GAMEPAD_BUTTON_LEFT_FACE_LEFT ? "ESQUERDA" : button == GAMEPAD_BUTTON_LEFT_FACE_RIGHT ? "DIREITA"
++                            : button == GAMEPAD_BUTTON_RIGHT_FACE_DOWN ? "X" : button == GAMEPAD_BUTTON_RIGHT_FACE_RIGHT ? "CIRCULO"
++                            : button == GAMEPAD_BUTTON_LEFT_TRIGGER_1 ? "L1" : button == GAMEPAD_BUTTON_RIGHT_TRIGGER_1 ? "R1"
++                            : button == GAMEPAD_BUTTON_RIGHT_THUMB ? "R3" : nullptr;
++            return (step != 0 && step == want) || (ps2 ? boundPressed(m.pad, ps2) : pressedOn(m.pad, button));
 +        };
 +        if (!m.open)
 +        {
-+            const bool r3Pad2 = allowR3 && pressedOn(1, GAMEPAD_BUTTON_RIGHT_THUMB); // o jogador 2 abre com o controle dele
++            const bool r3Pad2 = allowR3 && boundPressed(1, "R3"); // o jogador 2 abre com o R3 do controle dele (o mapeado)
 +            m.pad = r3Pad2 ? 1 : 0;
-+            if (IsKeyPressed(KEY_F1) || r3Pad2 || (allowR3 && pressed(GAMEPAD_BUTTON_RIGHT_THUMB)))
++            if (IsKeyPressed(KEY_F1) || r3Pad2 || (allowR3 && (step == 'o' || boundPressed(0, "R3"))))
 +            {
 +                m.open = true, m.row = 0, m.confirmReset = false;
 +                m.rpgPlayer = m.pad; // cada jogador vê só o próprio RPG: o do controle que abriu a janela
@@ -6802,23 +6835,23 @@ index 45cb9d2..d25f5bf 100644
 +            const int tabs = rpg.active ? static_cast<int>(TabCount) : static_cast<int>(TabRpg); // a aba RPG só num jogo RPG
 +            if (m.tab >= tabs)
 +                m.tab = TabGfx, m.row = 0;
-+            if (pressed(GAMEPAD_BUTTON_LEFT_TRIGGER_1) || IsKeyPressed(KEY_Q))
++            if (pressed(GAMEPAD_BUTTON_LEFT_TRIGGER_1))
 +                m.tab = (m.tab + tabs - 1) % tabs, m.row = 0, m.confirmReset = false;
-+            if (pressed(GAMEPAD_BUTTON_RIGHT_TRIGGER_1) || IsKeyPressed(KEY_E))
++            if (pressed(GAMEPAD_BUTTON_RIGHT_TRIGGER_1))
 +                m.tab = (m.tab + 1) % tabs, m.row = 0, m.confirmReset = false;
 +            const int rows = m.tab == TabGfx ? static_cast<int>(RowCount) : m.tab == TabCtl ? static_cast<int>(CtlRowCount) : static_cast<int>(RpgRowCount);
 +            const int oldRow = m.row;
-+            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_UP) || IsKeyPressed(KEY_UP))
++            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_UP))
 +                m.row = (m.row + rows - 1) % rows;
-+            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN) || IsKeyPressed(KEY_DOWN))
++            if (pressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
 +                m.row = (m.row + 1) % rows;
 +            if (m.tab == TabRpg && !rpg.active) // save normal: só a mensagem e "Fechar"
 +                m.row = RpgClose;
 +            if (m.row != oldRow)
 +                m.confirmReset = false;
-+            const bool left = pressed(GAMEPAD_BUTTON_LEFT_FACE_LEFT) || IsKeyPressed(KEY_LEFT);
-+            const bool right = pressed(GAMEPAD_BUTTON_LEFT_FACE_RIGHT) || IsKeyPressed(KEY_RIGHT);
-+            const bool accept = pressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || IsKeyPressed(KEY_ENTER);
++            const bool left = pressed(GAMEPAD_BUTTON_LEFT_FACE_LEFT);
++            const bool right = pressed(GAMEPAD_BUTTON_LEFT_FACE_RIGHT);
++            const bool accept = pressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
 +            const bool back = pressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) || pressed(GAMEPAD_BUTTON_RIGHT_THUMB) ||
 +                              IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_F1);
 +            const int closeRow = m.tab == TabGfx ? static_cast<int>(RowClose) : m.tab == TabCtl ? static_cast<int>(CtlClose) : static_cast<int>(RpgClose);
@@ -7150,7 +7183,7 @@ index 45cb9d2..d25f5bf 100644
 +            mksm_rpg::setArmed(false); // o RPG é uma variante do Hard
 +        else if (autoArm)
 +            mksm_rpg::setArmed(true);
-+        else if (IsKeyPressed(KEY_F2) || (IsGamepadAvailable(0) && IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_THUMB)))
++        else if (IsKeyPressed(KEY_F2) || boundPressed(0, "L3"))
 +            mksm_rpg::setArmed(!mksm_rpg::armed());
 +        if (const char *test = std::getenv("MKSM_TEST_LUTADOR")) // roteiro de teste: "90" ou "88,83" (jogador 1, jogador 2)
 +        {
@@ -7165,9 +7198,9 @@ index 45cb9d2..d25f5bf 100644
 +        static double nextStep[2] = {};
 +        for (int j = 0; j < 2; ++j)
 +        {
-+            const bool pad = IsGamepadAvailable(j);
-+            const int want = (pad && IsGamepadButtonDown(j, GAMEPAD_BUTTON_RIGHT_TRIGGER_2)) || (j == 0 && IsKeyDown(KEY_RIGHT_SHIFT)) ? 1
-+                           : (pad && IsGamepadButtonDown(j, GAMEPAD_BUTTON_LEFT_TRIGGER_2)) || (j == 0 && IsKeyDown(KEY_LEFT_SHIFT)) ? -1 : 0;
++            // L2/R2 como o jogador mapeou na aba Controles (Shift esq./dir. continuam valendo no teclado)
++            const int want = boundDown(j, "R2") || (j == 0 && IsKeyDown(KEY_RIGHT_SHIFT)) ? 1
++                           : boundDown(j, "L2") || (j == 0 && IsKeyDown(KEY_LEFT_SHIFT)) ? -1 : 0;
 +            // um passo ao apertar; segurado, passa sozinho depois de 0,4 s (a lista tem ~60 nomes)
 +            int dir = 0;
 +            if (want != heldDir[j])
@@ -7336,7 +7369,7 @@ index 45cb9d2..d25f5bf 100644
      static uint32_t s_lastDisplayFbp = std::numeric_limits<uint32_t>::max();
      static uint32_t s_lastSourceFbp = std::numeric_limits<uint32_t>::max();
      static bool s_lastPreferred = false;
-@@ -387,21 +1297,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -387,21 +1330,10 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      static std::vector<uint8_t> s_uploadBuffer(DEFAULT_FB_SIZE, 0u);
  
      const uint64_t currentTick = rt->eeScheduler().currentVSyncTick();
@@ -7361,7 +7394,7 @@ index 45cb9d2..d25f5bf 100644
      uint32_t width = 0u;
      uint32_t height = 0u;
      uint32_t displayFbp = 0u;
-@@ -414,14 +1313,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -414,14 +1346,19 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
                                                     &sourceFbp,
                                                     &usedPreferredDisplaySource))
      {
@@ -7389,7 +7422,7 @@ index 45cb9d2..d25f5bf 100644
          return;
      }
  
-@@ -450,13 +1354,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -450,13 +1387,30 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
      s_lastWidth = width;
      s_lastHeight = height;
  
@@ -7426,7 +7459,7 @@ index 45cb9d2..d25f5bf 100644
          const size_t copyRowBytes = static_cast<size_t>(copyWidth) * 4u;
          for (uint32_t y = 0; y < copyHeight; ++y)
          {
-@@ -471,7 +1392,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
+@@ -471,7 +1425,34 @@ static void UploadFrame(Texture2D &tex, PS2Runtime *rt, uint32_t &outWidth, uint
          }
      }
  
@@ -7462,7 +7495,7 @@ index 45cb9d2..d25f5bf 100644
      outWidth = width;
      outHeight = height;
      s_hasUploadedFrame = true;
-@@ -483,6 +1431,8 @@ PS2Runtime::PS2Runtime()
+@@ -483,6 +1464,8 @@ PS2Runtime::PS2Runtime()
      m_iopSubsystem = std::make_unique<ps2x::iop::IopSubsystem>(*m_iopHost);
  
      m_eeScheduler = std::make_unique<EeScheduler>(*this);
@@ -7471,7 +7504,7 @@ index 45cb9d2..d25f5bf 100644
  
      // Assign rather than memset: R5900Context's constructor zeroes itself and
      // then applies the COP0 reset values, which a memset here would discard.
-@@ -529,6 +1479,9 @@ PS2Runtime::~PS2Runtime()
+@@ -529,6 +1512,9 @@ PS2Runtime::~PS2Runtime()
      try
      {
          requestStop();
@@ -7481,7 +7514,7 @@ index 45cb9d2..d25f5bf 100644
          m_iopSubsystem.reset();
          m_iopHost.reset();
  #if defined(PLATFORM_VITA)
-@@ -666,44 +1619,64 @@ bool PS2Runtime::syncCoreSubsystems()
+@@ -666,44 +1652,64 @@ bool PS2Runtime::syncCoreSubsystems()
  
      m_gs.init(gsVram, static_cast<uint32_t>(PS2_GS_VRAM_SIZE), &m_memory.gs());
      m_gifArbiter.setProcessPacketFn([this](const uint8_t *data, uint32_t size)
@@ -7577,7 +7610,7 @@ index 45cb9d2..d25f5bf 100644
      resetIop();
      m_vu0.reset();
      m_vu1.reset();
-@@ -731,12 +1704,64 @@ bool PS2Runtime::initialize(const char *title)
+@@ -731,12 +1737,64 @@ bool PS2Runtime::initialize(const char *title)
  #if defined(PLATFORM_VITA)
          InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
  #else
@@ -7612,8 +7645,7 @@ index 45cb9d2..d25f5bf 100644
 +                std::fprintf(stderr, "[pgo] perfil gravado aos %d s\n", at);
 +                std::_Exit(0);
 +            }).detach();
- #endif
--        SetTargetFPS(60);
++#endif
 +        // Test harness: PS2X_DUMP_RAM_AT="70,74" writes ram_<s>.bin (32 MB) and vu1_<s>.bin at those seconds.
 +        if (const char *dumpAt = std::getenv("PS2X_DUMP_RAM_AT"))
 +        {
@@ -7639,12 +7671,13 @@ index 45cb9d2..d25f5bf 100644
 +                }
 +            }).detach();
 +        }
-+#endif
+ #endif
+-        SetTargetFPS(60);
 +        SetTargetFPS(gfx().vsync ? 240 : 60); // com vsync quem segura o ritmo é a troca do buffer (applyVsync)
          if (m_debugUiInitCallback)
          {
              m_debugUiInitCallback(*this, m_debugUiUserData);
-@@ -2214,6 +3239,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
+@@ -2214,6 +3272,11 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
      return m_eeScheduler->checkpointDue(cycles);
  }
  
@@ -7656,7 +7689,7 @@ index 45cb9d2..d25f5bf 100644
  [[noreturn]] void PS2Runtime::eeWaitVSyncTicks(uint32_t ticks, uint32_t resumePc)
  {
      const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
-@@ -2360,13 +3390,16 @@ void PS2Runtime::run()
+@@ -2360,13 +3423,16 @@ void PS2Runtime::run()
      // A blank image to use as a framebuffer
      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
      Texture2D frameTex = LoadTextureFromImage(blank);
@@ -7673,7 +7706,7 @@ index 45cb9d2..d25f5bf 100644
          try
          {
              m_eeScheduler->reset(m_memory.getRDRAM(), m_cpuContext);
-@@ -2388,9 +3421,63 @@ void PS2Runtime::run()
+@@ -2388,9 +3454,63 @@ void PS2Runtime::run()
      uint64_t tick = 0;
      while (!isStopRequested() && !gameThreadFinished.load(std::memory_order_acquire))
      {
@@ -7738,7 +7771,7 @@ index 45cb9d2..d25f5bf 100644
              {
                  uint64_t curDma = m_memory.dmaStartCount();
                  uint64_t curGif = m_memory.gifCopyCount();
-@@ -2401,25 +3488,240 @@ void PS2Runtime::run()
+@@ -2401,25 +3521,240 @@ void PS2Runtime::run()
                  const uint32_t dbgRa = m_debugRa.load(std::memory_order_relaxed);
                  const uint32_t dbgSp = m_debugSp.load(std::memory_order_relaxed);
                  const uint32_t dbgGp = m_debugGp.load(std::memory_order_relaxed);
@@ -7993,7 +8026,7 @@ index 45cb9d2..d25f5bf 100644
          uint32_t presentWidth = FB_WIDTH;
          uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
          UploadFrame(frameTex, this, presentWidth, presentHeight);
-@@ -2430,21 +3732,197 @@ void PS2Runtime::run()
+@@ -2430,21 +3765,197 @@ void PS2Runtime::run()
          const float srcHeight = static_cast<float>(std::max<uint32_t>(1u, presentHeight));
          const float screenWidth = static_cast<float>(GetScreenWidth());
          const float screenHeight = static_cast<float>(GetScreenHeight());

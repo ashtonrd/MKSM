@@ -948,8 +948,12 @@ struct GSHwBackend::Renderer
     void fallback(const GSPrimitiveBatch &b);
 };
 
+bool ps2xVulkanLoaderUsable(); // gs_gpu_accelerator.cpp: no Windows, vulkan-1.dll presente e 1.1+
+
 bool GSHwBackend::Renderer::init()
 {
+    if (!ps2xVulkanLoaderUsable())
+        return false;
     if (const char *s = std::getenv("PS2X_SCALE"))
         scale = static_cast<uint32_t>(std::clamp(std::atoi(s), 1, 4));
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};

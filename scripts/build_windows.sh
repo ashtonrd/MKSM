@@ -13,7 +13,10 @@ mkdir -p "$B"
 
 # vulkan-1.dll vem com o driver de vídeo; a biblioteca de ligação sai da lista de funções que o runtime chama.
 { echo "LIBRARY vulkan-1.dll"; echo EXPORTS; grep -rhoE '\bvk[A-Z][A-Za-z0-9]+\(' "$SRC/ps2xRuntime/src" | tr -d '(' | sort -u; } > "$B/vulkan-1.def"
-x86_64-w64-mingw32-dlltool -d "$B/vulkan-1.def" -l "$B/libvulkan-1.a"
+# Carga atrasada (-y): o Windows só procura o vulkan-1.dll na primeira chamada. Sem isso, PC sem Vulkan ou com um
+# Vulkan 1.0 antigo nem abria ("ponto de entrada vkGetPhysicalDeviceFeatures2 não encontrado"); o runtime confere
+# antes (ps2xVulkanLoaderUsable) e desenha pela CPU.
+x86_64-w64-mingw32-dlltool -d "$B/vulkan-1.def" -y "$B/libvulkan-1.a"
 
 # Reaproveita as fontes que o build do Linux já baixou.
 fontes=()

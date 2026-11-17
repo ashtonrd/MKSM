@@ -6,11 +6,21 @@
 
 #include "runtime/gs/ps2_gs_memory.h"
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
 #include <cmath>
 #include <array>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -755,8 +765,38 @@ std::unique_ptr<GSGpuAccelerator> GSGpuAccelerator::CreateFromEnvironment(uint32
     return accelerator;
 }
 
+// Windows: o vulkan-1.dll é ligado com carga atrasada (scripts/build_windows.sh), então o .exe abre mesmo sem ele.
+// Antes de qualquer chamada, confere que ele existe e é 1.1+: placa sem Vulkan (Intel HD 3000, GeForce Fermi) ou um
+// carregador 1.0 antigo deixado por outro programa caem no renderizador da CPU em vez de não abrir.
+bool ps2xVulkanLoaderUsable()
+{
+#if defined(_WIN32)
+    static const bool usable = []
+    {
+        HMODULE dll = LoadLibraryA("vulkan-1.dll");
+        if (!dll)
+        {
+            std::fprintf(stderr, "[vulkan] vulkan-1.dll não encontrado: desenho pela CPU\n");
+            return false;
+        }
+        for (const char *name : {"vkEnumerateInstanceVersion", "vkGetPhysicalDeviceFeatures2", "vkGetPhysicalDeviceProperties2"})
+            if (!GetProcAddress(dll, name))
+            {
+                std::fprintf(stderr, "[vulkan] Vulkan 1.0 (falta %s): desenho pela CPU\n", name);
+                return false;
+            }
+        return true;
+    }();
+    return usable;
+#else
+    return true;
+#endif
+}
+
 bool GSGpuAccelerator::Initialize(uint32_t vramSize)
 {
+    if (!ps2xVulkanLoaderUsable())
+        return false;
     Impl &v = *m_impl;
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     app.pApplicationName = "ps2x-gs";
