@@ -1171,7 +1171,7 @@ index d0fc95d..d180aa9 100644
                      return fmt::format("// NOP operation, no action needed for VU0");
                  case VU0_S2_VRNEXT:
 diff --git a/ps2xRuntime/CMakeLists.txt b/ps2xRuntime/CMakeLists.txt
-index 589d768..f327bea 100644
+index 589d768..800262c 100644
 --- a/ps2xRuntime/CMakeLists.txt
 +++ b/ps2xRuntime/CMakeLists.txt
 @@ -11,7 +11,7 @@ option(PS2X_ENABLE_RUNNER_PCH "Precompile the heavy runtime headers for ps2Entry
@@ -1183,7 +1183,24 @@ index 589d768..f327bea 100644
  option(PS2X_ENABLE_IOP_RPC_TRACE "Log unhandled IOP/SIF RPC trace suggestions" ON)
  option(PS2X_STRICT_RETURN_DIAGNOSTICS "Route generated JR $ra returns through runtime branch diagnostics" OFF)
  option(PS2X_SHOW_WINDOWS_CONSOLE "Show a console window for ps2EntryRunner on Windows release builds" ON)
-@@ -327,7 +327,8 @@ elseif(WIN32)
+@@ -261,13 +261,15 @@ elseif(WIN32)
+         "https://github.com/System233/ffmpeg-msvc-prebuilt/releases/download/${FFMPEG_PREBUILT_TAG}/ffmpeg-${FFMPEG_PREBUILT_TAG}-lgpl-amd64-shared.zip")
+ 
+     set(FFMPEG_PREFIX_DIR "${CMAKE_BINARY_DIR}/ThirdParty/ffmpeg-prefix")
++    # Pacote offline: aponta para o zip que vem junto (file:///...).
++    set(PS2X_FFMPEG_URL "${FFMPEG_PREBUILT_URL}" CACHE STRING "Zip do FFmpeg pré-compilado para Windows")
+     set(FFMPEG_SOURCE_DIR "${FFMPEG_PREFIX_DIR}/src/ffmpeg_external")
+     set(FFMPEG_INCLUDE_DIR "${FFMPEG_SOURCE_DIR}/include")
+     set(FFMPEG_LIB_DIR "${FFMPEG_SOURCE_DIR}/bin")
+     set(FFMPEG_BIN_DIR "${FFMPEG_SOURCE_DIR}/bin")
+ 
+     ExternalProject_Add(ffmpeg_external
+-        URL "${FFMPEG_PREBUILT_URL}"
++        URL "${PS2X_FFMPEG_URL}"
+         DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+         PREFIX "${FFMPEG_PREFIX_DIR}"
+         CONFIGURE_COMMAND ""
+@@ -327,7 +329,8 @@ elseif(WIN32)
          bcrypt
          secur32
          ws2_32
@@ -1193,7 +1210,7 @@ index 589d768..f327bea 100644
          advapi32
          ole32
          shell32
-@@ -382,7 +383,13 @@ add_library(ps2_runtime STATIC
+@@ -382,7 +385,13 @@ add_library(ps2_runtime STATIC
      src/lib/ps2_audio_vag.cpp
      src/lib/gs/ps2_gs_memory.cpp
      src/lib/gs/gs_frontend.cpp
@@ -1207,7 +1224,7 @@ index 589d768..f327bea 100644
      src/lib/ps2_iop_host.cpp
      src/lib/ps2_memory.cpp
      src/lib/ps2_pad.cpp
-@@ -390,12 +397,25 @@ add_library(ps2_runtime STATIC
+@@ -390,12 +399,25 @@ add_library(ps2_runtime STATIC
      src/lib/ps2_vfs.cpp
      src/lib/ps2_runtime.cpp
      src/lib/ps2_vif1_interpreter.cpp
@@ -1233,7 +1250,7 @@ index 589d768..f327bea 100644
  if(PS2X_ENABLE_RUNTIME_LOGS)
      target_compile_definitions(ps2_runtime PUBLIC
          PS2_RUNTIME_LOGS=1
-@@ -462,6 +482,20 @@ else()
+@@ -462,6 +484,20 @@ else()
      )
  endif()
  
@@ -1254,7 +1271,7 @@ index 589d768..f327bea 100644
  if(PS2X_ENABLE_RUNNER_UNITY_BUILD)
      set_target_properties(ps2EntryRunner PROPERTIES
          UNITY_BUILD ON
-@@ -507,6 +541,70 @@ target_include_directories(ps2_runtime PUBLIC
+@@ -507,6 +543,80 @@ target_include_directories(ps2_runtime PUBLIC
  )
  
  target_link_libraries(ps2_runtime PUBLIC ps2_host_backend ffmpeg ps2_iop)
@@ -1271,7 +1288,10 @@ index 589d768..f327bea 100644
 +option(PS2X_ENABLE_GS_GPU "Build the Vulkan GS accelerator" ON)
 +find_library(PS2X_VULKAN_LIBRARY NAMES vulkan vulkan-1)
 +find_program(PS2X_GLSLC glslc)
-+if(PS2X_ENABLE_GS_GPU AND PS2X_VULKAN_LIBRARY AND PS2X_GLSLC)
++# Sem glslc (o pacote do Windows que compila no próprio Windows): os shaders já compilados desta pasta, gerados
++# do mesmo código por outro build (gs_shaders/*.inc).
++set(PS2X_GS_SHADER_PREBUILT_DIR "" CACHE PATH "Shaders do GS já compilados (*.inc), para compilar sem glslc")
++if(PS2X_ENABLE_GS_GPU AND PS2X_VULKAN_LIBRARY AND (PS2X_GLSLC OR PS2X_GS_SHADER_PREBUILT_DIR))
 +    include(FetchContent)
 +    FetchContent_Declare(
 +        vulkan_headers
@@ -1282,6 +1302,12 @@ index 589d768..f327bea 100644
 +    FetchContent_MakeAvailable(vulkan_headers)
 +
 +    set(PS2X_GS_SHADER_DIR ${CMAKE_CURRENT_BINARY_DIR}/gs_shaders)
++    if(NOT PS2X_GLSLC)
++        set(PS2X_GS_SHADER_DIR ${PS2X_GS_SHADER_PREBUILT_DIR})
++        target_sources(ps2_runtime PRIVATE ${PS2X_GS_SHADER_DIR}/gs_sprite.inc ${PS2X_GS_SHADER_DIR}/gs_tiles.inc
++                       ${PS2X_GS_SHADER_DIR}/gs_raster_frag.inc ${PS2X_GS_SHADER_DIR}/gs_raster_vert.inc
++                       ${PS2X_GS_SHADER_DIR}/gs_hw_vert.inc ${PS2X_GS_SHADER_DIR}/gs_hw_frag.inc)
++    else()
 +    foreach(shader gs_sprite gs_tiles)
 +        set(shader_out ${PS2X_GS_SHADER_DIR}/${shader}.inc)
 +        add_custom_command(
@@ -1315,6 +1341,7 @@ index 589d768..f327bea 100644
 +        COMMENT "Compiling GS batching renderer shaders"
 +    )
 +    target_sources(ps2_runtime PRIVATE ${PS2X_GS_SHADER_DIR}/gs_hw_vert.inc ${PS2X_GS_SHADER_DIR}/gs_hw_frag.inc)
++    endif()
 +    target_include_directories(ps2_runtime PRIVATE ${PS2X_GS_SHADER_DIR})
 +    target_compile_definitions(ps2_runtime PRIVATE PS2X_HAVE_VULKAN=1)
 +    target_link_libraries(ps2_runtime PRIVATE Vulkan::Headers ${PS2X_VULKAN_LIBRARY})
@@ -1325,7 +1352,7 @@ index 589d768..f327bea 100644
  target_link_libraries(ps2EntryRunner
      PRIVATE
      ps2_runtime
-@@ -591,6 +689,26 @@ if(PS2X_IS_ANDROID)
+@@ -591,6 +701,26 @@ if(PS2X_IS_ANDROID)
      target_sources(ps2EntryRunner PRIVATE src/lib/ps2_android_runtime.cpp)
  endif()
  
