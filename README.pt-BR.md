@@ -52,7 +52,7 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Som na gameplay | ✅ 48 kHz sem distorção; eco (reverb) do SPU2 aproximado (`PS2X_REVERB`) |
 | Som dos filmes | ✅ Tocado direto dos arquivos `.SFD` (sem chiado) |
 | Kung Lao como parceiro | ✅ Aparece (era invisível) |
-| Resto das fases testadas do início ao fim | ❌ Falta |
+| Resto das fases testadas do início ao fim | 🟡 Goro's Lair 100% e Wu Shi Academy 30%; as demais ainda não (ver [Testes das fases](#testes-das-fases)) |
 | Build para Windows | 🟡 Compila no próprio Windows com o kit do zip (`Instalar.bat`) ou a partir do Linux (`scripts/build_windows.sh`); já jogado num Windows de verdade, com pequenos engasgos (plano N22 no [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md)); abre também sem Vulkan (desenho pela CPU) |
 | Chão, paredes e raios de luz no Goro's Lair | ✅ Como no original (o VIF agora anda na frente da VU1: o jogo manda as cores de cada lote logo depois de começá-lo) |
 | Liu Kang girando parado (uma instrução MMI do R5900 lia o registrador errado) | ✅ Corrigido |
@@ -67,6 +67,55 @@ Isto **não é um emulador** e **não é um remaster**. O código MIPS do jogo (
 | Modo RPG (níveis e pontos de atributo) | 🟡 Implementado, Single Player e Ko-op, com nível e barra de XP no HUD no estilo do jogo (ver [Modo RPG](#modo-rpg-opcional)); equilíbrio ainda em teste |
 
 Estado detalhado: [`ESTADO.md`](ESTADO.md). Plano de desempenho com medições: [`PLANO_DESEMPENHO.md`](PLANO_DESEMPENHO.md).
+
+## Testes das fases
+
+Quanto de cada fase já foi jogado do início ao fim na recompilação (situação em 17/11/2026). Legenda: ✅ 100% testada, 🟡 testada em parte, ⬜ 0% ainda não testada.
+
+Ordem completa da campanha, com o menu inicial antes dela:
+
+| # | Fase | Progresso |
+|---|---|---|
+| — | Menu inicial — seleção de personagem e telas de save | ✅ 100% |
+| 1 | Goro's Lair — Covil de Goro | ✅ 100% |
+| 2 | Wu Shi Academy — Academia Shaolin | 🟡 30% |
+| 3 | The Portal — Portal entre os reinos (área central) | ⬜ 0% |
+| 4 | Evil Monastery — Monastério do Mal | ⬜ 0% |
+| 5 | Living Forest — Floresta Viva | ⬜ 0% |
+| 6 | Reptile's Lair — Covil de Reptile | ⬜ 0% |
+| 7 | The Portal — Retorno ao portal central | ⬜ 0% |
+| 8 | Soul Tombs — Tumbas das Almas | ⬜ 0% |
+| 9 | The Iron Maiden Room — Sala da Donzela de Ferro | ⬜ 0% |
+| 10 | The Spiked Ceiling Room — Sala do teto de espinhos | ⬜ 0% |
+| 11 | The Flaming Floor — Sala do chão em chamas | ⬜ 0% |
+| 12 | The Spinning Fan Room — Sala do ventilador giratório | ⬜ 0% |
+| 13 | The Soul Collector Room — Sala do coletor de almas | ⬜ 0% |
+| 14 | Wastelands — Terras Desoladas | ⬜ 0% |
+| 15 | Sub-Zero's Boat — Embarcação de Sub-Zero | ⬜ 0% |
+| 16 | Goro's Arena — Arena do confronto com Goro | ⬜ 0% |
+| 17 | The Portal — Retorno ao portal | ⬜ 0% |
+| 18 | The Dead Pool — Poço da Morte | ⬜ 0% |
+| 19 | Netherrealm — Submundo | ⬜ 0% |
+| 20 | Scorpion's Lair — Covil de Scorpion | ⬜ 0% |
+| 21 | The Foundry — Fundição | ⬜ 0% |
+| 22 | The Prison — Prisão onde estão Kitana e Johnny Cage | ⬜ 0% |
+| 23 | Kano's Secret Room — Sala do confronto secreto com Kano | ⬜ 0% |
+| 24 | Shao Kahn's Arena — Arena dos chefes finais | ⬜ 0% |
+| 25 | Shang Tsung — Primeiro chefe final | ⬜ 0% |
+| 26 | Kintaro — Segundo chefe final | ⬜ 0% |
+| 27 | Shao Kahn — Chefe final | ⬜ 0% |
+| 28 | Ending — Encerramento | ⬜ 0% |
+
+Áreas extras e opcionais (visitadas durante a exploração; nenhuma testada ainda):
+
+- The Warrior Shrine — ⬜ 0%
+- The Armory — ⬜ 0%
+- The Pit — ⬜ 0%
+- The Rooftops — ⬜ 0%
+- The Tower — ⬜ 0%
+- Ice Falls — ⬜ 0%
+- Kombat Tomb — ⬜ 0%
+- Wu Shi Shrine — ⬜ 0%
 
 ## O que você precisa
 
