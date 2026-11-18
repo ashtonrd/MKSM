@@ -1,5 +1,7 @@
 # ShaolinMonks RPG
 
+**[⬇️ Baixar](#baixar)** · **[Estado](#estado)** · **[Testes das fases](#testes-das-fases)** · **[Requisitos](#requisitos)** · **[Compilar e rodar](#compilar-e-rodar)** · **[Outros lutadores](#outros-lutadores)** · **[Modo RPG](#modo-rpg-opcional)** · **[Organização](#organizacao)** · **[Contribuir](#contribuir)** · **[Licença](#licenca)** · **[Créditos](#creditos)**
+
 *Mortal Kombat: Shaolin Monks* (PS2) recompilado para PC, com modo RPG e lutadores extras.
 
 ### [⬇️ Baixar agora (Windows e Linux)](#baixar)
@@ -117,6 +119,8 @@ Ordem completa da campanha, com o menu inicial antes dela:
 - Kombat Tomb — ⬜ 0%
 - Wu Shi Shrine — ⬜ 0%
 
+<a id="requisitos"></a>
+
 ## O que você precisa
 
 - Sua própria cópia do jogo (PS2, USA, `SLUS-210.87`).
@@ -221,6 +225,8 @@ Um modo opcional, escolhido só ao começar um jogo novo, em que a experiência 
 - **Ajustes:** todos os números (curva de XP, efeito por ponto, tetos, força dos inimigos) são chaves `RPG_*` do `mksm.ini` (lista no começo do [`scripts/jogar.sh`](scripts/jogar.sh)). Com o modo desligado, o jogo roda igual ao original.
 - Desenho, endereços e o que já foi testado: [`PLANO_RPG.md`](PLANO_RPG.md).
 
+<a id="organizacao"></a>
+
 ## Como o repositório é organizado
 
 O PS2Recomp **não é copiado para cá**. O `scripts/aplicar_patches.sh` clona-o no commit de [`patches/UPSTREAM_COMMIT`](patches/UPSTREAM_COMMIT) e aplica o [`patches/runtime_atual.diff`](patches/runtime_atual.diff) mais os arquivos novos listados em [`patches/arquivos.txt`](patches/arquivos.txt). A pasta `PS2Recomp/` resultante é ignorada pelo git: você trabalha nela e roda `scripts/atualizar_patches.sh` para trazer as mudanças de volta para `patches/`.
@@ -243,9 +249,13 @@ O PS2Recomp **não é copiado para cá**. O `scripts/aplicar_patches.sh` clona-o
 
 Veja o [`CONTRIBUTING.md`](CONTRIBUTING.md). Em resumo: nunca envie dados do jogo, mantenha o renderizador bit a bit exato (há testes de replay para isso) e mantenha a documentação em dia com o código.
 
+<a id="licenca"></a>
+
 ## Licença
 
 [GPL-3.0](LICENSE), a mesma do PS2Recomp, de onde `patches/` deriva.
+
+<a id="creditos"></a>
 
 ## Créditos
 
